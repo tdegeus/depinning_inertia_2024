@@ -1,0 +1,23 @@
+channels:
+- conda-forge
+dependencies:
+- autodocsumm
+- enstat
+- goosehdf5 >=0.17.0
+- goosempl
+- gooseslurm
+- h5py
+- parallel
+- pre-commit
+- python
+- python-cppcolormap
+- python-frictionqpotspringblock >=0.7.0
+- python-goosefem >=1.1.0
+- python-prrng
+- python-qpot
+- setuptools_scm
+- shelephant
+- sphinx_rtd_theme
+- tqdm
+- xdmfwrite_h5py
+- xsimd
