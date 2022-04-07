@@ -7,12 +7,9 @@ import shutil
 import sys
 
 import click
-import GMatElastoPlasticQPot.Cartesian2d as GMat
-import GooseFEM
 import GooseHDF5 as g5
 import h5py
 import numpy as np
-import yaml
 from numpy.typing import ArrayLike
 
 
