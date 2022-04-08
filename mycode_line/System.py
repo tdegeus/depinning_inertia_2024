@@ -558,7 +558,8 @@ def cli_ensembleinfo(cli_args=None):
                 else:
                     test = normalisation(file)
                     for key in norm:
-                        assert np.isclose(norm[key], test[key])
+                        if key not in ["seed"]:
+                            assert np.isclose(norm[key], test[key])
 
                 out = basic_output(file)
 
