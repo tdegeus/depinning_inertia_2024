@@ -40,12 +40,12 @@ class MyTests(unittest.TestCase):
 
         shutil.rmtree(dirname)
 
-    def test_foo(self):
+    def test_read(self):
         """
-        No tests yet
+        Read output.
         """
 
-        self.assertTrue(True)
+        my.System.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
 
 if __name__ == "__main__":
