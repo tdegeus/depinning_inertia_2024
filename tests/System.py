@@ -3,10 +3,6 @@ import shutil
 import sys
 import unittest
 
-import h5py
-import numpy as np
-import shelephant
-
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))

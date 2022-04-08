@@ -7,7 +7,6 @@ import argparse
 import inspect
 import os
 import re
-import sys
 import textwrap
 import uuid
 
@@ -20,9 +19,9 @@ import tqdm
 from numpy.typing import ArrayLike
 
 from . import slurm
+from . import storage
 from . import tag
 from . import tools
-from . import storage
 from ._version import version
 
 
@@ -98,23 +97,23 @@ class System(model.System):
 
         if "weibull" in file_yield:
             self.distribution = dict(
-                type = "weibull",
-                offset = file_yield["weibull"]["offset"][...],
-                mean = file_yield["weibull"]["mean"][...],
-                k = file_yield["weibull"]["k"][...],
+                type="weibull",
+                offset=file_yield["weibull"]["offset"][...],
+                mean=file_yield["weibull"]["mean"][...],
+                k=file_yield["weibull"]["k"][...],
             )
         else:
             raise OSError("Distribution not supported")
 
         super().__init__(
-            m = file["param"]["m"][...],
-            eta = file["param"]["eta"][...],
-            mu = file["param"]["mu"][...],
-            k_neighbours = file["param"]["k_neighbours"][...],
-            k_frame = file["param"]["k_frame"][...],
-            dt = file["param"]["dt"][...],
-            x_yield = np.cumsum(self._draw_chunk(), axis=1) + xoffset,
-            istart = self.state_istart,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            x_yield=np.cumsum(self._draw_chunk(), axis=1) + xoffset,
+            istart=self.state_istart,
         )
 
     def _draw_chunk(self):
@@ -320,9 +319,9 @@ def cli_run(cli_args=None):
             system.set_t(0.0)
             file["/x/0"] = system.x()
             storage.create_extendible(file, "/stored", np.uint64, desc="List of stored increments")
-            storage.create_extendible(file, "/t", np.float64, desc=f"Time.")
-            storage.create_extendible(file, "/x_frame", np.float64, desc=f"Position of load frame.")
-            storage.create_extendible(file, "/event_driven/kick", bool, desc=f"Kick used.")
+            storage.create_extendible(file, "/t", np.float64, desc="Time.")
+            storage.create_extendible(file, "/x_frame", np.float64, desc="Position of load frame.")
+            storage.create_extendible(file, "/event_driven/kick", bool, desc="Kick used.")
             storage.dset_extend1d(file, "/stored", 0, 0)
             storage.dset_extend1d(file, "/t", 0, system.t())
             storage.dset_extend1d(file, "/x_frame", 0, system.x_frame())
@@ -335,9 +334,7 @@ def cli_run(cli_args=None):
         dx = file["/event_driven/dx"][...]
         system.restore_inc(file, inc)
 
-        pbar = tqdm.tqdm(
-            total=args.ninc, desc=f"{basename}: inc = {inc:8d}, niter = {'-':8s}"
-        )
+        pbar = tqdm.tqdm(total=args.ninc, desc=f"{basename}: inc = {inc:8d}, niter = {'-':8s}")
 
         for inc in range(inc + 1, inc + 1 + args.ninc):
 

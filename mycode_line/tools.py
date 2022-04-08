@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import shutil
 import sys
 
@@ -12,6 +11,7 @@ import h5py
 import numpy as np
 import yaml
 from numpy.typing import ArrayLike
+
 
 def h5py_read_unique(
     file: h5py.File,
