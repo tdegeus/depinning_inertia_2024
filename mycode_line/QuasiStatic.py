@@ -127,19 +127,49 @@ class System(model.System):
             ret += self.distribution["offset"]
             return ret
 
-    def rshift_chunk(self):
+    def _chuck_shift(self, shift: ArrayLike):
+        """
+        Apply shift to current chunk.
+
+        :param shift: Shift per particle.
+        """
+
+        self.generators.restore(self.state)
+        self.generators.advance(shift)
+        self.state = self.generators.state()
+        self.state_istart += shift
+        self.shift_dy(istart=self.state_istart, dy=self._draw_chunk())
+
+    def chunk_rshift(self):
+        """
+        Shift chunk in positive direction. Asserts that positions are in the current chunk.
+        """
+
+        y = self.y()
+        x = self.x()
+        assert np.all(y[:, -1] > x)
+        assert np.all(y[:, 0] < x)
+        shift = np.argmax(self.y() >= self.x().reshape(-1, 1), axis=1) - self.nbuffer
+        assert np.all(shift > self.nbuffer - self.nchunk)
+        shift = np.where(shift < 0, 0, shift)
+        self._chuck_shift(shift)
+
+    def _chunk_goto(self):
+        """
+        Shift until the positions are in the current chunk.
+        """
+
+        x = self.x()
 
         while True:
+            y = self.y()
+            if np.all(np.logical_and(y[:, 0] < x, y[:, -1] > x)):
+                return
             shift = np.argmax(self.y() >= self.x().reshape(-1, 1), axis=1) - self.nbuffer
             assert np.all(shift > self.nbuffer - self.nchunk)
             shift = np.where(shift < 0, 0, shift)
-            if np.all(shift == 0):
-                return
-            self.generators.restore(self.state)
-            self.generators.advance(shift)
-            self.state = self.generators.state()
-            self.state_istart += shift
-            self.shift_dy(istart=self.state_istart, dy=self._draw_chunk())
+            shift = np.where(y[:, -1] <= x, self.nchunk - 1, shift)
+            self._chuck_shift(shift)
 
     def restore_inc(self, file: h5py.File, inc: int):
         """
@@ -150,10 +180,10 @@ class System(model.System):
         """
 
         self.quench()
-        self.set_t(file["/t"][inc])
+        self.set_inc(file["/inc"][inc])
         self.set_x_frame(file["/x_frame"][inc])
         self.set_x(file[f"/x/{inc:d}"][...])
-        self.rshift_chunk()
+        self._chunk_goto()
 
 
 def create_check_meta(
@@ -250,8 +280,8 @@ def cli_generate(cli_args=None):
             file["/param/dt"] = args.dt
             file["/param/xyield/initstate"] = seed + np.arange(args.size).astype(np.int64)
             file["/param/xyield/initseq"] = np.zeros(args.size, dtype=np.int64)
-            file["/param/xyield/nchunk"] = 1500
-            file["/param/xyield/nbuffer"] = 200
+            file["/param/xyield/nchunk"] = 5000
+            file["/param/xyield/nbuffer"] = 300
             file["/param/xyield/xoffset"] = -100.0
             file["/param/xyield/weibull/offset"] = 1e-5
             file["/param/xyield/weibull/mean"] = 1.0
@@ -319,11 +349,11 @@ def cli_run(cli_args=None):
             system.set_t(0.0)
             file["/x/0"] = system.x()
             storage.create_extendible(file, "/stored", np.uint64, desc="List of stored increments")
-            storage.create_extendible(file, "/t", np.float64, desc="Time.")
+            storage.create_extendible(file, "/inc", np.uint64, desc="Time.")
             storage.create_extendible(file, "/x_frame", np.float64, desc="Position of load frame.")
             storage.create_extendible(file, "/event_driven/kick", bool, desc="Kick used.")
             storage.dset_extend1d(file, "/stored", 0, 0)
-            storage.dset_extend1d(file, "/t", 0, system.t())
+            storage.dset_extend1d(file, "/inc", 0, system.inc())
             storage.dset_extend1d(file, "/x_frame", 0, system.x_frame())
             storage.dset_extend1d(file, "/event_driven/kick", 0, True)
             file.flush()
@@ -339,7 +369,7 @@ def cli_run(cli_args=None):
         for inc in range(inc + 1, inc + 1 + args.ninc):
 
             if np.any(system.i() - system.istart() > system.nchunk - system.nbuffer):
-                system.rshift_chunk()
+                system.chunk_rshift()
 
             kick = not kick
             system.eventDrivenStep(dx, kick)
@@ -351,7 +381,7 @@ def cli_run(cli_args=None):
                 pbar.refresh()
 
             storage.dset_extend1d(file, "/stored", inc, inc)
-            storage.dset_extend1d(file, "/t", inc, system.t())
+            storage.dset_extend1d(file, "/inc", inc, system.inc())
             storage.dset_extend1d(file, "/x_frame", inc, system.x_frame())
             storage.dset_extend1d(file, "/event_driven/kick", inc, kick)
             file[f"/x/{inc:d}"] = system.x()

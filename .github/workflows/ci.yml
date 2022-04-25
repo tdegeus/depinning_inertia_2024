@@ -42,9 +42,8 @@ jobs:
       run: echo "SETUPTOOLS_SCM_PRETEND_VERSION=0.0" >> $GITHUB_ENV
 
     - name: Install module
-      run: python -m pip install . -vv
+      run: python -m pip install . -v
 
     - name: Run tests
       working-directory: tests
-      run: |
-        python System.py
+      run: python -m unittest discover tests -v

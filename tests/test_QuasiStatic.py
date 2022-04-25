@@ -7,7 +7,7 @@ root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
-import mycode_line as my  # noqa: E402
+from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
 idname = "id=0000.h5"
@@ -28,8 +28,8 @@ class MyTests(unittest.TestCase):
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        my.System.cli_generate(["--dev", "-N", 50, "-n", 1, dirname])
-        my.System.cli_run(["--dev", filename])
+        QuasiStatic.cli_generate(["--dev", "-N", 50, "-n", 1, dirname])
+        QuasiStatic.cli_run(["--dev", filename])
 
     @classmethod
     def tearDownClass(self):
@@ -41,7 +41,7 @@ class MyTests(unittest.TestCase):
         Read output.
         """
 
-        my.System.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+        QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
 
 if __name__ == "__main__":
