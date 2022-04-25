@@ -10,7 +10,7 @@ root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_front", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
-import mycode_front as my  # noqa: E402
+from mycode_line import storage  # noqa: E402
 
 
 class MyTests(unittest.TestCase):
@@ -32,10 +32,10 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(filepath, "w") as file:
 
-            my.storage.create_extendible(file, key, np.float64)
+            storage.create_extendible(file, key, np.float64)
 
             for i, d in enumerate(data):
-                my.storage.dset_extend1d(file, key, i, d)
+                storage.dset_extend1d(file, key, i, d)
 
             self.assertTrue(np.allclose(data, file[key][...]))
 
@@ -56,7 +56,7 @@ class MyTests(unittest.TestCase):
         with h5py.File(filepath, "w") as file:
 
             for i in range(3):
-                my.storage.dump_overwrite(file, key, data)
+                storage.dump_overwrite(file, key, data)
                 self.assertTrue(np.allclose(data, file[key][...]))
 
         shutil.rmtree(dirname)

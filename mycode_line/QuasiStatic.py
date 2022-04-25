@@ -180,10 +180,11 @@ class System(model.System):
         """
 
         self.quench()
-        self.set_t(file["/t"][inc])
+        self.set_inc(file["/inc"][inc])
         self.set_x_frame(file["/x_frame"][inc])
         self.set_x(file[f"/x/{inc:d}"][...])
         self._chunk_goto()
+
 
 def create_check_meta(
     file: h5py.File,
@@ -348,11 +349,11 @@ def cli_run(cli_args=None):
             system.set_t(0.0)
             file["/x/0"] = system.x()
             storage.create_extendible(file, "/stored", np.uint64, desc="List of stored increments")
-            storage.create_extendible(file, "/t", np.float64, desc="Time.")
+            storage.create_extendible(file, "/inc", np.uint64, desc="Time.")
             storage.create_extendible(file, "/x_frame", np.float64, desc="Position of load frame.")
             storage.create_extendible(file, "/event_driven/kick", bool, desc="Kick used.")
             storage.dset_extend1d(file, "/stored", 0, 0)
-            storage.dset_extend1d(file, "/t", 0, system.t())
+            storage.dset_extend1d(file, "/inc", 0, system.inc())
             storage.dset_extend1d(file, "/x_frame", 0, system.x_frame())
             storage.dset_extend1d(file, "/event_driven/kick", 0, True)
             file.flush()
@@ -380,7 +381,7 @@ def cli_run(cli_args=None):
                 pbar.refresh()
 
             storage.dset_extend1d(file, "/stored", inc, inc)
-            storage.dset_extend1d(file, "/t", inc, system.t())
+            storage.dset_extend1d(file, "/inc", inc, system.inc())
             storage.dset_extend1d(file, "/x_frame", inc, system.x_frame())
             storage.dset_extend1d(file, "/event_driven/kick", inc, kick)
             file[f"/x/{inc:d}"] = system.x()
