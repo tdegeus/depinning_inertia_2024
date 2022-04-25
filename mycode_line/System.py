@@ -127,19 +127,49 @@ class System(model.System):
             ret += self.distribution["offset"]
             return ret
 
-    def rshift_chunk(self):
+    def _chuck_shift(self, shift: ArrayLike):
+        """
+        Apply shift to current chunk.
+
+        :param shift: Shift per particle.
+        """
+
+        self.generators.restore(self.state)
+        self.generators.advance(shift)
+        self.state = self.generators.state()
+        self.state_istart += shift
+        self.shift_dy(istart=self.state_istart, dy=self._draw_chunk())
+
+    def chunk_rshift(self):
+        """
+        Shift chunk in positive direction. Asserts that positions are in the current chunk.
+        """
+
+        y = self.y()
+        x = self.x()
+        assert np.all(y[:, -1] > x)
+        assert np.all(y[:, 0] < x)
+        shift = np.argmax(self.y() >= self.x().reshape(-1, 1), axis=1) - self.nbuffer
+        assert np.all(shift > self.nbuffer - self.nchunk)
+        shift = np.where(shift < 0, 0, shift)
+        self._chuck_shift(shift)
+
+    def _chunk_goto(self):
+        """
+        Shift until the positions are in the current chunk.
+        """
+
+        x = self.x()
 
         while True:
+            y = self.y()
+            if np.all(np.logical_and(y[:, 0] < x, y[:, -1] > x)):
+                return
             shift = np.argmax(self.y() >= self.x().reshape(-1, 1), axis=1) - self.nbuffer
             assert np.all(shift > self.nbuffer - self.nchunk)
             shift = np.where(shift < 0, 0, shift)
-            if np.all(shift == 0):
-                return
-            self.generators.restore(self.state)
-            self.generators.advance(shift)
-            self.state = self.generators.state()
-            self.state_istart += shift
-            self.shift_dy(istart=self.state_istart, dy=self._draw_chunk())
+            shift = np.where(y[:, -1] <= x, self.nchunk - 1, shift)
+            self._chuck_shift(shift)
 
     def restore_inc(self, file: h5py.File, inc: int):
         """
@@ -153,8 +183,7 @@ class System(model.System):
         self.set_t(file["/t"][inc])
         self.set_x_frame(file["/x_frame"][inc])
         self.set_x(file[f"/x/{inc:d}"][...])
-        self.rshift_chunk()
-
+        self._chunk_goto()
 
 def create_check_meta(
     file: h5py.File,
@@ -250,8 +279,8 @@ def cli_generate(cli_args=None):
             file["/param/dt"] = args.dt
             file["/param/xyield/initstate"] = seed + np.arange(args.size).astype(np.int64)
             file["/param/xyield/initseq"] = np.zeros(args.size, dtype=np.int64)
-            file["/param/xyield/nchunk"] = 1500
-            file["/param/xyield/nbuffer"] = 200
+            file["/param/xyield/nchunk"] = 5000
+            file["/param/xyield/nbuffer"] = 300
             file["/param/xyield/xoffset"] = -100.0
             file["/param/xyield/weibull/offset"] = 1e-5
             file["/param/xyield/weibull/mean"] = 1.0
@@ -339,7 +368,7 @@ def cli_run(cli_args=None):
         for inc in range(inc + 1, inc + 1 + args.ninc):
 
             if np.any(system.i() - system.istart() > system.nchunk - system.nbuffer):
-                system.rshift_chunk()
+                system.chunk_rshift()
 
             kick = not kick
             system.eventDrivenStep(dx, kick)
