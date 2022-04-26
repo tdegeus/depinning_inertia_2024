@@ -329,7 +329,7 @@ def cli_run(cli_args=None):
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--nopassing", action="store_true", help="Use nonpassing rule not dynamics")
-    parser.add_argument("-n", "--nstep", type=int, default=1000, help="#load-steps to run")
+    parser.add_argument("-n", "--nstep", type=int, default=5000, help="#load-steps to run")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
 
