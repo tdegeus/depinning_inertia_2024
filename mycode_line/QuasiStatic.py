@@ -142,13 +142,13 @@ class System(model.System):
 
     def chunk_rshift(self):
         """
-        Shift chunk in positive direction. Asserts that positions are in the current chunk.
+        Shift chunk strictly in positive direction. Asserts that positions are in the current chunk.
         """
 
         x = self.x()
         assert np.all(self.ymin() < x)
         assert np.all(self.ymax() > x)
-        shift = np.argmax(self.y() >= x.reshape(-1, 1), axis=1) - self.nbuffer
+        shift = self.i() - self.istart() - self.nbuffer + 1
         assert np.all(shift > self.nbuffer - self.nchunk)
         shift = np.where(shift < 0, 0, shift)
         self._chuck_shift(shift)
@@ -159,6 +159,7 @@ class System(model.System):
         """
 
         x = self.x()
+        assert np.all(x <= self.ymax())
 
         while True:
             if np.all(np.logical_and(self.ymin() < x, self.ymax() > x)):
@@ -166,22 +167,21 @@ class System(model.System):
             y = self.y()
             shift = np.argmax(y >= x.reshape(-1, 1), axis=1) - self.nbuffer
             assert np.all(shift > self.nbuffer - self.nchunk)
-            shift = np.where(shift < 0, 0, shift)
             shift = np.where(y[:, -1] <= x, self.nchunk - 1, shift)
             self._chuck_shift(shift)
 
-    def restore_inc(self, file: h5py.File, inc: int):
+    def restore_quasistatic_step(self, file: h5py.File, step: int):
         """
         Restore an increment.
 
         :param file: Open simulation HDF5 archive (read-only).
-        :param inc: Increment number.
+        :param step: Step number.
         """
 
         self.quench()
-        self.set_inc(file["/inc"][inc])
-        self.set_x_frame(file["/x_frame"][inc])
-        self.set_x(file[f"/x/{inc:d}"][...])
+        self.set_inc(file["/inc"][step])
+        self.set_x_frame(file["/x_frame"][step])
+        self.set_x(file[f"/x/{step:d}"][...])
         self._chunk_goto()
 
 
@@ -321,8 +321,8 @@ def cli_run(cli_args=None):
     progname = entry_points[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
-    parser.add_argument("-n", "--ninc", type=int, default=1000, help="#increments to run")
+    parser.add_argument("--nopassing", action="store_true", help="Use nonpassing rule not dynamics")
+    parser.add_argument("-n", "--nstep", type=int, default=1000, help="#load-steps to run")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
 
@@ -347,8 +347,8 @@ def cli_run(cli_args=None):
             minimise()
             system.set_t(0.0)
             file["/x/0"] = system.x()
-            storage.create_extendible(file, "/stored", np.uint64, desc="List of stored increments")
-            storage.create_extendible(file, "/inc", np.uint64, desc="Time.")
+            storage.create_extendible(file, "/stored", np.uint64, desc="List of stored load-steps")
+            storage.create_extendible(file, "/inc", np.uint64, desc="'Time' (increment number).")
             storage.create_extendible(file, "/x_frame", np.float64, desc="Position of load frame.")
             storage.create_extendible(file, "/event_driven/kick", bool, desc="Kick used.")
             storage.dset_extend1d(file, "/stored", 0, 0)
@@ -357,15 +357,15 @@ def cli_run(cli_args=None):
             storage.dset_extend1d(file, "/event_driven/kick", 0, True)
             file.flush()
 
-        inc = int(file["/stored"][-1])
-        inc0 = inc
-        kick = file["/event_driven/kick"][inc]
+        step = int(file["/stored"][-1])
+        step0 = step
+        kick = file["/event_driven/kick"][step]
         dx = file["/event_driven/dx"][...]
-        system.restore_inc(file, inc)
+        system.restore_quasistatic_step(file, step)
 
-        pbar = tqdm.tqdm(total=args.ninc, desc=f"{basename}: inc = {inc:8d}, niter = {'-':8s}")
+        pbar = tqdm.tqdm(total=args.nstep, desc=f"{basename}: step = {step:8d}, niter = {'-':8s}")
 
-        for inc in range(inc + 1, inc + 1 + args.ninc):
+        for step in range(step + 1, step + 1 + args.nstep):
 
             if np.any(system.i() - system.istart() > system.nchunk - system.nbuffer):
                 system.chunk_rshift()
@@ -375,18 +375,18 @@ def cli_run(cli_args=None):
 
             if kick:
                 niter = minimise()
-                pbar.n = inc - inc0
-                pbar.set_description(f"{basename}: inc = {inc:8d}, niter = {niter:8d}")
+                pbar.n = step - step0
+                pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
                 pbar.refresh()
 
-            storage.dset_extend1d(file, "/stored", inc, inc)
-            storage.dset_extend1d(file, "/inc", inc, system.inc())
-            storage.dset_extend1d(file, "/x_frame", inc, system.x_frame())
-            storage.dset_extend1d(file, "/event_driven/kick", inc, kick)
-            file[f"/x/{inc:d}"] = system.x()
+            storage.dset_extend1d(file, "/stored", step, step)
+            storage.dset_extend1d(file, "/inc", step, system.inc())
+            storage.dset_extend1d(file, "/x_frame", step, system.x_frame())
+            storage.dset_extend1d(file, "/event_driven/kick", step, kick)
+            file[f"/x/{step:d}"] = system.x()
             file.flush()
 
-        pbar.set_description(f"{basename}: inc = {inc:8d}, {'completed':16s}")
+        pbar.set_description(f"{basename}: step = {step:8d}, {'completed':16s}")
 
 
 def normalisation(file: h5py.File):
@@ -421,7 +421,7 @@ def steadystate(
     x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs
 ) -> int:
     """
-    Estimate the first increment of the steady-state. Constraints:
+    Estimate the first step of the steady-state. Constraints:
     -   Start with elastic loading.
     -   Sufficiently low tangent modulus.
     -   All blocks yielded at least once.
@@ -430,10 +430,10 @@ def steadystate(
 
         Keywords arguments that are not explicitly listed are ignored.
 
-    :param x_frame: Position of the load frame [ninc].
-    :param f_frame: Average driving force [ninc].
-    :param kick: Whether a kick was applied [ninc].
-    :param A: Number of blocks that yielded at least once [ninc].
+    :param x_frame: Position of the load frame [nstep].
+    :param f_frame: Average driving force [nstep].
+    :param kick: Whether a kick was applied [nstep].
+    :param A: Number of blocks that yielded at least once [nstep].
     :param N: Number of blocks.
     :return: Increment number.
     """
@@ -468,13 +468,13 @@ def basic_output(file: h5py.File) -> dict:
     :param file: Open simulation HDF5 archive (read-only).
 
     :return: Basic output as follows::
-        x_frame: Position of the load frame [ninc].
-        f_frame: Average driving force [ninc].
-        f_potential: Average elastic force [ninc].
-        S: Number of times a particle yielded [ninc].
-        A: Number of particles that yielded at least once [ninc].
-        kick: Increment started with a kick (True), or contains only elastic loading (False) [ninc].
-        inc: Increment numbers == np.arange(ninc).
+        x_frame: Position of the load frame [nstep].
+        f_frame: Average driving force [nstep].
+        f_potential: Average elastic force [nstep].
+        S: Number of times a particle yielded [nstep].
+        A: Number of particles that yielded at least once [nstep].
+        kick: Step started with a kick (True), or contains only elastic loading (False) [nstep].
+        step: Step numbers == np.arange(nstep).
         steadystate: Increment number where the steady state starts (int).
         seed: Base seed (uint64).
         mu: Elastic stiffness (float).
@@ -488,31 +488,35 @@ def basic_output(file: h5py.File) -> dict:
     """
 
     system = System(file)
-    incs = file["/stored"][...]
-    ninc = incs.size
-    assert ninc >= 1
-    assert all(incs == np.arange(ninc))
-    system.restore_inc(file, 0)
-    i_n = system.i()
-
     ret = normalisation(file)
+
+    if "stored" not in file:
+        return ret
+
+    steps = file["/stored"][...]
+    nstep = steps.size
+    assert all(steps == np.arange(nstep))
     ret["x_frame"] = file["x_frame"][...]
-    ret["f_frame"] = np.empty((ninc), dtype=float)
-    ret["f_potential"] = np.empty((ninc), dtype=float)
-    ret["S"] = np.empty((ninc), dtype=int)
-    ret["A"] = np.empty((ninc), dtype=int)
+    ret["f_frame"] = np.empty((nstep), dtype=float)
+    ret["f_potential"] = np.empty((nstep), dtype=float)
+    ret["S"] = np.empty((nstep), dtype=int)
+    ret["A"] = np.empty((nstep), dtype=int)
     ret["kick"] = file["event_driven"]["kick"][...].astype(bool)
-    ret["inc"] = incs
+    ret["step"] = steps
 
-    for inc in incs:
+    for i, step in enumerate(steps):
 
-        system.restore_inc(file, inc)
+        system.restore_quasistatic_step(file, step)
+
+        if i == 0:
+            i_n = system.i()
+
         i = system.i()
-        ret["x_frame"][inc] = system.x_frame()
-        ret["f_frame"][inc] = np.mean(system.f_frame())
-        ret["f_potential"][inc] = -np.mean(system.f_potential())
-        ret["S"][inc] = np.sum(i - i_n)
-        ret["A"][inc] = np.sum(i != i_n)
+        ret["x_frame"][step] = system.x_frame()
+        ret["f_frame"][step] = np.mean(system.f_frame())
+        ret["f_potential"][step] = -np.mean(system.f_potential())
+        ret["S"][step] = np.sum(i - i_n)
+        ret["A"][step] = np.sum(i != i_n)
         i_n = np.copy(i)
 
     ret["steadystate"] = steadystate(**ret)
@@ -564,7 +568,7 @@ def cli_ensembleinfo(cli_args=None):
         dependencies=[],
     )
 
-    fields_full = ["x_frame", "f_frame", "f_potential", "S", "A", "kick", "inc"]
+    fields_full = ["x_frame", "f_frame", "f_potential", "S", "A", "kick", "step"]
     combine_load = {key: [] for key in fields_full}
     combine_kick = {key: [] for key in fields_full}
     file_load = []
@@ -592,17 +596,20 @@ def cli_ensembleinfo(cli_args=None):
 
                 out = basic_output(file)
 
-                for key in fields_full:
-                    output[f"/full/{filename}/{key}"] = out[key]
-                if out["steadystate"] is not None:
-                    output[f"/full/{filename}/steadystate"] = out["steadystate"]
-                output.flush()
-
                 info["seed"].append(out["seed"])
 
                 meta = file[f"/meta/{entry_points['cli_run']}"]
                 for key in ["uuid", "version", "dependencies", "dynamics"]:
                     info[key].append(meta.attrs[key])
+
+                if "step" not in out:
+                    continue
+
+                for key in fields_full:
+                    output[f"/full/{filename}/{key}"] = out[key]
+                if out["steadystate"] is not None:
+                    output[f"/full/{filename}/steadystate"] = out["steadystate"]
+                output.flush()
 
                 if out["steadystate"] is None:
                     continue
@@ -631,7 +638,7 @@ def cli_ensembleinfo(cli_args=None):
         combine_load["file"] = np.array(file_load, dtype=np.uint64)
         combine_kick["file"] = np.array(file_kick, dtype=np.uint64)
 
-        for key in ["A", "inc"]:
+        for key in ["A", "step"]:
             combine_load[key] = np.array(combine_load[key], dtype=np.uint64)
             combine_kick[key] = np.array(combine_kick[key], dtype=np.uint64)
 
@@ -649,7 +656,7 @@ def cli_ensembleinfo(cli_args=None):
         # extract ensemble averages
 
         ss = np.equal(combine_kick["A"], norm["N"])
-        assert all(np.equal(combine_kick["inc"][ss], combine_load["inc"][ss] + 1))
+        assert all(np.equal(combine_kick["step"][ss], combine_load["step"][ss] + 1))
         output["/averages/f_frame_top"] = np.mean(combine_load["f_frame"][ss])
         output["/averages/f_frame_bot"] = np.mean(combine_kick["f_frame"][ss])
 
