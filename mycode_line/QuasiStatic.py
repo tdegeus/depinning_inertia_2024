@@ -153,13 +153,12 @@ class System(model.System):
         shift = np.where(shift < 0, 0, shift)
         self._chuck_shift(shift)
 
-    def _chunk_goto(self):
+    def _chunk_goto(self, x: ArrayLike):
         """
         Shift until the positions are in the current chunk.
         """
 
-        x = self.x()
-        assert np.all(x >= self.ymin())
+        assert np.all(x >= self.ymin())  # WIP
 
         while True:
             if np.all(np.logical_and(self.ymin() < x, self.ymax() > x)):
@@ -172,17 +171,19 @@ class System(model.System):
 
     def restore_quasistatic_step(self, file: h5py.File, step: int):
         """
-        Restore an increment.
+        Restore an a quasi-static step.
 
         :param file: Open simulation HDF5 archive (read-only).
         :param step: Step number.
         """
 
+        x = file[f"/x/{step:d}"][...]
+
+        self._chunk_goto(x)
         self.quench()
         self.set_inc(file["/inc"][step])
         self.set_x_frame(file["/x_frame"][step])
-        self.set_x(file[f"/x/{step:d}"][...])
-        self._chunk_goto()
+        self.set_x(x)
 
 
 def create_check_meta(
