@@ -159,7 +159,7 @@ class System(model.System):
         """
 
         x = self.x()
-        assert np.all(x <= self.ymax())
+        assert np.all(x >= self.ymin())
 
         while True:
             if np.all(np.logical_and(self.ymin() < x, self.ymax() > x)):
@@ -191,6 +191,7 @@ def create_check_meta(
     ver: str = version,
     deps: str = dependencies(model),
     dev: bool = False,
+    **kwargs,
 ) -> h5py.Group:
     """
     Create or read/check metadata. This function asserts that:
@@ -220,11 +221,16 @@ def create_check_meta(
         meta.attrs["uuid"] = str(uuid.uuid4())
         meta.attrs["version"] = ver
         meta.attrs["dependencies"] = deps
+        for key in kwargs:
+            meta.attrs[key] = kwargs[key]
         return meta
 
     meta = file[path]
     assert dev or tag.equal(ver, meta.attrs["version"])
     assert dev or tag.all_equal(deps, meta.attrs["dependencies"])
+    for key in kwargs:
+        assert meta.attrs[key] == kwargs[key]
+
     return meta
 
 
@@ -328,20 +334,20 @@ def cli_run(cli_args=None):
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
-
     basename = os.path.basename(args.file)
 
     with h5py.File(args.file, "a") as file:
 
         system = System(file)
-        meta = create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
         if args.nopassing:
             minimise = system.minimise_nopassing
-            meta.attrs["dynamics"] = "nopassing"
+            dynamics = "nopassing"
         else:
             minimise = system.minimise
-            meta.attrs["dynamics"] = "normal"
+            dynamics = "normal"
+
+        meta = create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
 
         if "stored" not in file:
             minimise()
