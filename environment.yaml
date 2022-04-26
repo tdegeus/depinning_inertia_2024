@@ -12,7 +12,8 @@ dependencies:
 - pre-commit
 - python
 - python-cppcolormap
-- python-frictionqpotspringblock >=0.9.0
+# - python-frictionqpotspringblock >=0.9.0
+- python-frictionqpotspringblock
 - python-goosefem >=1.1.0
 - python-prrng
 - python-qpot
