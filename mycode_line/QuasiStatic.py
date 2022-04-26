@@ -145,11 +145,10 @@ class System(model.System):
         Shift chunk in positive direction. Asserts that positions are in the current chunk.
         """
 
-        y = self.y()
         x = self.x()
-        assert np.all(y[:, -1] > x)
-        assert np.all(y[:, 0] < x)
-        shift = np.argmax(self.y() >= self.x().reshape(-1, 1), axis=1) - self.nbuffer
+        assert np.all(self.ymin() < x)
+        assert np.all(self.ymax() > x)
+        shift = np.argmax(self.y() >= x.reshape(-1, 1), axis=1) - self.nbuffer
         assert np.all(shift > self.nbuffer - self.nchunk)
         shift = np.where(shift < 0, 0, shift)
         self._chuck_shift(shift)
@@ -162,10 +161,10 @@ class System(model.System):
         x = self.x()
 
         while True:
-            y = self.y()
-            if np.all(np.logical_and(y[:, 0] < x, y[:, -1] > x)):
+            if np.all(np.logical_and(self.ymin() < x, self.ymax() > x)):
                 return
-            shift = np.argmax(self.y() >= self.x().reshape(-1, 1), axis=1) - self.nbuffer
+            y = self.y()
+            shift = np.argmax(y >= x.reshape(-1, 1), axis=1) - self.nbuffer
             assert np.all(shift > self.nbuffer - self.nchunk)
             shift = np.where(shift < 0, 0, shift)
             shift = np.where(y[:, -1] <= x, self.nchunk - 1, shift)
