@@ -433,9 +433,7 @@ def normalisation(file: h5py.File):
     return ret
 
 
-def steadystate(
-    x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwargs
-) -> int:
+def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwargs) -> int:
     """
     Estimate the first step of the steady-state. Constraints:
     -   Start with elastic loading.
@@ -521,7 +519,6 @@ def basic_output(file: h5py.File) -> dict:
 
         if i == 0:
             i_n = system.i()
-            i0 = np.copy(i_n)
 
         i = system.i()
         ret["x_frame"][step] = system.x_frame()
