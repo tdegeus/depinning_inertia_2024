@@ -286,7 +286,7 @@ def cli_generate(cli_args=None):
             file["/param/dt"] = args.dt
             file["/param/xyield/initstate"] = seed + np.arange(args.size).astype(np.int64)
             file["/param/xyield/initseq"] = np.zeros(args.size, dtype=np.int64)
-            file["/param/xyield/nchunk"] = 5000
+            file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * args.size)))
             file["/param/xyield/nbuffer"] = 300
             file["/param/xyield/xoffset"] = -100.0
             file["/param/xyield/weibull/offset"] = 1e-5
@@ -351,7 +351,8 @@ def cli_run(cli_args=None):
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
 
         if "stored" not in file:
-            minimise()
+            niter = minimise(nmargin=10)
+            assert niter > 0
             system.set_t(0.0)
             file["/x/0"] = system.x()
             storage.create_extendible(file, "/stored", np.uint64, desc="List of stored load-steps")
@@ -381,7 +382,15 @@ def cli_run(cli_args=None):
             system.eventDrivenStep(dx, kick)
 
             if kick:
-                niter = minimise()
+                inc = system.inc()
+
+                while True:
+                    niter = minimise(nmargin=10)
+                    if niter > 0:
+                        break
+                    system.chunk_rshift()
+
+                niter = system.inc() - inc
                 pbar.n = step - step0
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
                 pbar.refresh()
@@ -425,7 +434,7 @@ def normalisation(file: h5py.File):
 
 
 def steadystate(
-    x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs
+    x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwargs
 ) -> int:
     """
     Estimate the first step of the steady-state. Constraints:
@@ -440,23 +449,18 @@ def steadystate(
     :param x_frame: Position of the load frame [nstep].
     :param f_frame: Average driving force [nstep].
     :param kick: Whether a kick was applied [nstep].
-    :param A: Number of blocks that yielded at least once [nstep].
-    :param N: Number of blocks.
     :return: Increment number.
     """
 
-    if f_frame.size <= 2:
+    if f_frame.size <= 3:
         return None
 
     tangent = np.empty_like(f_frame)
     tangent[0] = np.inf
     tangent[1:] = (f_frame[1:] - f_frame[0]) / (x_frame[1:] - x_frame[0])
+    steadystate = np.argmax(tangent <= 0.95 * tangent[3])
 
-    i_yield = np.argmax(A == N)
-    i_tangent = np.argmax(tangent <= 0.95 * tangent[1])
-    steadystate = max(i_yield + 1, i_tangent)
-
-    if i_yield == 0 or i_tangent == 0:
+    if steadystate == 0:
         return None
 
     if steadystate >= kick.size - 1:
@@ -517,6 +521,7 @@ def basic_output(file: h5py.File) -> dict:
 
         if i == 0:
             i_n = system.i()
+            i0 = np.copy(i_n)
 
         i = system.i()
         ret["x_frame"][step] = system.x_frame()
@@ -586,6 +591,8 @@ def cli_ensembleinfo(cli_args=None):
     pbar.set_description(fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
+
+        create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
         for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
 
@@ -681,7 +688,3 @@ def cli_ensembleinfo(cli_args=None):
             [";".join(i) for i in info["dependencies"]], output, "/lookup/dependencies", split=";"
         )
         output["files"] = output["/lookup/filepath"]
-
-        # metadata for this program
-
-        meta = create_check_meta(output, f"/meta/{progname}", dev=args.develop)
