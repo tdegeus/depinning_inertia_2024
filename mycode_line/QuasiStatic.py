@@ -235,6 +235,36 @@ def create_check_meta(
     return meta
 
 
+def generate(file: h5py.File, N: int, seed: int, eta: float, dt: float):
+    """
+    Generate a simulation file.
+
+    :param file: HDF5 file opened for writing.
+    :param N: System size.
+    :param seed: Base seed.
+    :param eta: Damping coefficient.
+    :param dt: Time step.
+    """
+
+    file["/meta/normalisation/N"] = N
+    file["/meta/seed_base"] = seed
+    file["/param/m"] = 1.0
+    file["/param/eta"] = eta
+    file["/param/mu"] = 1.0
+    file["/param/k_neighbours"] = 1.0
+    file["/param/k_frame"] = 1.0 / N
+    file["/param/dt"] = dt
+    file["/param/xyield/initstate"] = seed + np.arange(N).astype(np.int64)
+    file["/param/xyield/initseq"] = np.zeros(N, dtype=np.int64)
+    file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * N)))
+    file["/param/xyield/nbuffer"] = 300
+    file["/param/xyield/xoffset"] = -100.0
+    file["/param/xyield/weibull/offset"] = 1e-5
+    file["/param/xyield/weibull/mean"] = 1.0
+    file["/param/xyield/weibull/k"] = 2.0
+    file["/event_driven/dx"] = 1e-3
+
+
 def cli_generate(cli_args=None):
     """
     Generate IO files (including job-scripts) to run simulations.
@@ -252,9 +282,10 @@ def cli_generate(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
-    parser.add_argument("--eta", type=float, default=2.0 * np.sqrt(3.0) / 10.0, help="Damping")
     parser.add_argument("--dt", type=float, default=0.1, help="Time-step")
+    parser.add_argument("--eta", type=float, default=2.0 * np.sqrt(3.0) / 10.0, help="Damping")
+    parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
+    parser.add_argument("--nstep", type=int, default=5000, help="#load-steps to run")
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
@@ -275,31 +306,20 @@ def cli_generate(cli_args=None):
         seed = i * args.size
 
         with h5py.File(os.path.join(args.outdir, files[-1]), "w") as file:
-
-            file["/meta/normalisation/N"] = args.size
-            file["/meta/seed_base"] = seed
-            file["/param/m"] = 1.0
-            file["/param/eta"] = args.eta
-            file["/param/mu"] = 1.0
-            file["/param/k_neighbours"] = 1.0
-            file["/param/k_frame"] = 1.0 / args.size
-            file["/param/dt"] = args.dt
-            file["/param/xyield/initstate"] = seed + np.arange(args.size).astype(np.int64)
-            file["/param/xyield/initseq"] = np.zeros(args.size, dtype=np.int64)
-            file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * args.size)))
-            file["/param/xyield/nbuffer"] = 300
-            file["/param/xyield/xoffset"] = -100.0
-            file["/param/xyield/weibull/offset"] = 1e-5
-            file["/param/xyield/weibull/mean"] = 1.0
-            file["/param/xyield/weibull/k"] = 2.0
-            file["/event_driven/dx"] = 1e-3
+            generate(
+                file=file,
+                N=args.size,
+                seed=seed,
+                eta=args.eta,
+                dt=args.dt,
+            )
 
     executable = entry_points["cli_run"]
 
     if args.nopassing:
-        commands = [f"{executable} --nopassing {file}" for file in files]
+        commands = [f"{executable} --nopassing --nstep {args.nstep:d} {file}" for file in files]
     else:
-        commands = [f"{executable} {file}" for file in files]
+        commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
 
     slurm.serial_group(
         commands,
