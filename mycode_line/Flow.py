@@ -85,6 +85,7 @@ def cli_generate(cli_args=None):
     parser.add_argument("--dt", type=float, default=0.1, help="Time-step")
     parser.add_argument("--eta", type=float, default=2.0 * np.sqrt(3.0) / 10.0, help="Damping")
     parser.add_argument("--gammadot", type=float, default=1.0, help="Driving rate")
+    parser.add_argument("--nstep", type=int, default=1000, help="#output steps to run")
     parser.add_argument("--output", type=int, default=1000, help="Output interval")
     parser.add_argument("--snapshot", type=int, default=100, help="Snapshot every n-output.")
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
@@ -120,7 +121,7 @@ def cli_generate(cli_args=None):
 
     executable = entry_points["cli_run"]
     slurm.serial_group(
-        [f"{executable} {file}" for file in files],
+        [f"{executable} --nstep {args.nstep:d} {file}" for file in files],
         basename=executable,
         group=1,
         outdir=args.outdir,
