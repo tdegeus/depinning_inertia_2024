@@ -12,7 +12,6 @@ import textwrap
 import FrictionQPotSpringBlock  # noqa: F401
 import h5py
 import matplotlib.pyplot as plt
-import GooseMPL as gplt
 import numpy as np
 import tqdm
 

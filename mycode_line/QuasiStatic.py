@@ -12,10 +12,10 @@ import uuid
 
 import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock.Line1d as model
-import h5py
-import numpy as np
-import matplotlib.pyplot as plt
 import GooseMPL as gplt
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
 import prrng
 import tqdm
 from numpy.typing import ArrayLike
