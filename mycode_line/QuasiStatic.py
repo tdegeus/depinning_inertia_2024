@@ -26,7 +26,10 @@ from . import tag
 from . import tools
 from ._version import version
 
-plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+try:
+    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+except FileNotFoundError:
+    pass
 
 entry_points = dict(
     cli_ensembleinfo="EnsembleInfo",

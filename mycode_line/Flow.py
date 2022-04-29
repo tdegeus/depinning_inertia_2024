@@ -21,7 +21,10 @@ from . import storage
 from . import tools
 from ._version import version
 
-plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+try:
+    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+except FileNotFoundError:
+    pass
 
 basename = os.path.splitext(os.path.basename(__file__))[0]
 
