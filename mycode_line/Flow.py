@@ -12,6 +12,7 @@ import textwrap
 import FrictionQPotSpringBlock  # noqa: F401
 import h5py
 import matplotlib.pyplot as plt
+import GooseMPL as gplt
 import numpy as np
 import tqdm
 
@@ -21,12 +22,15 @@ from . import storage
 from . import tools
 from ._version import version
 
+plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+
+basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
     cli_ensembleinfo="Flow_ensembleinfo",
     cli_generate="Flow_generate",
-    cli_run="Flow_run",
     cli_plot="Flow_plot",
+    cli_run="Flow_run",
 )
 
 
@@ -81,19 +85,86 @@ def cli_generate(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--dt", type=float, default=0.1, help="Time-step")
-    parser.add_argument("--eta", type=float, default=2.0 * np.sqrt(3.0) / 10.0, help="Damping")
-    parser.add_argument("--gammadot", type=float, default=1.0, help="Driving rate")
-    parser.add_argument("--nstep", type=int, default=1000, help="#output steps to run")
-    parser.add_argument("--output", type=int, default=1000, help="Output interval")
-    parser.add_argument("--snapshot", type=int, default=100, help="Snapshot every n-output.")
-    parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
-    parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
-    parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-w", "--time", type=str, default="72h", help="Walltime")
-    parser.add_argument("outdir", type=str, help="Output directory")
+    parser.add_argument(
+        "--nstep",
+        type=lambda x: int(float(x)),
+        default=1000,
+        help="#output steps to run.",
+    )
+    parser.add_argument(
+        "--output",
+        type=lambda x: int(float(x)),
+        default=1000,
+        help="Number of time-steps between writing global output variables.",
+    )
+    parser.add_argument(
+        "--snapshot",
+        type=lambda x: int(float(x)),
+        default=100,
+        help="Write snapshot every n output steps.",
+    )
+    parser.add_argument(
+        "-n",
+        "--nsim",
+        type=lambda x: int(float(x)),
+        default=1,
+        help="#simulations",
+    )
+    parser.add_argument(
+        "-N",
+        "--size",
+        type=lambda x: int(float(x)),
+        default=5000,
+        help="#particles",
+    )
+    parser.add_argument(
+        "--develop",
+        action="store_true",
+        help="Allow uncommitted changes",
+    )
+    parser.add_argument(
+        "--dt",
+        type=float,
+        default=0.1,
+        help="Time-step",
+    )
+    parser.add_argument(
+        "--eta",
+        type=float,
+        default=2.0 * np.sqrt(3.0) / 10.0,
+        help="Damping coefficient.",
+    )
+    parser.add_argument(
+        "--gammadot",
+        type=float,
+        default=1.0,
+        help="Driving rate.",
+    )
+    parser.add_argument(
+        "-s",
+        "--start",
+        type=int,
+        default=0,
+        help="Start simulation (correct seed if extending ensemble.",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=version,
+    )
+    parser.add_argument(
+        "-w",
+        "--time",
+        type=str,
+        default="72h",
+        help="Walltime",
+    )
+    parser.add_argument(
+        "outdir",
+        type=str,
+        help="Output directory",
+    )
 
     args = tools._parse(parser, cli_args)
 
@@ -183,7 +254,8 @@ def cli_run(cli_args=None):
 
             system.chunk_rshift()
             ret = system.flowSteps_boundcheck(output, gammadot)
-            assert ret > 0
+            if ret == 0:
+                raise RuntimeError("Ran out-of-bounds: reduce output interval")
             pbar.n = istep + 1
             pbar.refresh()
             inc += output
@@ -231,6 +303,8 @@ def cli_plot(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
+    parser.add_argument("-m", "--marker", type=str, help="Marker.")
+    parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("file", type=str, help="Simulation file")
 
     args = tools._parse(parser, cli_args)
@@ -242,8 +316,18 @@ def cli_plot(cli_args=None):
         f_frame = file["/output/f_frame"][...]
         f_potential = file["/output/f_potential"][...]
 
+    opts = {}
+    if args.marker is not None:
+        opts["marker"] = args.marker
+
     fig, ax = plt.subplots()
-    ax.plot(x_frame, f_frame)
-    ax.plot(x_frame, f_potential)
-    plt.show()
+    ax.plot(x_frame, f_frame, label=r"$f_\text{frame}$", **opts)
+    ax.plot(x_frame, f_potential, label=r"$f_\text{potential}$", **opts)
+    ax.set_xlabel(r"$x_\text{frame}$")
+    ax.set_ylabel(r"$f$")
+    ax.legend()
+    if args.output is not None:
+        fig.savefig(args.output)
+    else:
+        plt.show()
     plt.close(fig)
