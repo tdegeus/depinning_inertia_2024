@@ -243,7 +243,7 @@ def create_check_meta(
     return meta
 
 
-def generate(file: h5py.File, N: int, seed: int, eta: float, dt: float):
+def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = None):
     """
     Generate a simulation file.
 
@@ -253,6 +253,16 @@ def generate(file: h5py.File, N: int, seed: int, eta: float, dt: float):
     :param eta: Damping coefficient.
     :param dt: Time step.
     """
+
+    if eta is None and dt is None:
+        eta = 1
+        dt = 1
+    elif dt is None:
+        np.array([1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2])
+        known_dt = np.array([5e-2, 1e-2, 1e-3, 5e-2, 5e-2, 5e-3])
+        dt = known_dt[np.argmin(np.abs(eta - known_dt))]
+    else:
+        assert eta is not None
 
     file["/meta/normalisation/N"] = N
     file["/meta/seed_base"] = seed
@@ -290,10 +300,10 @@ def cli_generate(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--dt", type=float, default=0.1, help="Time-step")
-    parser.add_argument("--eta", type=float, default=2.0 * np.sqrt(3.0) / 10.0, help="Damping")
+    parser.add_argument("--dt", type=float, help="Time-step")
+    parser.add_argument("--eta", type=float, help="Damping coefficient")
     parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
-    parser.add_argument("--nstep", type=int, default=5000, help="#load-steps to run")
+    parser.add_argument("--nstep", type=int, default=20000, help="#load-steps to run")
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
@@ -302,6 +312,7 @@ def cli_generate(cli_args=None):
     parser.add_argument("outdir", type=str, help="Output directory")
 
     args = tools._parse(parser, cli_args)
+    assert args.nopassing or args.eta is not None
 
     if not os.path.isdir(args.outdir):
         os.makedirs(args.outdir)

@@ -93,13 +93,13 @@ def cli_generate(cli_args=None):
     parser.add_argument(
         "--output",
         type=lambda x: int(float(x)),
-        default=1000,
+        default=10000,
         help="Number of time-steps between writing global output variables.",
     )
     parser.add_argument(
         "--snapshot",
         type=lambda x: int(float(x)),
-        default=100,
+        default=0,
         help="Write snapshot every n output steps.",
     )
     parser.add_argument(
@@ -124,13 +124,12 @@ def cli_generate(cli_args=None):
     parser.add_argument(
         "--dt",
         type=float,
-        default=0.1,
         help="Time-step",
     )
     parser.add_argument(
         "--eta",
         type=float,
-        default=2.0 * np.sqrt(3.0) / 10.0,
+        required=True,
         help="Damping coefficient.",
     )
     parser.add_argument(
@@ -248,6 +247,7 @@ def cli_run(cli_args=None):
 
         system = QuasiStatic.System(file)
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+        output_fields = ["/output/inc", "/output/f_frame", "/output/f_potential", "/output/x"]
 
         for istep in range(args.nstep):
 
@@ -259,31 +259,27 @@ def cli_run(cli_args=None):
             pbar.refresh()
             inc += output
 
-            if inc % snapshot == 0:
+            if snapshot > 0:
+                if inc % snapshot == 0:
+                    i = int(inc / snapshot)
+                    for key in ["/snapshot/inc"]:
+                        file[key].resize((i + 1,))
+                    file["/snapshot/inc"][i] = inc
+                    file[f"/snapshot/x/{inc:d}"] = system.x()
+                    file[f"/snapshot/v/{inc:d}"] = system.v()
+                    file[f"/snapshot/a/{inc:d}"] = system.a()
+                    file.flush()
 
-                i = int(inc / snapshot)
-
-                for key in ["/snapshot/inc"]:
-                    file[key].resize((i + 1,))
-
-                file["/snapshot/inc"][i] = inc
-                file[f"/snapshot/x/{inc:d}"] = system.x()
-                file[f"/snapshot/v/{inc:d}"] = system.v()
-                file[f"/snapshot/a/{inc:d}"] = system.a()
-                file.flush()
-
-            if inc % output == 0:
-
-                i = int(inc / output)
-
-                for key in ["/output/inc", "/output/f_frame", "/output/f_potential", "/output/x"]:
-                    file[key].resize((i + 1,))
-
-                file["/output/inc"][i] = inc
-                file["/output/f_frame"][i] = np.mean(system.f_frame())
-                file["/output/f_potential"][i] = -np.mean(system.f_potential())
-                file["/output/x"][i] = np.mean(system.x())
-                file.flush()
+            if output > 0:
+                if inc % output == 0:
+                    i = int(inc / output)
+                    for key in output_fields:
+                        file[key].resize((i + 1,))
+                    file["/output/inc"][i] = inc
+                    file["/output/f_frame"][i] = np.mean(system.f_frame())
+                    file["/output/f_potential"][i] = -np.mean(system.f_potential())
+                    file["/output/x"][i] = np.mean(system.x())
+                    file.flush()
 
 
 def cli_plot(cli_args=None):
