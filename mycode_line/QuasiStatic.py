@@ -14,6 +14,8 @@ import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock.Line1d as model
 import h5py
 import numpy as np
+import matplotlib.pyplot as plt
+import GooseMPL as gplt
 import prrng
 import tqdm
 from numpy.typing import ArrayLike
@@ -24,10 +26,12 @@ from . import tag
 from . import tools
 from ._version import version
 
+plt.style.use(["goose", "goose-latex", "goose-autolayout"])
 
 entry_points = dict(
     cli_ensembleinfo="EnsembleInfo",
     cli_generate="Run_generate",
+    cli_plot="Run_plot",
     cli_run="Run",
 )
 
@@ -709,3 +713,57 @@ def cli_ensembleinfo(cli_args=None):
             [";".join(i) for i in info["dependencies"]], output, "/lookup/dependencies", split=";"
         )
         output["files"] = output["/lookup/filepath"]
+
+
+def cli_plot(cli_args=None):
+    """
+    Basic plot
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-m", "--marker", type=str, help="Marker.")
+    parser.add_argument("-o", "--output", type=str, help="Store figure.")
+    parser.add_argument("file", type=str, help="Simulation file")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+
+    with h5py.File(args.file) as file:
+        out = basic_output(file)
+
+    opts = {}
+    if args.marker is not None:
+        opts["marker"] = args.marker
+
+    fig, axes = gplt.subplots(ncols=2)
+
+    axes[0].plot(out["x_frame"], out["f_frame"], label=r"$f_\text{frame}$", **opts)
+    axes[0].plot(out["x_frame"], out["f_potential"], label=r"$f_\text{potential}$", **opts)
+    axes[0].set_xlabel(r"$x_\text{frame}$")
+    axes[0].set_ylabel(r"$f$")
+    axes[0].legend()
+
+    axes[1].set_xscale("log")
+    axes[1].set_yscale("log")
+
+    data = out["S"][out["S"] > 0]
+    bin_edges = gplt.histogram_bin_edges(data, bins=30, mode="log")
+    P, x = gplt.histogram(data, bins=bin_edges, density=True, return_edges=False)
+    axes[1].plot(x, P)
+
+    if args.output is not None:
+        fig.savefig(args.output)
+    else:
+        plt.show()
+
+    plt.close(fig)
