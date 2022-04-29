@@ -12,9 +12,7 @@ import uuid
 
 import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock.Line1d as model
-import GooseMPL as gplt
 import h5py
-import matplotlib.pyplot as plt
 import numpy as np
 import prrng
 import tqdm
@@ -729,10 +727,10 @@ def cli_plot(cli_args=None):
     Basic plot
     """
 
-    try:
-        plt.style.use(["goose", "goose-latex", "goose-autolayout"])
-    except FileNotFoundError:
-        pass
+    import GooseMPL as gplt  # noqa: F401
+    import matplotlib.pyplot as plt  # noqa: F401
+
+    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
 
     class MyFmt(
         argparse.RawDescriptionHelpFormatter,
