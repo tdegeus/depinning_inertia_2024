@@ -142,7 +142,12 @@ class System(model.System):
 
     def chunk_rshift(self):
         """
-        Shift chunk strictly in positive direction. Asserts that positions are in the current chunk.
+        Shift all particles such that the current yield positions are aligned as::
+
+            nbuffer | nchunk - nbuffer
+
+        This function should be used if you expect that the particles are moving forward.
+        It if very inefficient to track a backward movement.
         """
 
         x = self.x()
@@ -150,7 +155,6 @@ class System(model.System):
         assert np.all(self.ymax() > x)
         shift = self.i() - self.istart() - self.nbuffer + 1
         assert np.all(shift > self.nbuffer - self.nchunk)
-        shift = np.where(shift < 0, 0, shift)
         self._chuck_shift(shift)
 
     def _chunk_goto(self, x: ArrayLike):
@@ -371,7 +375,7 @@ def cli_run(cli_args=None):
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
 
         if "stored" not in file:
-            niter = minimise(nmargin=10)
+            niter = minimise(nmargin=30)
             assert niter > 0
             system.set_t(0.0)
             file["/x/0"] = system.x()
@@ -405,7 +409,7 @@ def cli_run(cli_args=None):
                 inc = system.inc()
 
                 while True:
-                    niter = minimise(nmargin=10)
+                    niter = minimise(nmargin=30)
                     if niter > 0:
                         break
                     system.chunk_rshift()
