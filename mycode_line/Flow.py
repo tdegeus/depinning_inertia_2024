@@ -21,11 +21,6 @@ from . import storage
 from . import tools
 from ._version import version
 
-try:
-    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
-except FileNotFoundError:
-    pass
-
 basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
@@ -289,6 +284,11 @@ def cli_plot(cli_args=None):
     """
     Basic plot
     """
+
+    try:
+        plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+    except FileNotFoundError:
+        pass
 
     class MyFmt(
         argparse.RawDescriptionHelpFormatter,

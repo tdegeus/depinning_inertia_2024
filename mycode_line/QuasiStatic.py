@@ -26,11 +26,6 @@ from . import tag
 from . import tools
 from ._version import version
 
-try:
-    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
-except FileNotFoundError:
-    pass
-
 entry_points = dict(
     cli_ensembleinfo="EnsembleInfo",
     cli_generate="Run_generate",
@@ -733,6 +728,11 @@ def cli_plot(cli_args=None):
     """
     Basic plot
     """
+
+    try:
+        plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+    except FileNotFoundError:
+        pass
 
     class MyFmt(
         argparse.RawDescriptionHelpFormatter,
