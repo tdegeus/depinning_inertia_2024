@@ -28,7 +28,7 @@ class MyTests(unittest.TestCase):
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        Flow.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, dirname])
+        Flow.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, "--gammadot", 1, dirname])
         Flow.cli_run(["--dev", filename])
 
     @classmethod
