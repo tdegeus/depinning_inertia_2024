@@ -255,7 +255,7 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
         dt = 1
     elif dt is None:
         known_eta = np.array([1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2])
-        known_dt = np.array([5e-3, 1e-3, 5e-2, 5e-2, 5e-3, 5e-4])
+        known_dt = np.array([5e-3, 5e-3, 5e-2, 5e-2, 5e-3, 5e-4])
         dt = np.interp(eta, known_eta, known_dt)
     else:
         assert eta is not None

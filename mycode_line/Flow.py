@@ -84,13 +84,11 @@ def cli_generate(cli_args=None):
     parser.add_argument(
         "--nstep",
         type=lambda x: int(float(x)),
-        default=1000,
         help="#output steps to run.",
     )
     parser.add_argument(
         "--output",
         type=lambda x: int(float(x)),
-        default=10000,
         help="Number of time-steps between writing global output variables.",
     )
     parser.add_argument(
@@ -132,7 +130,7 @@ def cli_generate(cli_args=None):
     parser.add_argument(
         "--gammadot",
         type=float,
-        default=1.0,
+        required=True,
         help="Driving rate.",
     )
     parser.add_argument(
@@ -162,6 +160,14 @@ def cli_generate(cli_args=None):
     )
 
     args = tools._parse(parser, cli_args)
+
+    known_gammadot = np.array([1e-2, 1e-1, 1e-0, 1e1])
+    known_output = np.array([1e3, 1e3, 1e3, 1e2])
+    known_nstep = np.array([1e5, 1e5, 1e5, 1e5])
+    if args.output is None:
+        args.output = int(np.interp(args.gammadot, known_gammadot, known_output))
+    if args.nstep is None:
+        args.nstep = int(np.interp(args.gammadot, known_gammadot, known_nstep))
 
     if not os.path.isdir(args.outdir):
         os.makedirs(args.outdir)
@@ -202,6 +208,7 @@ def run_create_extendible(file: h5py.File):
 
     storage.create_extendible(file, "/output/f_frame", np.float64)
     storage.create_extendible(file, "/output/f_potential", np.float64)
+    storage.create_extendible(file, "/output/f_damping", np.float64)
     storage.create_extendible(file, "/output/x", np.float64)
     storage.create_extendible(file, "/output/inc", np.uint32)
     storage.create_extendible(file, "/snapshot/inc", np.uint32)
@@ -274,7 +281,8 @@ def cli_run(cli_args=None):
                         file[key].resize((i + 1,))
                     file["/output/inc"][i] = inc
                     file["/output/f_frame"][i] = np.mean(system.f_frame())
-                    file["/output/f_potential"][i] = -np.mean(system.f_potential())
+                    file["/output/f_potential"][i] = np.mean(system.f_potential())
+                    file["/output/f_damping"][i] = np.mean(system.f_damping())
                     file["/output/x"][i] = np.mean(system.x())
                     file.flush()
 
@@ -318,7 +326,7 @@ def cli_plot(cli_args=None):
 
     fig, ax = plt.subplots()
     ax.plot(x_frame, f_frame, label=r"$f_\text{frame}$", **opts)
-    ax.plot(x_frame, f_potential, label=r"$f_\text{potential}$", **opts)
+    ax.plot(x_frame, -f_potential, label=r"$f_\text{potential}$", **opts)
     ax.set_xlabel(r"$x_\text{frame}$")
     ax.set_ylabel(r"$f$")
     ax.legend()
