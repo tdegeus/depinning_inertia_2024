@@ -251,7 +251,13 @@ def cli_run(cli_args=None):
 
         system = QuasiStatic.System(file)
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
-        output_fields = ["/output/inc", "/output/f_frame", "/output/f_potential", "/output/x"]
+        output_fields = [
+            "/output/inc",
+            "/output/f_frame",
+            "/output/f_potential",
+            "/output/f_damping",
+            "/output/x",
+        ]
 
         for istep in range(args.nstep):
 
