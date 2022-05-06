@@ -163,7 +163,9 @@ def cli_generate(cli_args=None):
 
     known_gammadot = np.array([1e-2, 1e-1, 1e-0, 1e1])
     known_output = np.array([1e3, 1e3, 1e3, 1e2])
-    known_nstep = np.array([1e5, 1e5, 1e5, 1e5])
+    known_nstep = np.array([1e4, 1e4, 1e4, 1e4])
+    if args.eta > 1e0:
+        known_nstep *= 1e5 * np.ones_line(known_nstep)
     if args.output is None:
         args.output = int(np.interp(args.gammadot, known_gammadot, known_output))
     if args.nstep is None:
