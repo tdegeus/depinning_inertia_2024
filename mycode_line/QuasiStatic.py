@@ -162,15 +162,13 @@ class System(model.System):
         Shift until the positions are in the current chunk.
         """
 
-        assert np.all(x >= self.ymin())  # WIP
-
         while True:
             if np.all(np.logical_and(self.ymin() < x, self.ymax() > x)):
                 return
             y = self.y()
             shift = np.argmax(y >= x.reshape(-1, 1), axis=1) - self.nbuffer
-            assert np.all(shift > self.nbuffer - self.nchunk)
-            shift = np.where(y[:, -1] <= x, self.nchunk - 1, shift)
+            shift = np.where(y[:, -1] <= x, self.nchunk - 10, shift)
+            shift = np.where(y[:, 0] >= x, 10 - self.nchunk, shift)
             self._chuck_shift(shift)
 
     def restore_quasistatic_step(self, file: h5py.File, step: int):
@@ -181,12 +179,12 @@ class System(model.System):
         :param step: Step number.
         """
 
-        x = file[f"/x/{step:d}"][...]
+        x = file["x"][str(step)][...]
 
         self._chunk_goto(x)
         self.quench()
-        self.set_inc(file["/inc"][step])
-        self.set_x_frame(file["/x_frame"][step])
+        self.set_inc(file["inc"][step])
+        self.set_x_frame(file["x_frame"][step])
         self.set_x(x)
 
 
