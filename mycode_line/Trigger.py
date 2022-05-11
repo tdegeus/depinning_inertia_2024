@@ -154,6 +154,7 @@ def cli_generate(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    progname = entry_points[funcname]
 
     parser.add_argument("--delta-f", type=float, help="Advance to fixed force")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -169,7 +170,6 @@ def cli_generate(cli_args=None):
         os.makedirs(args.outdir)
 
     basedir = os.path.dirname(args.ensembleinfo)
-    progname = entry_points["cli_run"]
 
     with h5py.File(args.ensembleinfo, "r") as info:
 
@@ -276,11 +276,12 @@ def cli_generate(cli_args=None):
                     storage.dset_extend1d(dest, f"/branch/{ibranch:d}/x_frame", 0, x_frame)
                     dest.flush()
 
-    commands = [f"{progname} {file}" for file in files]
+    executable = entry_points["cli_run"]
+    commands = [f"{executable} {file}" for file in files]
 
     slurm.serial_group(
         commands,
-        basename=progname,
+        basename=executable,
         group=1,
         outdir=args.outdir,
         sbatch={"time": args.time},
