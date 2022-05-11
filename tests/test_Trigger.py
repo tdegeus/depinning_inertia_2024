@@ -31,7 +31,7 @@ class MyTests(unittest.TestCase):
             os.makedirs(dirname)
 
         QuasiStatic.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, dirname])
-        QuasiStatic.cli_run(["--dev", filename])
+        QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
     @classmethod
