@@ -16,6 +16,9 @@ idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
 
+tfile = os.path.join(workdir, idname)
+tinfo = os.path.join(workdir, "EnsembleInfo.h5")
+
 
 class MyTests(unittest.TestCase):
     """ """
@@ -45,12 +48,13 @@ class MyTests(unittest.TestCase):
         """
 
         Trigger.cli_generate(["--dev", "-o", workdir, infoname])
-        Trigger.cli_run(["--dev", os.path.join(workdir, idname)])
+        Trigger.cli_run(["--dev", tfile])
 
         shutil.rmtree(workdir)
 
         Trigger.cli_generate(["--dev", "-o", workdir, "--delta-f", 0.1, infoname])
-        Trigger.cli_run(["--dev", os.path.join(workdir, idname)])
+        Trigger.cli_run(["--dev", tfile])
+        Trigger.cli_ensembleinfo(["--dev", "-o", tinfo, tfile])
 
 
 if __name__ == "__main__":

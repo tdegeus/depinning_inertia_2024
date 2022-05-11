@@ -25,6 +25,11 @@ basename = os.path.splitext(os.path.basename(__file__))[0]
 entry_points = dict(
     cli_run="Trigger_run",
     cli_generate="Trigger_generate",
+    cli_ensembleinfo="Trigger_EnsembleInfo",
+)
+
+file_defaults = dict(
+    cli_ensembleinfo="Trigger_EnsembleInfo.h5",
 )
 
 
@@ -106,6 +111,75 @@ def cli_run(cli_args=None):
             storage.dset_extend1d(file, f"/branch/{ibranch:d}/x_frame", 1, system.x_frame())
             file[f"/branch/{ibranch:d}/x/1"] = system.x()
             file.flush()
+
+
+def cli_ensembleinfo(cli_args=None):
+    """
+    Read information (avalanche size, force) of an ensemble,
+    see :py:func:`basic_output`.
+    Store into a single output file.
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    progname = entry_points[funcname]
+    output = file_defaults[funcname]
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("files", nargs="*", type=str, help="Files to read")
+
+    args = tools._parse(parser, cli_args)
+    assert len(args.files) > 0
+    assert all([os.path.isfile(file) for file in args.files])
+    tools._check_overwrite_file(args.output, args.force)
+
+    fmt = "{:" + str(max(len(i) for i in args.files)) + "s}"
+    pbar = tqdm.tqdm(args.files)
+    pbar.set_description(fmt.format(""))
+
+    with h5py.File(args.output, "w") as output:
+
+        QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+
+        S = []
+        A = []
+        T = []
+        p = []
+        f_frame = []
+        f_frame_0 = []
+
+        for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
+
+            pbar.set_description(fmt.format(filename), refresh=True)
+
+            with h5py.File(filepath) as file:
+
+                keep = file["/output/completed"][...]
+                S += file["/output/S"][...][keep].tolist()
+                A += file["/output/A"][...][keep].tolist()
+                T += file["/output/T"][...][keep].tolist()
+                p += file["/output/p"][...][keep].tolist()
+                f_frame += file["/output/f_frame"][...][keep].tolist()
+                f_frame_0 += file["/output/f_frame_0"][...][keep].tolist()
+
+        output["S"] = S
+        output["A"] = A
+        output["T"] = T
+        output["p"] = p
+        output["f_frame"] = f_frame
+        output["f_frame_0"] = f_frame_0
 
 
 def _get_force_increment(step, force, kick, target_force):
