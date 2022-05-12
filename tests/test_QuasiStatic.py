@@ -41,7 +41,10 @@ class MyTests(unittest.TestCase):
         Read output.
         """
 
+        ss = os.path.join(dirname, "AfterSystemSpanning.h5")
+
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+        QuasiStatic.cli_stateaftersystemspanning(["--dev", "-o", ss, infoname])
 
 
 if __name__ == "__main__":
