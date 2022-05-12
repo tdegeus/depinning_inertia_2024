@@ -13,6 +13,7 @@ dependencies:
 - python
 - python-cppcolormap
 - python-frictionqpotspringblock >=0.14.0
+- python-gooseeye
 - python-goosefem >=1.1.0
 - python-prrng
 - python-qpot >=0.12.1

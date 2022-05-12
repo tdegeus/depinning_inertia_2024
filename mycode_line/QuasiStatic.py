@@ -12,6 +12,7 @@ import uuid
 
 import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock.Line1d as model
+import GooseEYE as eye
 import h5py
 import numpy as np
 import prrng
@@ -30,13 +31,13 @@ entry_points = dict(
     cli_generate="Run_generate",
     cli_plot="Run_plot",
     cli_run="Run",
-    cli_yielddistance="YieldDistance",
+    cli_stateaftersystemspanning="StateAfterSystemSpanning",
 )
 
 
 file_defaults = dict(
     cli_ensembleinfo="EnsembleInfo.h5",
-    cli_yielddistance="YieldDistance.h5",
+    cli_stateaftersystemspanning="StateAfterSystemSpanning.h5",
 )
 
 
@@ -640,7 +641,7 @@ def cli_ensembleinfo(cli_args=None):
 
             pbar.set_description(fmt.format(filename), refresh=True)
 
-            with h5py.File(filepath, "r") as file:
+            with h5py.File(filepath) as file:
 
                 if i == 0:
                     norm = normalisation(file)
@@ -732,7 +733,7 @@ def cli_ensembleinfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
-def cli_yielddistance(cli_args=None):
+def cli_stateaftersystemspanning(cli_args=None):
     """
     Extract the distribution of P(x), with x the distance to yielding.
     """
@@ -759,18 +760,20 @@ def cli_yielddistance(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.info)
     tools._check_overwrite_file(args.output, args.force)
-    dirname = os.path.dirname(args.info)
+    basedir = os.path.dirname(args.info)
 
-    with h5py.File(args.info) as file:
+    with h5py.File(args.info) as info:
 
-        paths = file["/lookup/filepath"].asstr()[...]
-        fid = file["/avalanche/file"][...]
-        step = file["/avalanche/step"][...]
-        A = file["/avalanche/A"][...]
-        N = file["/normalisation/N"][...]
+        assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
+
+        paths = info["/lookup/filepath"].asstr()[...]
+        file = info["/avalanche/file"][...]
+        step = info["/avalanche/step"][...]
+        A = info["/avalanche/A"][...]
+        N = info["/normalisation/N"][...]
 
         keep = A == N
-        fid = fid[keep]
+        file = file[keep]
         step = step[keep]
 
     bin_edges = np.logspace(-1, 1, 20001)
@@ -778,14 +781,20 @@ def cli_yielddistance(cli_args=None):
     count_xr = np.zeros(bin_edges.size + 1, dtype=np.int64)
     count_xl = np.zeros(bin_edges.size + 1, dtype=np.int64)
 
-    for f in tqdm.tqdm(np.unique(fid)):
+    roi = int((N - N % 2) / 2)
+    roi = int(roi - roi % 2 + 1)
+    ensemble = eye.Ensemble([roi], variance=True, periodic=True)
 
-        with h5py.File(os.path.join(dirname, paths[f])) as file:
+    for f in tqdm.tqdm(np.unique(file)):
 
-            system = System(file)
+        with h5py.File(os.path.join(basedir, paths[f])) as source:
 
-            for s in tqdm.tqdm(np.sort(step[fid == f])):
-                system.restore_quasistatic_step(file, s)
+            system = System(source)
+
+            for s in tqdm.tqdm(np.sort(step[file == f])):
+
+                system.restore_quasistatic_step(source, s)
+
                 xr = system.yieldDistanceRight
                 xl = system.yieldDistanceLeft
                 x = np.minimum(xl, xl)
@@ -794,12 +803,22 @@ def cli_yielddistance(cli_args=None):
                 count_xr += np.bincount(np.digitize(xr, bin_edges), minlength=count_x.size)
                 count_xl += np.bincount(np.digitize(xl, bin_edges), minlength=count_x.size)
 
-    with h5py.File(args.output, "w") as file:
+                ensemble.heightheight(system.x)
 
-        file["bin_edges"] = bin_edges
-        file["count_right"] = count_xr
-        file["count_left"] = count_xl
-        file["count_any"] = count_x
+    with h5py.File(args.output, "w") as output:
+
+        output["/yield_distance/bin_edges"] = bin_edges
+        output["/yield_distance/count_right"] = count_xr
+        output["/yield_distance/count_left"] = count_xl
+        output["/yield_distance/count_any"] = count_x
+
+        R = ensemble.result()
+        V = ensemble.variance()
+        A = ensemble.distance(0).astype(int)
+
+        output["/heightheight/A"] = A[A >= 0]
+        output["/heightheight/R"] = R[A >= 0]
+        output["/heightheight/error"] = np.sqrt(V[A >= 0])
 
 
 def cli_plot(cli_args=None):
