@@ -546,7 +546,7 @@ def basic_output(file: h5py.File) -> dict:
     ret["kick"] = file["event_driven"]["kick"][...].astype(bool)
     ret["step"] = steps
 
-    for i, step in enumerate(steps):
+    for i, step in enumerate(tqdm.tqdm(steps)):
 
         system.restore_quasistatic_step(file, step)
 
