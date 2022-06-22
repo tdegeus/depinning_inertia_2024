@@ -75,14 +75,13 @@ def cli_run(cli_args=None):
         pbar = tqdm.tqdm(total=n, desc=f"{basename}: branch = {0:8d}, p = {0:8d}, S = {0:8d}")
         dx = file["/event_driven/dx"][...]
         system = QuasiStatic.System(file)
-        N = system.N()
 
         for ibranch in branches:
 
-            for p in range(N):
+            for p in range(system.N):
                 system.restore_quasistatic_step(file[f"/branch/{ibranch:d}"], 0)
-                inc = system.inc()
-                i_n = system.i()
+                inc = system.inc
+                i_n = np.copy(system.i)
                 system.trigger(p=p, eps=dx, direction=1)
 
                 while True:
@@ -91,7 +90,7 @@ def cli_run(cli_args=None):
                         break
                     system.chunk_rshift()
 
-                S = np.sum(system.i() - i_n)
+                S = np.sum(system.i - i_n)
 
                 if S > 0:
                     break
@@ -102,14 +101,14 @@ def cli_run(cli_args=None):
 
             file["/output/completed"][ibranch] = True
             file["/output/S"][ibranch] = S
-            file["/output/A"][ibranch] = np.sum(system.i() != i_n)
+            file["/output/A"][ibranch] = np.sum(system.i != i_n)
             file["/output/T"][ibranch] = system.quasistaticActivityLast() - inc
             file["/output/p"][ibranch] = p
-            file["/output/f_frame"][ibranch] = np.mean(system.f_frame())
+            file["/output/f_frame"][ibranch] = np.mean(system.f_frame)
 
-            storage.dset_extend1d(file, f"/branch/{ibranch:d}/inc", 1, system.inc())
-            storage.dset_extend1d(file, f"/branch/{ibranch:d}/x_frame", 1, system.x_frame())
-            file[f"/branch/{ibranch:d}/x/1"] = system.x()
+            storage.dset_extend1d(file, f"/branch/{ibranch:d}/inc", 1, system.inc)
+            storage.dset_extend1d(file, f"/branch/{ibranch:d}/x_frame", 1, system.x_frame)
+            file[f"/branch/{ibranch:d}/x/1"] = system.x
             file.flush()
 
 
@@ -335,8 +334,8 @@ def cli_generate(cli_args=None):
                     if load:
                         system.restore_quasistatic_step(source, s)
                         system.advanceToFixedForce(f)
-                        x = system.x()
-                        x_frame = system.x_frame()
+                        x = system.x
+                        x_frame = system.x_frame
 
                     dest["/output/step_c"][ibranch] = start
                     dest["/output/step"][ibranch] = s

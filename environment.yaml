@@ -12,10 +12,10 @@ dependencies:
 - pre-commit
 - python
 - python-cppcolormap
-- python-frictionqpotspringblock >=0.12.0
+- python-frictionqpotspringblock >=0.14.0
 - python-goosefem >=1.1.0
 - python-prrng
-- python-qpot
+- python-qpot >=0.12.1
 - setuptools_scm
 - shelephant
 - sphinx_rtd_theme

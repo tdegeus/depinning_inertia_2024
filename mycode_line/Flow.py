@@ -277,9 +277,9 @@ def cli_run(cli_args=None):
                     for key in ["/snapshot/inc"]:
                         file[key].resize((i + 1,))
                     file["/snapshot/inc"][i] = inc
-                    file[f"/snapshot/x/{inc:d}"] = system.x()
-                    file[f"/snapshot/v/{inc:d}"] = system.v()
-                    file[f"/snapshot/a/{inc:d}"] = system.a()
+                    file[f"/snapshot/x/{inc:d}"] = system.x
+                    file[f"/snapshot/v/{inc:d}"] = system.v
+                    file[f"/snapshot/a/{inc:d}"] = system.a
                     file.flush()
 
             if output > 0:
@@ -288,10 +288,10 @@ def cli_run(cli_args=None):
                     for key in output_fields:
                         file[key].resize((i + 1,))
                     file["/output/inc"][i] = inc
-                    file["/output/f_frame"][i] = np.mean(system.f_frame())
-                    file["/output/f_potential"][i] = np.mean(system.f_potential())
-                    file["/output/f_damping"][i] = np.mean(system.f_damping())
-                    file["/output/x"][i] = np.mean(system.x())
+                    file["/output/f_frame"][i] = np.mean(system.f_frame)
+                    file["/output/f_potential"][i] = np.mean(system.f_potential)
+                    file["/output/f_damping"][i] = np.mean(system.f_damping)
+                    file["/output/x"][i] = np.mean(system.x)
                     file.flush()
 
 

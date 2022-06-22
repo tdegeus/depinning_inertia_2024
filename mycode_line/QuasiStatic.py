@@ -15,6 +15,7 @@ import FrictionQPotSpringBlock.Line1d as model
 import h5py
 import numpy as np
 import prrng
+import QPot
 import tqdm
 from numpy.typing import ArrayLike
 
@@ -29,11 +30,13 @@ entry_points = dict(
     cli_generate="Run_generate",
     cli_plot="Run_plot",
     cli_run="Run",
+    cli_yielddistance="YieldDistance",
 )
 
 
 file_defaults = dict(
     cli_ensembleinfo="EnsembleInfo.h5",
+    cli_yielddistance="YieldDistance.h5",
 )
 
 
@@ -88,12 +91,13 @@ class System(model.System):
         initstate = file_yield["initstate"][...]
         initseq = file_yield["initseq"][...]
         xoffset = file_yield["xoffset"][...]
+        nchunk = file_yield["nchunk"][...] if nchunk is None else nchunk
 
         self.generators = prrng.pcg32_array(initstate, initseq)
-        self.nchunk = file_yield["nchunk"][...] if nchunk is None else nchunk
         self.nbuffer = file_yield["nbuffer"][...]
         self.state = self.generators.state()
-        self.state_istart = np.zeros(initstate.size, dtype=int)
+        self.istate = np.zeros(initstate.size, dtype=int)
+        self.istart = np.zeros(initstate.size, dtype=int)
 
         if "weibull" in file_yield:
             self.distribution = dict(
@@ -112,19 +116,25 @@ class System(model.System):
             k_neighbours=file["param"]["k_neighbours"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            x_yield=np.cumsum(self._draw_chunk(), axis=1) + xoffset,
-            istart=self.state_istart,
+            x_yield=np.cumsum(self._draw_dy(nchunk), axis=1) + xoffset,
         )
 
-    def _draw_chunk(self):
+        self.ymin = self.y[:, 0]
+        self.ymax = self.y[:, -1]
+
+    def _draw_dy(self, n):
         """
         Draw chunk of yield distances.
+
+        :param n: Number of yield distances to draw.
         """
 
         if self.distribution["type"] == "weibull":
-            ret = self.generators.weibull([self.nchunk], self.distribution["k"])
+            ret = self.generators.weibull([n], self.distribution["k"])
             ret *= 2.0 * self.distribution["mean"]
             ret += self.distribution["offset"]
+            self.state = self.generators.state()
+            self.istate += n
             return ret
 
     def _chuck_shift(self, shift: ArrayLike):
@@ -133,42 +143,44 @@ class System(model.System):
 
         :param shift: Shift per particle.
         """
+        if np.all(shift == 0):
+            return
 
-        self.generators.restore(self.state)
-        self.generators.advance(shift)
-        self.state = self.generators.state()
-        self.state_istart += shift
-        self.shift_dy(istart=self.state_istart, dy=self._draw_chunk())
+        dist = self.istart - self.istate
+        advance = np.where(shift < 0, shift + dist, self.y.shape[1] + dist)
+        self.generators.advance(advance)
+        self.istate += advance
+        self.istart += shift
+        self.y = QPot.cumsum_chunk(self.y, self._draw_dy(np.max(np.abs(shift)) + 1), shift)
+        self.ymin = self.y[:, 0]
+        self.ymax = self.y[:, -1]
 
     def chunk_rshift(self):
         """
         Shift all particles such that the current yield positions are aligned as::
 
-            nbuffer | nchunk - nbuffer
+            nbuffer | ...
 
         This function should be used if you expect that the particles are moving forward.
-        It if very inefficient to track a backward movement.
+        It if inefficient to track a backward movement.
         """
 
-        x = self.x()
-        assert np.all(self.ymin() < x)
-        assert np.all(self.ymax() > x)
-        shift = self.i() - self.istart() - self.nbuffer + 1
-        assert np.all(shift > self.nbuffer - self.nchunk)
-        self._chuck_shift(shift)
+        assert np.all(self.ymin < self.x)
+        assert np.all(self.ymax > self.x)
+        self._chuck_shift(self.i - self.nbuffer + 1)
 
     def _chunk_goto(self, x: ArrayLike):
         """
-        Shift until the positions are in the current chunk.
+        Shift until the chunk encompasses a target position ``x``.
+        Note that this function does not update position itself.
         """
 
         while True:
-            if np.all(np.logical_and(self.ymin() < x, self.ymax() > x)):
+            if np.all(np.logical_and(self.ymin < x, self.ymax > x)):
                 return
-            y = self.y()
-            shift = np.argmax(y >= x.reshape(-1, 1), axis=1) - self.nbuffer
-            shift = np.where(y[:, -1] <= x, self.nchunk - 10, shift)
-            shift = np.where(y[:, 0] >= x, 10 - self.nchunk, shift)
+            shift = np.argmax(self.y >= x.reshape(-1, 1), axis=1) - self.nbuffer
+            shift = np.where(self.y[:, -1] <= x, self.y.shape[1] - 10, shift)
+            shift = np.where(self.y[:, 0] >= x, 10 - self.y.shape[1], shift)
             self._chuck_shift(shift)
 
     def restore_quasistatic_step(self, file: h5py.File, step: int):
@@ -183,9 +195,9 @@ class System(model.System):
 
         self._chunk_goto(x)
         self.quench()
-        self.set_inc(file["inc"][step])
-        self.set_x_frame(file["x_frame"][step])
-        self.set_x(x)
+        self.inc = file["inc"][step]
+        self.x_frame = file["x_frame"][step]
+        self.x = x
 
 
 def create_check_meta(
@@ -386,15 +398,15 @@ def cli_run(cli_args=None):
         if "stored" not in file:
             niter = minimise(nmargin=30)
             assert niter > 0
-            system.set_t(0.0)
-            file["/x/0"] = system.x()
+            system.t = 0.0
+            file["/x/0"] = system.x
             storage.create_extendible(file, "/stored", np.uint64, desc="List of stored load-steps")
             storage.create_extendible(file, "/inc", np.uint64, desc="'Time' (increment number).")
             storage.create_extendible(file, "/x_frame", np.float64, desc="Position of load frame.")
             storage.create_extendible(file, "/event_driven/kick", bool, desc="Kick used.")
             storage.dset_extend1d(file, "/stored", 0, 0)
-            storage.dset_extend1d(file, "/inc", 0, system.inc())
-            storage.dset_extend1d(file, "/x_frame", 0, system.x_frame())
+            storage.dset_extend1d(file, "/inc", 0, system.inc)
+            storage.dset_extend1d(file, "/x_frame", 0, system.x_frame)
             storage.dset_extend1d(file, "/event_driven/kick", 0, True)
             file.flush()
 
@@ -408,14 +420,14 @@ def cli_run(cli_args=None):
 
         for step in range(step + 1, step + 1 + args.nstep):
 
-            if np.any(system.i() - system.istart() > system.nchunk - system.nbuffer):
+            if np.any(system.i > system.y.shape[1] - system.nbuffer):
                 system.chunk_rshift()
 
             kick = not kick
             system.eventDrivenStep(dx, kick)
 
             if kick:
-                inc = system.inc()
+                inc_n = system.inc
 
                 while True:
                     niter = minimise(nmargin=30)
@@ -423,16 +435,16 @@ def cli_run(cli_args=None):
                         break
                     system.chunk_rshift()
 
-                niter = system.inc() - inc
+                niter = system.inc - inc_n
                 pbar.n = step - step0
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
                 pbar.refresh()
 
             storage.dset_extend1d(file, "/stored", step, step)
-            storage.dset_extend1d(file, "/inc", step, system.inc())
-            storage.dset_extend1d(file, "/x_frame", step, system.x_frame())
+            storage.dset_extend1d(file, "/inc", step, system.inc)
+            storage.dset_extend1d(file, "/x_frame", step, system.x_frame)
             storage.dset_extend1d(file, "/event_driven/kick", step, kick)
-            file[f"/x/{step:d}"] = system.x()
+            file[f"/x/{step:d}"] = system.x
             file.flush()
 
         pbar.set_description(f"{basename}: step = {step:8d}, {'completed':16s}")
@@ -551,12 +563,12 @@ def basic_output(file: h5py.File) -> dict:
         system.restore_quasistatic_step(file, step)
 
         if i == 0:
-            i_n = system.i()
+            i_n = system.istart + system.i
 
-        i = system.i()
-        ret["x_frame"][step] = system.x_frame()
-        ret["f_frame"][step] = np.mean(system.f_frame())
-        ret["f_potential"][step] = -np.mean(system.f_potential())
+        i = system.istart + system.i
+        ret["x_frame"][step] = system.x_frame
+        ret["f_frame"][step] = np.mean(system.f_frame)
+        ret["f_potential"][step] = -np.mean(system.f_potential)
         ret["S"][step] = np.sum(i - i_n)
         ret["A"][step] = np.sum(i != i_n)
         i_n = np.copy(i)
@@ -718,6 +730,76 @@ def cli_ensembleinfo(cli_args=None):
             [";".join(i) for i in info["dependencies"]], output, "/lookup/dependencies", split=";"
         )
         output["files"] = output["/lookup/filepath"]
+
+
+def cli_yielddistance(cli_args=None):
+    """
+    Extract the distribution of P(x), with x the distance to yielding.
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    output = file_defaults[funcname]
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("info", type=str, help="EnsembleInfo")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.info)
+    tools._check_overwrite_file(args.output, args.force)
+    dirname = os.path.dirname(args.info)
+
+    with h5py.File(args.info) as file:
+
+        paths = file["/lookup/filepath"].asstr()[...]
+        fid = file["/avalanche/file"][...]
+        step = file["/avalanche/step"][...]
+        A = file["/avalanche/A"][...]
+        N = file["/normalisation/N"][...]
+
+        keep = A == N
+        fid = fid[keep]
+        step = step[keep]
+
+    bin_edges = np.logspace(-1, 1, 20001)
+    count_x = np.zeros(bin_edges.size + 1, dtype=np.int64)
+    count_xr = np.zeros(bin_edges.size + 1, dtype=np.int64)
+    count_xl = np.zeros(bin_edges.size + 1, dtype=np.int64)
+
+    for f in tqdm.tqdm(np.unique(fid)):
+
+        with h5py.File(os.path.join(dirname, paths[f])) as file:
+
+            system = System(file)
+
+            for s in tqdm.tqdm(np.sort(step[fid == f])):
+                system.restore_quasistatic_step(file, s)
+                xr = system.yieldDistanceRight
+                xl = system.yieldDistanceLeft
+                x = np.minimum(xl, xl)
+
+                count_x += np.bincount(np.digitize(x, bin_edges), minlength=count_x.size)
+                count_xr += np.bincount(np.digitize(xr, bin_edges), minlength=count_x.size)
+                count_xl += np.bincount(np.digitize(xl, bin_edges), minlength=count_x.size)
+
+    with h5py.File(args.output, "w") as file:
+
+        file["bin_edges"] = bin_edges
+        file["count_right"] = count_xr
+        file["count_left"] = count_xl
+        file["count_any"] = count_x
 
 
 def cli_plot(cli_args=None):
