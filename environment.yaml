@@ -4,7 +4,7 @@ dependencies:
 - autodocsumm
 - click
 - enstat
-- goosehdf5 >=0.17.0
+- goosehdf5 >=0.17.1
 - goosempl
 - gooseslurm
 - h5py
@@ -12,7 +12,7 @@ dependencies:
 - pre-commit
 - python
 - python-cppcolormap
-- python-frictionqpotspringblock >=0.14.1
+- python-frictionqpotspringblock >=0.15.0
 - python-gooseeye
 - python-goosefem >=1.1.0
 - python-prrng

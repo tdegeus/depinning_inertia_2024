@@ -3,6 +3,8 @@ import shutil
 import sys
 import unittest
 
+import h5py
+
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
@@ -34,6 +36,11 @@ class MyTests(unittest.TestCase):
             os.makedirs(dirname)
 
         QuasiStatic.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, dirname])
+
+        with h5py.File(filename, "a") as file:
+            file["param"]["xyield"]["nchunk"][...] = 150
+            file["param"]["xyield"]["nbuffer"][...] = 20
+
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
@@ -55,6 +62,13 @@ class MyTests(unittest.TestCase):
         Trigger.cli_generate(["--dev", "-o", workdir, "--delta-f", 0.1, infoname])
         Trigger.cli_run(["--dev", tfile])
         Trigger.cli_ensembleinfo(["--dev", "-o", tinfo, tfile])
+
+        with h5py.File(tfile, "a") as file:
+            file["param"]["xyield"]["nchunk"][...] = 10000
+            file["param"]["xyield"]["nbuffer"][...] = 300
+            branch = file["stored"][...]
+
+        Trigger.cli_run(["--dev", tfile, "--check", branch[0]])
 
 
 if __name__ == "__main__":
