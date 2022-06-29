@@ -65,6 +65,51 @@ def interpret_filename(filename: str) -> dict:
     return info
 
 
+def cli_ensembleinfo(cli_args=None):
+    """
+    Extract basic output and combine into a single file.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    progname = entry_points[funcname]
+    output = file_defaults[funcname]
+
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("files", nargs="*", type=str, help="Input files")
+
+    args = tools._parse(parser, cli_args)
+    assert len(args.files) > 0
+    assert all([os.path.isfile(file) for file in args.files])
+    tools._check_overwrite_file(args.output, args.force)
+
+    with h5py.File(args.output, "w") as output:
+
+        QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+
+        for filepath in args.files:
+
+            fname = os.path.relpath(filepath, os.path.dirname(args.output))
+            fname = fname.replace("/", "_")
+
+            with h5py.File(filepath) as file:
+
+                output[f"{fname}/f_frame"] = file["/output/f_frame"][...]
+                output[f"{fname}/f_potential"] = file["/output/f_potential"][...]
+                output[f"{fname}/f_damping"] = file["/output/f_damping"][...]
+                output[f"{fname}/gammadot"] = file["/flow/gammadot"][...]
+                output[f"{fname}/eta"] = file["/param/eta"][...]
+
+
 def cli_generate(cli_args=None):
     """
     Generate IO files (including job-scripts) to run simulations.
@@ -264,7 +309,7 @@ def cli_run(cli_args=None):
         for istep in range(args.nstep):
 
             system.chunk_rshift()
-            ret = system.flowSteps_boundcheck(output, gammadot)
+            ret = system.flowSteps(output, gammadot, nmargin=10)
             if ret == 0:
                 raise RuntimeError("Ran out-of-bounds: reduce output interval")
             pbar.n = istep + 1
@@ -333,8 +378,8 @@ def cli_plot(cli_args=None):
         opts["marker"] = args.marker
 
     fig, ax = plt.subplots()
-    ax.plot(x_frame, f_frame, label=r"$f_\text{frame}$", **opts)
-    ax.plot(x_frame, -f_potential, label=r"$f_\text{potential}$", **opts)
+    ax.plot(x_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
+    ax.plot(x_frame, -f_potential, label=r"$f_\text{potential}$", c="r", **opts)
     ax.set_xlabel(r"$x_\text{frame}$")
     ax.set_ylabel(r"$f$")
     ax.legend()

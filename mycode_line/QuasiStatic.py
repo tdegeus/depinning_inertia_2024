@@ -120,9 +120,6 @@ class System(model.System):
             x_yield=np.cumsum(self._draw_dy(nchunk), axis=1) + xoffset,
         )
 
-        self.ymin = self.y[:, 0]
-        self.ymax = self.y[:, -1]
-
     def _draw_dy(self, n):
         """
         Draw chunk of yield distances.
@@ -153,8 +150,6 @@ class System(model.System):
         self.istate += advance
         self.istart += shift
         self.y = QPot.cumsum_chunk(self.y, self._draw_dy(np.max(np.abs(shift)) + 1), shift)
-        self.ymin = self.y[:, 0]
-        self.ymax = self.y[:, -1]
 
     def chunk_rshift(self):
         """
@@ -166,8 +161,8 @@ class System(model.System):
         It if inefficient to track a backward movement.
         """
 
-        assert np.all(self.ymin < self.x)
-        assert np.all(self.ymax > self.x)
+        assert np.all(self.y[:, 0] < self.x)
+        assert np.all(self.y[:, -1] > self.x)
         self._chuck_shift(self.i - self.nbuffer + 1)
 
     def _chunk_goto(self, x: ArrayLike):
@@ -177,24 +172,29 @@ class System(model.System):
         """
 
         while True:
-            if np.all(np.logical_and(self.ymin < x, self.ymax > x)):
-                return
             shift = np.argmax(self.y >= x.reshape(-1, 1), axis=1) - self.nbuffer
-            shift = np.where(self.y[:, -1] <= x, self.y.shape[1] - 10, shift)
-            shift = np.where(self.y[:, 0] >= x, 10 - self.y.shape[1], shift)
+            shift = np.where(self.y[:, -1] <= x, self.y.shape[1] - self.nbuffer, shift)
+            shift = np.where(self.y[:, 0] >= x, self.nbuffer - self.y.shape[1], shift)
             self._chuck_shift(shift)
+            if np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
+                return
 
-    def restore_quasistatic_step(self, file: h5py.File, step: int):
+    def restore_quasistatic_step(self, file: h5py.File, step: int, align_buffer: bool = True):
         """
         Restore an a quasi-static step.
 
         :param file: Open simulation HDF5 archive (read-only).
         :param step: Step number.
+        :param align: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
         """
 
         x = file["x"][str(step)][...]
 
-        self._chunk_goto(x)
+        if not align_buffer and np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
+            pass
+        else:
+            self._chunk_goto(x)
+
         self.quench()
         self.inc = file["inc"][step]
         self.x_frame = file["x_frame"][step]
@@ -377,6 +377,7 @@ def cli_run(cli_args=None):
     parser.add_argument("--nopassing", action="store_true", help="Use nonpassing rule not dynamics")
     parser.add_argument("-n", "--nstep", type=int, default=5000, help="#load-steps to run")
     parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("--check", type=int, help="Rerun step")
     parser.add_argument("file", type=str, help="Simulation file")
 
     args = tools._parse(parser, cli_args)
@@ -397,7 +398,7 @@ def cli_run(cli_args=None):
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
 
         if "stored" not in file:
-            niter = minimise(nmargin=30)
+            niter = minimise(nmargin=10)
             assert niter > 0
             system.t = 0.0
             file["/x/0"] = system.x
@@ -411,15 +412,20 @@ def cli_run(cli_args=None):
             storage.dset_extend1d(file, "/event_driven/kick", 0, True)
             file.flush()
 
-        step = int(file["/stored"][-1])
-        step0 = step
+        if args.check is not None:
+            assert args.check - 1 in file["/stored"][...]
+            assert args.check in file["/stored"][...]
+            step = args.check - 1
+        else:
+            step = int(file["/stored"][-1])
+
         kick = file["/event_driven/kick"][step]
         dx = file["/event_driven/dx"][...]
         system.restore_quasistatic_step(file, step)
 
         pbar = tqdm.tqdm(total=args.nstep, desc=f"{basename}: step = {step:8d}, niter = {'-':8s}")
 
-        for step in range(step + 1, step + 1 + args.nstep):
+        for istep, step in enumerate(range(step + 1, step + 1 + args.nstep)):
 
             if np.any(system.i > system.y.shape[1] - system.nbuffer):
                 system.chunk_rshift()
@@ -431,22 +437,29 @@ def cli_run(cli_args=None):
                 inc_n = system.inc
 
                 while True:
-                    niter = minimise(nmargin=30)
+                    niter = minimise(nmargin=10)
                     if niter > 0:
                         break
                     system.chunk_rshift()
 
                 niter = system.inc - inc_n
-                pbar.n = step - step0
+                pbar.n = istep
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
                 pbar.refresh()
 
-            storage.dset_extend1d(file, "/stored", step, step)
-            storage.dset_extend1d(file, "/inc", step, system.inc)
-            storage.dset_extend1d(file, "/x_frame", step, system.x_frame)
-            storage.dset_extend1d(file, "/event_driven/kick", step, kick)
-            file[f"/x/{step:d}"] = system.x
-            file.flush()
+            if args.check is not None:
+                assert file["/inc"][step] == system.inc
+                assert file["/event_driven/kick"][step] == kick
+                assert np.isclose(file["/x_frame"][step], system.x_frame)
+                assert np.allclose(file[f"/x/{step:d}"][...], system.x)
+                return
+            else:
+                storage.dset_extend1d(file, "/stored", step, step)
+                storage.dset_extend1d(file, "/inc", step, system.inc)
+                storage.dset_extend1d(file, "/x_frame", step, system.x_frame)
+                storage.dset_extend1d(file, "/event_driven/kick", step, kick)
+                file[f"/x/{step:d}"] = system.x
+                file.flush()
 
         pbar.set_description(f"{basename}: step = {step:8d}, {'completed':16s}")
 
@@ -561,7 +574,7 @@ def basic_output(file: h5py.File) -> dict:
 
     for i, step in enumerate(tqdm.tqdm(steps)):
 
-        system.restore_quasistatic_step(file, step)
+        system.restore_quasistatic_step(file, step, align_buffer=False)
 
         if i == 0:
             i_n = system.istart + system.i
@@ -793,7 +806,7 @@ def cli_stateaftersystemspanning(cli_args=None):
 
             for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                system.restore_quasistatic_step(source, s)
+                system.restore_quasistatic_step(source, s, align_buffer=False)
 
                 xr = system.yieldDistanceRight
                 xl = system.yieldDistanceLeft
