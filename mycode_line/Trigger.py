@@ -78,7 +78,7 @@ def cli_run(cli_args=None):
             assert np.all(np.in1d(args.check, file["stored"][...]))
             branches = [i for i in args.check]
         else:
-            branches = file["stored"][...]
+            branches = file["/stored"][...]
 
         n = len(branches)
         pbar = tqdm.tqdm(total=n, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, S = {-1:8d}")
@@ -86,7 +86,7 @@ def cli_run(cli_args=None):
         dx = file["/event_driven/dx"][...]
         system = QuasiStatic.System(file)
 
-        for pbar.n, ibranch in enumerate(branches):
+        for pbar.n, ibranch in enumerate(branches, start=1):
 
             if args.check is not None:
                 try_p = [file["/output/p"][ibranch][...]]
@@ -97,7 +97,7 @@ def cli_run(cli_args=None):
 
                 system.restore_quasistatic_step(file[f"/branch/{ibranch:d}"], 0)
                 inc = system.inc
-                i_n = np.copy(system.i)
+                i_n = system.istart + system.i
 
                 system.trigger(p=p, eps=dx, direction=1)
 
@@ -107,7 +107,7 @@ def cli_run(cli_args=None):
                         break
                     system.chunk_rshift()
 
-                S = np.sum(system.i - i_n)
+                S = np.sum(system.istart + system.i - i_n)
 
                 if args.check is not None:
                     assert S > 0
@@ -118,7 +118,7 @@ def cli_run(cli_args=None):
             pbar.set_description(f"{basename}: branch = {ibranch:8d}, p = {p:8d}, S = {S:8d}")
             pbar.refresh()
 
-            A = np.sum(system.i != i_n)
+            A = np.sum(system.istart + system.i != i_n)
             T = system.quasistaticActivityLast() - inc
             f_frame = np.mean(system.f_frame)
 

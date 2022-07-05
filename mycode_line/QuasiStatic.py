@@ -416,6 +416,7 @@ def cli_run(cli_args=None):
             assert args.check - 1 in file["/stored"][...]
             assert args.check in file["/stored"][...]
             step = args.check - 1
+            args.nstep = 1
         else:
             step = int(file["/stored"][-1])
 
@@ -443,8 +444,13 @@ def cli_run(cli_args=None):
                     system.chunk_rshift()
 
                 niter = system.inc - inc_n
-                pbar.n = istep
+                pbar.n = istep + 1
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
+                pbar.refresh()
+
+            else:
+                pbar.n = istep + 1
+                pbar.set_description(f"{basename}: step = {step:8d}, niter = {0:8d}")
                 pbar.refresh()
 
             if args.check is not None:
@@ -452,7 +458,7 @@ def cli_run(cli_args=None):
                 assert file["/event_driven/kick"][step] == kick
                 assert np.isclose(file["/x_frame"][step], system.x_frame)
                 assert np.allclose(file[f"/x/{step:d}"][...], system.x)
-                return
+                break
             else:
                 storage.dset_extend1d(file, "/stored", step, step)
                 storage.dset_extend1d(file, "/inc", step, system.inc)
@@ -462,6 +468,7 @@ def cli_run(cli_args=None):
                 file.flush()
 
         pbar.set_description(f"{basename}: step = {step:8d}, {'completed':16s}")
+        pbar.refresh()
 
 
 def normalisation(file: h5py.File):
