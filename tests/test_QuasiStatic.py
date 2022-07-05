@@ -5,11 +5,13 @@ import unittest
 
 import GooseHDF5 as g5
 import h5py
+import numpy as np
 
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
+from mycode_line import EventMap  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
@@ -67,6 +69,27 @@ class MyTests(unittest.TestCase):
                     self.assertGreater(len(diff[key]), 0)
                 else:
                     self.assertEqual(len(diff[key]), 0)
+
+    def test_eventmap(self):
+
+        with h5py.File(infoname) as file:
+            for fname in file["full"]:
+                path = os.path.join(os.path.dirname(infoname), fname)
+                step = file["full"][fname]["step"][...]
+                A = file["full"][fname]["A"][...]
+                N = file["normalisation"]["N"][...]
+                i = np.argwhere(A == N).ravel()
+                s = step[i[-2]]
+                t = step[i[-1]]
+                break
+
+        out_s = os.path.join(dirname, "EventMap_s.h5")
+        out_t = os.path.join(dirname, "EventMap_t.h5")
+        EventMap.cli_run(["--dev", "-o", out_s, "-s", str(s), path])
+        EventMap.cli_run(["--dev", "-o", out_t, "-s", str(t), path])
+
+        out = os.path.join(dirname, "EventMapInfo.h5")
+        EventMap.cli_basic_output(["--dev", "-o", out, out_s, out_t])
 
     def test_read(self):
         """
