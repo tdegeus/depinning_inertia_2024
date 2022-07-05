@@ -70,7 +70,7 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
     basename = os.path.basename(args.file)
 
-    with h5py.File(args.file, "a") as file:
+    with h5py.File(args.file, "a" if args.check is None else "r") as file:
 
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
@@ -81,12 +81,12 @@ def cli_run(cli_args=None):
             branches = file["stored"][...]
 
         n = len(branches)
-        pbar = tqdm.tqdm(total=n, desc=f"{basename}: branch = {0:8d}, p = {0:8d}, S = {0:8d}")
+        pbar = tqdm.tqdm(total=n, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, S = {-1:8d}")
 
         dx = file["/event_driven/dx"][...]
         system = QuasiStatic.System(file)
 
-        for ibranch in branches:
+        for pbar.n, ibranch in enumerate(branches):
 
             if args.check is not None:
                 try_p = [file["/output/p"][ibranch][...]]
@@ -115,7 +115,6 @@ def cli_run(cli_args=None):
                 if S > 0:
                     break
 
-            pbar.n = ibranch
             pbar.set_description(f"{basename}: branch = {ibranch:8d}, p = {p:8d}, S = {S:8d}")
             pbar.refresh()
 
@@ -180,7 +179,7 @@ def cli_ensembleinfo(cli_args=None):
     tools._check_overwrite_file(args.output, args.force)
 
     fmt = "{:" + str(max(len(i) for i in args.files)) + "s}"
-    pbar = tqdm.tqdm(args.files)
+    pbar = tqdm.tqdm([os.path.normpath(i) for i in args.files])
     pbar.set_description(fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
@@ -195,6 +194,8 @@ def cli_ensembleinfo(cli_args=None):
         f_frame_0 = []
         step = []
         step_c = []
+        branch = []
+        source = []
 
         for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
 
@@ -211,6 +212,8 @@ def cli_ensembleinfo(cli_args=None):
                 f_frame_0 += file["/output/f_frame_0"][...][keep].tolist()
                 step += file["/output/step"][...][keep].tolist()
                 step_c += file["/output/step_c"][...][keep].tolist()
+                branch += np.arange(keep.size)[keep].tolist()
+                source += [filename for i in keep]
 
                 if i == 0:
                     output["N"] = file["/param/xyield/initseq"].size
@@ -223,6 +226,8 @@ def cli_ensembleinfo(cli_args=None):
         output["f_frame_0"] = f_frame_0
         output["step"] = step
         output["step_c"] = step_c
+        output["branch"] = branch
+        tools.h5py_save_unique(data=source, file=output, path="source", asstr=True)
 
         output["S"].attrs["desc"] = "Slip: total number of yield events"
         output["A"].attrs["desc"] = "Spatial extension: total number of yielded particles"
@@ -232,6 +237,8 @@ def cli_ensembleinfo(cli_args=None):
         output["f_frame_0"].attrs["desc"] = "Frame force (before triggering)"
         output["step"].attrs["desc"] = "Step at triggering"
         output["step_c"].attrs["desc"] = "Step of last system-spanning event"
+        output["branch"].attrs["desc"] = "The branch in the source file"
+        output["source"].attrs["desc"] = "Source file (restore by ``value[index]``)"
 
 
 def _get_force_increment(step, force, kick, target_force):
