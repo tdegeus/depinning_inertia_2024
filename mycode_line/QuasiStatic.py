@@ -237,6 +237,7 @@ def create_check_meta(
         meta.attrs["uuid"] = str(uuid.uuid4())
         meta.attrs["version"] = ver
         meta.attrs["dependencies"] = deps
+        meta.attrs["compiler"] = model.version_compiler()
         for key in kwargs:
             meta.attrs[key] = kwargs[key]
         return meta
