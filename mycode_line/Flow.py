@@ -285,7 +285,7 @@ def cli_run(cli_args=None):
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
-    pbar = tqdm.tqdm(total=args.nstep, desc=args.file)
+    pbar = tqdm.tqdm(range(args.nstep), desc=args.file)
 
     with h5py.File(args.file, "a") as file:
 
@@ -306,14 +306,12 @@ def cli_run(cli_args=None):
             "/output/x",
         ]
 
-        for istep in range(args.nstep):
+        for istep in pbar:
 
             system.chunk_rshift()
             ret = system.flowSteps(output, gammadot, nmargin=10)
             if ret == 0:
                 raise RuntimeError("Ran out-of-bounds: reduce output interval")
-            pbar.n = istep + 1
-            pbar.refresh()
             inc += output
 
             if snapshot > 0:

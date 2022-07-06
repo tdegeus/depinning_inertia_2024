@@ -375,7 +375,7 @@ def cli_run(cli_args=None):
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--nopassing", action="store_true", help="Use nonpassing rule not dynamics")
-    parser.add_argument("-n", "--nstep", type=int, default=5000, help="#load-steps to run")
+    parser.add_argument("-n", "--nstep", type=int, default=5000, help="Total #load-steps to run")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("--check", type=int, help="Rerun step")
     parser.add_argument("file", type=str, help="Simulation file")
@@ -415,18 +415,19 @@ def cli_run(cli_args=None):
         if args.check is not None:
             assert args.check - 1 in file["/stored"][...]
             assert args.check in file["/stored"][...]
-            step = args.check - 1
             args.nstep = 1
+            step = args.check
         else:
-            step = int(file["/stored"][-1])
+            step = int(file["/stored"][-1]) + 1
 
-        kick = file["/event_driven/kick"][step]
+        kick = file["/event_driven/kick"][step - 1]
         dx = file["/event_driven/dx"][...]
-        system.restore_quasistatic_step(file, step)
+        system.restore_quasistatic_step(file, step - 1)
 
-        pbar = tqdm.tqdm(total=args.nstep, desc=f"{basename}: step = {step:8d}, niter = {'-':8s}")
+        desc = f"{basename}: step = {step:8d}, niter = {'-':8s}"
+        pbar = tqdm.tqdm(range(step, step + args.nstep), desc=desc)
 
-        for istep, step in enumerate(range(step + 1, step + 1 + args.nstep)):
+        for step in pbar:
 
             if np.any(system.i > system.y.shape[1] - system.nbuffer):
                 system.chunk_rshift()
@@ -444,13 +445,7 @@ def cli_run(cli_args=None):
                     system.chunk_rshift()
 
                 niter = system.inc - inc_n
-                pbar.n = istep + 1
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
-                pbar.refresh()
-
-            else:
-                pbar.n = istep + 1
-                pbar.set_description(f"{basename}: step = {step:8d}, niter = {0:8d}")
                 pbar.refresh()
 
             if args.check is not None:
@@ -458,7 +453,6 @@ def cli_run(cli_args=None):
                 assert file["/event_driven/kick"][step] == kick
                 assert np.isclose(file["/x_frame"][step], system.x_frame)
                 assert np.allclose(file[f"/x/{step:d}"][...], system.x)
-                break
             else:
                 storage.dset_extend1d(file, "/stored", step, step)
                 storage.dset_extend1d(file, "/inc", step, system.inc)
@@ -466,9 +460,6 @@ def cli_run(cli_args=None):
                 storage.dset_extend1d(file, "/event_driven/kick", step, kick)
                 file[f"/x/{step:d}"] = system.x
                 file.flush()
-
-        pbar.set_description(f"{basename}: step = {step:8d}, {'completed':16s}")
-        pbar.refresh()
 
 
 def normalisation(file: h5py.File):
@@ -650,8 +641,7 @@ def cli_ensembleinfo(cli_args=None):
     file_kick = []
 
     fmt = "{:" + str(max(len(i) for i in info["filepath"])) + "s}"
-    pbar = tqdm.tqdm(info["filepath"])
-    pbar.set_description(fmt.format(""))
+    pbar = tqdm.tqdm(info["filepath"], desc=fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
 
