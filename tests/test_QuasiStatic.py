@@ -12,6 +12,7 @@ if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
 from mycode_line import EventMap  # noqa: E402
+from mycode_line import MeasureDynamics  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
@@ -90,6 +91,21 @@ class MyTests(unittest.TestCase):
 
         out = os.path.join(dirname, "EventMapInfo.h5")
         EventMap.cli_basic_output(["--dev", "-o", out, out_s, out_t])
+
+    def test_measuredynamics(self):
+
+        with h5py.File(infoname) as file:
+            for fname in file["full"]:
+                path = os.path.join(os.path.dirname(infoname), fname)
+                step = file["full"][fname]["step"][...]
+                A = file["full"][fname]["A"][...]
+                N = file["normalisation"]["N"][...]
+                i = np.argwhere(A == N).ravel()
+                s = step[i[-2]]
+                break
+
+        out = os.path.join(dirname, "MeasureDynamics_s.h5")
+        MeasureDynamics.cli_run(["--dev", "-i", "20", "-o", out, "-s", str(s), path])
 
     def test_read(self):
         """
