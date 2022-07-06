@@ -40,82 +40,16 @@ def replace_ep(doc: str) -> str:
     return doc
 
 
-def runinc_event_basic(system: QuasiStatic.System, file: h5py.File, step: int, Smax=None) -> dict:
+def cli_run(cli_args=None):
     """
-    Rerun increment and get basic event information.
-
-    :param system: The system (modified: increment loaded/rerun).
-    :param file: Open simulation HDF5 archive (read-only).
-    :param step: The step (or branch) to rerun.
-    :param Smax: Stop at given S (to avoid spending time on final energy minimisation).
-    :return: A dictionary as follows::
+    Rerun increment and store basic event info as follows::
 
         r: Position of yielding event (block index).
         t: Time of each yielding event (real units).
         S: Size (signed) of the yielding event.
-    """
 
-    stored = file["/stored"][...]
-    assert step in stored
-
-    if Smax is None:
-        Smax = sys.maxsize
-
-    if "branch" in file:
-        system.restore_quasistatic_step(file[f"/branch/{step:d}"], 0)  # Trigger
-    else:
-        assert step - 1 in stored
-        system.restore_quasistatic_step(file, step - 1)  # QuasiStatic
-
-    i_n = system.istart + system.i
-    dx = file["/event_driven/dx"][...]
-
-    if "branch" in file:
-        system.trigger(p=file["/output/p"][step], eps=dx, direction=1)
-    else:
-        system.eventDrivenStep(dx, file["/event_driven/kick"][step])
-
-    R = []
-    T = []
-    S = []
-
-    while True:
-
-        if np.any(system.i > system.y.shape[1] - system.nbuffer):
-            system.chunk_rshift()
-
-        i_t = system.istart + system.i
-        niter = system.timeStepsUntilEvent()
-        assert np.all(np.logical_and(system.i > 10, system.i < system.y.shape[1] - 10))
-        i = system.istart + system.i
-        t = system.t
-
-        for r in np.argwhere(i != i_t).ravel():
-            R += [r]
-            T += [t * np.ones(r.shape)]
-            S += [(i - i_t)[r]]
-
-        i_t = np.copy(i)
-
-        if np.sum(i - i_n) >= Smax:
-            break
-
-        if niter == 0:
-            break
-
-    ret = dict(r=np.array(R).ravel(), t=np.array(T).ravel(), S=np.array(S).ravel())
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    tools.check_docstring(doc, ret, ":return:")
-
-    return ret
-
-
-def cli_run(cli_args=None):
-    """
-    Rerun increment and store basic event info (position and time).
-    Tip: truncate when (known) S is reached to not waste time on final stage of energy minimisation.
+    Tip: use "--smax" to truncate when (known) S is reached to not waste time on the final stage of
+    energy minimisation.
     """
 
     class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -140,13 +74,61 @@ def cli_run(cli_args=None):
     tools._check_overwrite_file(args.output, args.force)
 
     with h5py.File(args.file, "r") as file:
+
+        stored = file["/stored"][...]
+        assert args.step in stored
+
         system = QuasiStatic.System(file)
-        ret = runinc_event_basic(system, file, args.step, args.smax)
+
+        if args.smax is None:
+            args.smax = sys.maxsize
+
+        if "branch" in file:
+            system.restore_quasistatic_step(file[f"/branch/{args.step:d}"], 0)  # Trigger
+        else:
+            assert args.step - 1 in stored
+            system.restore_quasistatic_step(file, args.step - 1)  # QuasiStatic
+
+        i_n = system.istart + system.i
+        dx = file["/event_driven/dx"][...]
+
+        if "branch" in file:
+            system.trigger(p=file["/output/p"][args.step], eps=dx, direction=1)
+        else:
+            system.eventDrivenStep(dx, file["/event_driven/kick"][args.step])
+
+        R = []
+        T = []
+        S = []
+
+        while True:
+
+            if np.any(system.i > system.y.shape[1] - system.nbuffer):
+                system.chunk_rshift()
+
+            i_t = system.istart + system.i
+            niter = system.timeStepsUntilEvent()
+            assert np.all(np.logical_and(system.i > 10, system.i < system.y.shape[1] - 10))
+            i = system.istart + system.i
+            t = system.t
+
+            for r in np.argwhere(i != i_t).ravel():
+                R.append(r)
+                T.append(t)
+                S.append((i - i_t)[r])
+
+            i_t = np.copy(i)
+
+            if np.sum(i - i_n) >= args.smax:
+                break
+
+            if niter == 0:
+                break
 
     with h5py.File(args.output, "w") as file:
-        file["r"] = ret["r"]
-        file["t"] = ret["t"]
-        file["S"] = ret["S"]
+        file["r"] = np.array(R)
+        file["t"] = np.array(T)
+        file["S"] = np.array(S)
 
         meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
         meta.attrs["file"] = args.file
@@ -154,7 +136,7 @@ def cli_run(cli_args=None):
         meta.attrs["Smax"] = args.smax if args.smax else sys.maxsize
 
     if cli_args is not None:
-        return ret
+        return dict(r=np.array(R), t=np.array(T), S=np.array(S))
 
 
 def cli_basic_output(cli_args=None):
