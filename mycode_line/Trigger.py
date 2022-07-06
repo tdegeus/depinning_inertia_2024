@@ -80,13 +80,11 @@ def cli_run(cli_args=None):
         else:
             branches = file["/stored"][...]
 
-        n = len(branches)
-        pbar = tqdm.tqdm(total=n, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, S = {-1:8d}")
-
         dx = file["/event_driven/dx"][...]
         system = QuasiStatic.System(file)
+        pbar = tqdm.tqdm(branches, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, S = {-1:8d}")
 
-        for pbar.n, ibranch in enumerate(branches, start=1):
+        for ibranch in pbar:
 
             if args.check is not None:
                 try_p = [file["/output/p"][ibranch][...]]
