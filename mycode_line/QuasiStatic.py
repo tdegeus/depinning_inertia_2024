@@ -806,8 +806,8 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                 system.restore_quasistatic_step(source, s, align_buffer=False)
 
-                xr = system.yieldDistanceRight
-                xl = system.yieldDistanceLeft
+                xr = system.y_right - system.x
+                xl = system.x - system.y_left
                 x = np.minimum(xl, xl)
 
                 count_x += np.bincount(np.digitize(x, bin_edges), minlength=count_x.size)
