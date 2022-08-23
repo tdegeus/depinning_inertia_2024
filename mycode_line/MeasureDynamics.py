@@ -115,17 +115,17 @@ def cli_run(cli_args=None):
 
         while True:
 
-            niter = system.minimise(
+            ret = system.minimise(
                 nmargin=10,
                 niter_tol=min(10, dinc - 1),
                 max_iter=dinc - (system.inc - inc_n) % dinc,
                 max_iter_is_error=False,
             )
 
-            if niter > 0:
+            if ret == 0:
                 break
 
-            if niter < 0:
+            if ret < 0:
                 system.chunk_rshift()
 
             if (system.inc - inc_n) % dinc == 0:

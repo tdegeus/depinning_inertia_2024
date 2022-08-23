@@ -107,7 +107,7 @@ def cli_run(cli_args=None):
                 system.chunk_rshift()
 
             i_t = system.istart + system.i
-            niter = system.timeStepsUntilEvent()
+            ret = system.timeStepsUntilEvent()
             assert np.all(np.logical_and(system.i > 10, system.i < system.y.shape[1] - 10))
             i = system.istart + system.i
             t = system.t
@@ -122,7 +122,7 @@ def cli_run(cli_args=None):
             if np.sum(i - i_n) >= args.smax:
                 break
 
-            if niter == 0:
+            if ret == 0:
                 break
 
     with h5py.File(args.output, "w") as file:

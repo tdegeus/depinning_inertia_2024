@@ -399,8 +399,8 @@ def cli_run(cli_args=None):
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
 
         if "stored" not in file:
-            niter = minimise(nmargin=10)
-            assert niter > 0
+            ret = minimise(nmargin=10)
+            assert ret == 0
             system.t = 0.0
             file["/x/0"] = system.x
             storage.create_extendible(file, "/stored", np.uint64, desc="List of stored load-steps")
@@ -440,8 +440,8 @@ def cli_run(cli_args=None):
                 inc_n = system.inc
 
                 while True:
-                    niter = minimise(nmargin=10)
-                    if niter > 0:
+                    ret = minimise(nmargin=10)
+                    if ret == 0:
                         break
                     system.chunk_rshift()
 

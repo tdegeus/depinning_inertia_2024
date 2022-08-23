@@ -100,8 +100,8 @@ def cli_run(cli_args=None):
                 system.trigger(p=p, eps=dx, direction=1)
 
                 while True:
-                    niter = system.minimise(nmargin=10, time_activity=True)
-                    if niter > 0:
+                    ret = system.minimise(nmargin=10, time_activity=True)
+                    if ret == 0:
                         break
                     system.chunk_rshift()
 
