@@ -293,6 +293,7 @@ def cli_generate(cli_args=None):
 
     parser.add_argument("--delta-f", type=float, help="Advance to fixed force")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--info-ss", action="store_true", help="Use steadystate from EnsembleInfo")
     parser.add_argument("-o", "--outdir", type=str, default=".", help="Output directory")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-w", "--time", type=str, default="72h", help="Walltime")
@@ -330,7 +331,10 @@ def cli_generate(cli_args=None):
                 kick = info["full"][filename]["kick"][...]
                 f_frame = info["full"][filename]["f_frame"][...]
                 assert np.all(A[~kick] == 0)
-                ss = step[np.logical_and(A == N, step > steadystate)]
+                if args.info_ss:
+                    ss = step[step > steadystate]
+                else:
+                    ss = step[np.logical_and(A == N, step > steadystate)]
                 n = ss.size - 1
 
                 QuasiStatic.create_check_meta(dest, f"/meta/{progname}", dev=args.develop)
