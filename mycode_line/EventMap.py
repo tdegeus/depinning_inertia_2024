@@ -141,7 +141,7 @@ def cli_run(cli_args=None):
 
 def cli_basic_output(cli_args=None):
     """
-    Collect basis information from :py:func:`cli_run` and combine in a single output file.
+    Collect basic information from :py:func:`cli_run` and combine in a single output file.
     """
 
     class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
@@ -153,11 +153,18 @@ def cli_basic_output(cli_args=None):
     progname = entry_points[funcname]
     output = file_defaults[funcname]
 
+    # developer options
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-v", "--version", action="version", version=version)
+
+    # output file
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("files", nargs="*", type=str, help="Files to read")
+
+    # input files
+    parser.add_argument(
+        "files", nargs="*", type=str, help=f"Files to read (generate by {entry_points['cli_run']})"
+    )
 
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0

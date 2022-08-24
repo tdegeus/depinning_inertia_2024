@@ -374,12 +374,21 @@ def cli_run(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     progname = entry_points[funcname]
 
+    # development options
+    parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--nopassing", action="store_true", help="Use nonpassing rule not dynamics")
-    parser.add_argument("-n", "--nstep", type=int, default=5000, help="Total #load-steps to run")
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("--check", type=int, help="Rerun step")
-    parser.add_argument("file", type=str, help="Simulation file")
+
+    # different dynammics
+    parser.add_argument(
+        "--nopassing",
+        action="store_true",
+        help="Use no-passing rule (instead of inertial dynamics: assume m = 0)",
+    )
+
+    # simulation parameters
+    parser.add_argument("-n", "--nstep", type=int, default=5000, help="Total #load-steps to run")
+    parser.add_argument("file", type=str, help="Input/output file")
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
