@@ -795,6 +795,7 @@ def cli_fastload(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    progname = entry_points[funcname]
     output = file_defaults[funcname]
 
     class MyFmt(
@@ -834,6 +835,8 @@ def cli_fastload(cli_args=None):
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
         paths = info["/lookup/filepath"].asstr()[...]
         N = info["/normalisation/N"][...]
+
+        create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
         for path in tqdm.tqdm(paths):
 
