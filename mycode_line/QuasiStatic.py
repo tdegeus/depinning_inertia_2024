@@ -812,7 +812,9 @@ def cli_fastload(cli_args=None):
     # step selection
     parser.add_argument("-i", "--interval", type=int, help="Storage interval")
     parser.add_argument("-n", "--number", type=int, help="Number of steps to store")
-    parser.add_argument("-s", "--system-spanning", action="store_true", help="Save at system spanning events")
+    parser.add_argument(
+        "-s", "--system-spanning", action="store_true", help="Save at system spanning events"
+    )
 
     # input
     parser.add_argument("info", type=str, help="EnsembleInfo")
