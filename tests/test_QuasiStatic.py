@@ -62,7 +62,7 @@ class MyTests(unittest.TestCase):
         with h5py.File(filename) as file, h5py.File(fastname) as fastload:
 
             system = QuasiStatic.System(file)
-            step = fastload[idname]["stored"][...][-1]
+            step = fastload[idname]["step"][...][-1]
 
             system.restore_quasistatic_step(file=file, step=step)
 

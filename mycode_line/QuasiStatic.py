@@ -36,6 +36,11 @@ entry_points = dict(
 )
 
 
+brief = dict(
+    cli_fastload="State at some steps in the ensemble, helps to speed-up (random) loading",
+)
+
+
 file_defaults = dict(
     cli_ensembleinfo="EnsembleInfo.h5",
     cli_fastload="EnsembleFastLoad.h5",
@@ -850,9 +855,10 @@ def cli_fastload(cli_args=None):
                     raise ValueError("No step selection specified")
 
                 system = System(source)
-                output[f"/{path}/stored"] = steps
+                output[f"/{path}/step"] = steps
+                incs = np.empty(steps.shape, dtype=int)
 
-                for s in tqdm.tqdm(steps):
+                for i, s in enumerate(tqdm.tqdm(steps)):
 
                     system.restore_quasistatic_step(source, s, align_buffer=False)
                     system.chunk_rshift()
@@ -862,10 +868,12 @@ def cli_fastload(cli_args=None):
                     system.istate += shift
                     system.state = system.generators.state()
 
+                    incs[i] = system.inc
                     output[f"/{path}/data/{s:d}/state"] = np.copy(system.state)
                     output[f"/{path}/data/{s:d}/istate"] = np.copy(system.istate)
                     output[f"/{path}/data/{s:d}/y0"] = system.y[:, 0]
 
+                output[f"/{path}/inc"] = incs
                 output.flush()
 
 

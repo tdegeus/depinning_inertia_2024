@@ -297,6 +297,7 @@ def cli_generate(cli_args=None):
     parser.add_argument("-o", "--outdir", type=str, default=".", help="Output directory")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-w", "--time", type=str, default="72h", help="Walltime")
+    parser.add_argument("-q", "--fastload", type=str, help=QuasiStatic.brief["cli_fastload"])
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo (read-only)")
 
     args = tools._parse(parser, cli_args)
@@ -305,9 +306,13 @@ def cli_generate(cli_args=None):
     if not os.path.isdir(args.outdir):
         os.makedirs(args.outdir)
 
+    fastload = None
+    if args.fastload is not None:
+        fastload = h5py.File(args.fastload)
+
     basedir = os.path.dirname(args.ensembleinfo)
 
-    with h5py.File(args.ensembleinfo, "r") as info:
+    with h5py.File(args.ensembleinfo) as info:
 
         files = sorted(info["full"])
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in files])
@@ -316,6 +321,11 @@ def cli_generate(cli_args=None):
         N = info["/normalisation/N"][...]
 
         for filename in tqdm.tqdm(files):
+
+            if fastload is not None:
+                fast = fastload[filename]["data"]
+                faststep = fastload[filename]["step"][...]
+                fastinc = fastload[filename]["inc"][...]
 
             with h5py.File(os.path.join(basedir, filename)) as source, h5py.File(
                 os.path.join(args.outdir, filename), "w"
@@ -401,8 +411,19 @@ def cli_generate(cli_args=None):
                     inc = source["/inc"][s]
 
                     if load:
-                        system.restore_quasistatic_step(source, s, align_buffer=False)
+
+                        opt = {}
+                        if fastload is not None:
+                            fastdist = np.abs(fastinc - inc)
+                            fasti = np.argmin(fastdist)
+                            if fastdist[fasti] < np.abs(system.inc - inc):
+                                opt["state"] = fast[str(faststep[fasti])]["state"][...]
+                                opt["istate"] = fast[str(faststep[fasti])]["istate"][...]
+                                opt["y0"] = fast[str(faststep[fasti])]["y0"][...]
+
+                        system.restore_quasistatic_step(source, s, align_buffer=False, **opt)
                         system.advanceToFixedForce(f)
+
                         x = system.x
                         x_frame = system.x_frame
 
@@ -417,6 +438,9 @@ def cli_generate(cli_args=None):
                     storage.dset_extend1d(dest, f"/branch/{ibranch:d}/inc", 0, inc)
                     storage.dset_extend1d(dest, f"/branch/{ibranch:d}/x_frame", 0, x_frame)
                     dest.flush()
+
+    if fastload is not None:
+        fastload.close()
 
     executable = entry_points["cli_run"]
     commands = [f"{executable} {file}" for file in files]

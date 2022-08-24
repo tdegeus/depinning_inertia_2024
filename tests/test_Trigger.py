@@ -3,6 +3,7 @@ import shutil
 import sys
 import unittest
 
+import GooseHDF5 as g5
 import h5py
 
 root = os.path.join(os.path.dirname(__file__), "..")
@@ -14,9 +15,11 @@ from mycode_line import Trigger  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
 workdir = os.path.join(dirname, "trigger")
+bakdir = os.path.join(dirname, "trigger_bak")
 idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
+fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
 
 tfile = os.path.join(workdir, idname)
 tinfo = os.path.join(workdir, "EnsembleInfo.h5")
@@ -43,6 +46,7 @@ class MyTests(unittest.TestCase):
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+        QuasiStatic.cli_fastload(["--dev", "-s", "-o", fastname, infoname])
 
     @classmethod
     def tearDownClass(self):
@@ -51,15 +55,33 @@ class MyTests(unittest.TestCase):
 
     def test_branch_trigger(self):
         """
-        Branch and trigger
+        Branch and trigger at system spanning
         """
 
         Trigger.cli_generate(["--dev", "-o", workdir, infoname])
         Trigger.cli_run(["--dev", tfile])
-
         shutil.rmtree(workdir)
 
-        Trigger.cli_generate(["--dev", "-o", workdir, "--delta-f", 0.1, infoname])
+    def test_branch_trigger_deltaf(self):
+        """
+        Branch and trigger at --delta-f > 0
+        """
+
+        # generate, store as reference
+        Trigger.cli_generate(["--dev", "--delta-f", 0.1, "-o", workdir, infoname])
+        os.makedirs(bakdir)
+        shutil.copyfile(os.path.join(workdir, idname), os.path.join(bakdir, idname))
+        shutil.rmtree(workdir)
+
+        # generate using "--fastload" and check
+        Trigger.cli_generate(["--dev", "--delta-f", 0.1, "-o", workdir, "-q", fastname, infoname])
+        cmp = g5.compare(os.path.join(workdir, idname), os.path.join(bakdir, idname))
+        cmp["!="].remove("/meta/Trigger_generate")
+        self.assertEqual(len(cmp["<-"]), 0)
+        self.assertEqual(len(cmp["->"]), 0)
+        self.assertEqual(len(cmp["!="]), 0)
+
+        # run
         Trigger.cli_run(["--dev", tfile])
         Trigger.cli_ensembleinfo(["--dev", "-o", tinfo, tfile])
 
@@ -69,6 +91,7 @@ class MyTests(unittest.TestCase):
             branch = file["stored"][...]
 
         Trigger.cli_run(["--dev", tfile, "--check", branch[0]])
+        shutil.rmtree(workdir)
 
 
 if __name__ == "__main__":
