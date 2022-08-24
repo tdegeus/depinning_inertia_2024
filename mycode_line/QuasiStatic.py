@@ -28,6 +28,7 @@ from ._version import version
 
 entry_points = dict(
     cli_ensembleinfo="EnsembleInfo",
+    cli_fastload="EnsembleFastLoad",
     cli_generate="Run_generate",
     cli_plot="Run_plot",
     cli_run="Run",
@@ -37,6 +38,7 @@ entry_points = dict(
 
 file_defaults = dict(
     cli_ensembleinfo="EnsembleInfo.h5",
+    cli_fastload="EnsembleFastLoad.h5",
     cli_stateaftersystemspanning="StateAfterSystemSpanning.h5",
 )
 
@@ -179,14 +181,36 @@ class System(model.System):
             if np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
                 return
 
-    def restore_quasistatic_step(self, file: h5py.File, step: int, align_buffer: bool = True):
+    def restore_quasistatic_step(
+        self,
+        file: h5py.File,
+        step: int,
+        align_buffer: bool = True,
+        state: ArrayLike = None,
+        istate: ArrayLike = None,
+        y0: ArrayLike = None,
+    ):
         """
         Restore an a quasi-static step.
 
         :param file: Open simulation HDF5 archive (read-only).
         :param step: Step number.
         :param align: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
+        :param state: FastLoad: state of the random number generator.
+        :param istate: FastLoad: index of ``state``.
+        :param y0: FastLoad: yield position of ``state``.
         """
+
+        if state is not None:
+            assert istate is not None
+            assert y0 is not None
+            self.state = np.copy(state)
+            self.istate = np.copy(istate)
+            self.istart = np.copy(istate)
+            self.generators.restore(self.state)
+            y = np.cumsum(self._draw_dy(self.y.shape[1]), axis=1)
+            dy = y0 - y[:, 0]
+            self.y = y + dy.reshape(-1, 1)
 
         x = file["x"][str(step)][...]
 
@@ -751,6 +775,96 @@ def cli_ensembleinfo(cli_args=None):
             [";".join(i) for i in info["dependencies"]], output, "/lookup/dependencies", split=";"
         )
         output["files"] = output["/lookup/filepath"]
+
+
+def cli_fastload(cli_args=None):
+    """
+    Save the state of the random generators for fast loading of simulations.
+    The data created by this function is just to speed-up processing,
+    it is completely obsolete and can be removed without hesitation.
+
+    Data can be stored at:
+    - system spanning events (--system-spanning)
+    - a regular interval (--interval or --number)
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    output = file_defaults[funcname]
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    # developer options
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-v", "--version", action="version", version=version)
+
+    # output
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+
+    # step selection
+    parser.add_argument("-i", "--interval", type=int, help="Storage interval")
+    parser.add_argument("-n", "--number", type=int, help="Number of steps to store")
+    parser.add_argument("-s", "--system-spanning", action="store_true", help="Save at system spanning events")
+
+    # input
+    parser.add_argument("info", type=str, help="EnsembleInfo")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.info)
+    tools._check_overwrite_file(args.output, args.force)
+    basedir = os.path.dirname(args.info)
+
+    with h5py.File(args.info) as info, h5py.File(args.output, "w") as output:
+
+        assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
+        paths = info["/lookup/filepath"].asstr()[...]
+        N = info["/normalisation/N"][...]
+
+        for path in tqdm.tqdm(paths):
+
+            with h5py.File(os.path.join(basedir, path)) as source:
+
+                steps = info[f"/full/{path}/step"][...]
+
+                if args.interval is not None:
+                    n = np.ceil((1 + np.max(steps)) / args.interval)
+                    steps = args.interval * np.arange(1, n).astype(int)
+                    assert np.all(np.in1d(steps, info[f"/full/{path}/step"][...]))
+                elif args.number is not None:
+                    idx = np.round(np.linspace(0, steps.size - 1, args.number + 1)).astype(int)
+                    steps = steps[idx][1:]
+                elif args.system_spanning:
+                    A = info[f"/full/{path}/A"][...]
+                    steps = steps[A == N]
+                else:
+                    raise ValueError("No step selection specified")
+
+                system = System(source)
+                output[f"/{path}/stored"] = steps
+
+                for s in tqdm.tqdm(steps):
+
+                    system.restore_quasistatic_step(source, s, align_buffer=False)
+                    system.chunk_rshift()
+
+                    shift = system.istart - system.istate
+                    system.generators.advance(shift)
+                    system.istate += shift
+                    system.state = system.generators.state()
+
+                    output[f"/{path}/data/{s:d}/state"] = np.copy(system.state)
+                    output[f"/{path}/data/{s:d}/istate"] = np.copy(system.istate)
+                    output[f"/{path}/data/{s:d}/y0"] = system.y[:, 0]
+
+                output.flush()
 
 
 def cli_stateaftersystemspanning(cli_args=None):

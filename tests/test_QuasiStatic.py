@@ -45,8 +45,47 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self):
+        """
+        Remove the temporary directory.
+        """
 
         shutil.rmtree(dirname)
+
+    def test_fastload(self):
+        """
+        Store state of the random sequence at system spanning events for fast reloading.
+        """
+
+        fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
+        QuasiStatic.cli_fastload(["--dev", "-f", "-o", fastname, infoname, "-n", 10])
+
+        with h5py.File(filename) as file, h5py.File(fastname) as fastload:
+
+            system = QuasiStatic.System(file)
+            step = fastload[idname]["stored"][...][-1]
+
+            system.restore_quasistatic_step(file=file, step=step)
+
+            i = np.copy(system.i + system.istart)
+            all = np.arange(system.N)
+            yll = system.y[all, system.i - 2]
+            yl = system.y[all, system.i - 1]
+            yr = system.y[all, system.i]
+            yrr = system.y[all, system.i + 1]
+
+            system.restore_quasistatic_step(
+                file=file,
+                step=step,
+                state=fastload[f"/{idname}/data/{step:d}/state"][...],
+                istate=fastload[f"/{idname}/data/{step:d}/istate"][...],
+                y0=fastload[f"/{idname}/data/{step:d}/y0"][...],
+            )
+
+            self.assertTrue(np.all(np.equal(system.i + system.istart, i)))
+            self.assertTrue(np.allclose(system.y[all, system.i - 2], yll))
+            self.assertTrue(np.allclose(system.y[all, system.i - 1], yl))
+            self.assertTrue(np.allclose(system.y[all, system.i], yr))
+            self.assertTrue(np.allclose(system.y[all, system.i + 1], yrr))
 
     def test_chunk(self):
 
@@ -60,7 +99,7 @@ class MyTests(unittest.TestCase):
         QuasiStatic.cli_run(["--dev", "--check", 953, filename])
 
         tmp = os.path.join(dirname, "EnsembleInfo_duplicate.h5")
-        QuasiStatic.cli_ensembleinfo(["--dev", "-o", tmp, filename])
+        QuasiStatic.cli_ensembleinfo(["--dev", "-f", "-o", tmp, filename])
 
         with h5py.File(infoname) as src, h5py.File(tmp) as dest:
             dset = list(g5.getdatasets(src))
@@ -86,11 +125,11 @@ class MyTests(unittest.TestCase):
 
         out_s = os.path.join(dirname, "EventMap_s.h5")
         out_t = os.path.join(dirname, "EventMap_t.h5")
-        EventMap.cli_run(["--dev", "-o", out_s, "-s", str(s), path])
-        EventMap.cli_run(["--dev", "-o", out_t, "-s", str(t), path])
+        EventMap.cli_run(["--dev", "-f", "-o", out_s, "-s", str(s), path])
+        EventMap.cli_run(["--dev", "-f", "-o", out_t, "-s", str(t), path])
 
         out = os.path.join(dirname, "EventMapInfo.h5")
-        EventMap.cli_basic_output(["--dev", "-o", out, out_s, out_t])
+        EventMap.cli_basic_output(["--dev", "-f", "-o", out, out_s, out_t])
 
     def test_measuredynamics(self):
 
@@ -105,7 +144,7 @@ class MyTests(unittest.TestCase):
                 break
 
         out = os.path.join(dirname, "MeasureDynamics_s.h5")
-        MeasureDynamics.cli_run(["--dev", "-i", "20", "-o", out, "-s", str(s), path])
+        MeasureDynamics.cli_run(["--dev", "-f", "-i", "20", "-o", out, "-s", str(s), path])
 
     def test_read(self):
         """
@@ -113,8 +152,7 @@ class MyTests(unittest.TestCase):
         """
 
         ss = os.path.join(dirname, "AfterSystemSpanning.h5")
-
-        QuasiStatic.cli_stateaftersystemspanning(["--dev", "-o", ss, infoname])
+        QuasiStatic.cli_stateaftersystemspanning(["--dev", "-f", "-o", ss, infoname])
 
 
 if __name__ == "__main__":
