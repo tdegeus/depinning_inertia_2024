@@ -19,6 +19,7 @@ dirname = os.path.join(os.path.dirname(__file__), "output")
 idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
+fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
 
 
 class MyTests(unittest.TestCase):
@@ -42,6 +43,7 @@ class MyTests(unittest.TestCase):
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+        QuasiStatic.cli_fastload(["--dev", "-f", "-o", fastname, infoname, "-s"])
 
     @classmethod
     def tearDownClass(self):
@@ -55,9 +57,6 @@ class MyTests(unittest.TestCase):
         """
         Store state of the random sequence at system spanning events for fast reloading.
         """
-
-        fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
-        QuasiStatic.cli_fastload(["--dev", "-f", "-o", fastname, infoname, "-n", 10])
 
         with h5py.File(filename) as file, h5py.File(fastname) as fastload:
 
@@ -152,7 +151,9 @@ class MyTests(unittest.TestCase):
         """
 
         ss = os.path.join(dirname, "AfterSystemSpanning.h5")
-        QuasiStatic.cli_stateaftersystemspanning(["--dev", "-f", "-o", ss, infoname])
+        QuasiStatic.cli_stateaftersystemspanning(
+            ["--dev", "-f", "-q", fastname, "-o", ss, infoname]
+        )
 
 
 if __name__ == "__main__":
