@@ -277,10 +277,10 @@ class FastLoad:
 
         self.active = True
         self.data = self.file[filename]["data"]
-        self.step = self.file[filename]["step"][...]
-        self.inc = self.file[filename]["inc"][...]
+        self.steps = self.file[filename]["step"][...]
+        self.incs = self.file[filename]["inc"][...]
 
-    def fastload(self, system: System, inc: int):
+    def inc(self, system: System, inc: int):
         """
         Provide FastLoad information if available. Does not (yet) modify the system.
 
@@ -295,16 +295,43 @@ class FastLoad:
         if not self.active:
             return {}
 
-        distance = np.abs(self.inc - inc)
+        distance = np.abs(self.incs - inc)
         i = np.argmin(distance)
 
         if distance[i] > np.abs(system.inc - inc):
             return {}
 
+        key = str(self.steps[i])
+
         return dict(
-            state=self.data[str(self.step[i])]["state"][...],
-            istate=self.data[str(self.step[i])]["istate"][...],
-            y0=self.data[str(self.step[i])]["y0"][...],
+            state=self.data[key]["state"][...],
+            istate=self.data[key]["istate"][...],
+            y0=self.data[key]["y0"][...],
+        )
+
+    def step(self, system: System, step: int):
+        """
+        Proved FastLoad information for based on the nearest available quasi-static step available.
+        :param system: The system (read-only).
+        :param step: Quasi-static load step that will be loaded.
+        :return: If relevant FastLoad information is available, return a dictionary as follows::
+            state: FastLoad: state of the random number generator.
+            istate: FastLoad: index of ``state``.
+            y0: FastLoad: yield position of ``state``.
+        """
+
+        if not self.active:
+            return {}
+
+        distance = np.abs(self.steps - step)
+        i = np.argmin(distance)
+
+        key = str(self.steps[i])
+
+        return dict(
+            state=self.data[key]["state"][...],
+            istate=self.data[key]["istate"][...],
+            y0=self.data[key]["y0"][...],
         )
 
 
@@ -987,6 +1014,7 @@ def cli_stateaftersystemspanning(cli_args=None):
     assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
     basedir = os.path.dirname(args.ensembleinfo)
+    fastload = FastLoad(args.fastload)
 
     with h5py.File(args.ensembleinfo) as info:
 
@@ -1016,10 +1044,13 @@ def cli_stateaftersystemspanning(cli_args=None):
         with h5py.File(os.path.join(basedir, paths[f])) as source:
 
             system = System(source)
+            fastload.set_simulation(paths[f])
 
             for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                system.restore_quasistatic_step(source, s, align_buffer=False)
+                system.restore_quasistatic_step(
+                    source, s, align_buffer=False, **fastload.step(system, s)
+                )
 
                 xr = system.y_right() - system.x
                 xl = system.x - system.y_left()
