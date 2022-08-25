@@ -325,9 +325,8 @@ def cli_generate(cli_args=None):
 
                 g5.copy(source, dest, ["/event_driven", "/param"])
 
-                fastload.set_simulation(filename)
-
                 system = QuasiStatic.System(source)
+                fastload.set_simulation(filename)
 
                 steadystate = info["full"][filename]["steadystate"][...]
                 A = info["full"][filename]["A"][...]
@@ -406,7 +405,7 @@ def cli_generate(cli_args=None):
 
                     if load:
                         system.restore_quasistatic_step(
-                            source, s, align_buffer=False, **fastload.fastload(system, inc)
+                            source, s, align_buffer=False, **fastload.inc(system, inc)
                         )
                         system.advanceToFixedForce(f)
                         x = system.x
