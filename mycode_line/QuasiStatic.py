@@ -972,6 +972,7 @@ def cli_stateaftersystemspanning(cli_args=None):
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-n", "--select", type=int, help="Select random subset")
     parser.add_argument("-q", "--fastload", type=str, help=brief["cli_fastload"])
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
 
@@ -1003,7 +1004,14 @@ def cli_stateaftersystemspanning(cli_args=None):
     roi = int(roi - roi % 2 + 1)
     ensemble = eye.Ensemble([roi], variance=True, periodic=True)
 
-    for f in tqdm.tqdm(np.unique(file)):
+    files = np.unique(file)
+
+    if args.select is not None:
+        if args.select < len(files):
+            np.random.shuffle(files)
+            files = files[:args.select]
+
+    for f in tqdm.tqdm(files):
 
         with h5py.File(os.path.join(basedir, paths[f])) as source:
 
