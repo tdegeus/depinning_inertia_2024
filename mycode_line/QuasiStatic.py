@@ -230,6 +230,84 @@ class System(model.System):
         self.x = x
 
 
+class FastLoad:
+    """
+    Provide an easy API to provide e.g. :py:func:`System.restore_quasistatic_step` with 'FastLoad'
+    information.
+
+    See :py:func:`cli_fastload` to generate a 'FastLoad' file.
+    """
+
+    def __init__(self, filepath: str):
+        """
+        Open 'FastLoad' file (HDF5 archive).
+
+        Use :py:func:`set_simulation` to initialise for a specific simulation, before
+        :py:func:`fastload` becomes available.
+
+        :param file: Path to HDF5 archive (read-only), see :py:func:`cli_fastload`.
+        """
+
+        if filepath is None:
+            self.loaded = False
+            self.active = False
+            return
+
+        assert os.path.isfile(filepath)
+        self.loaded = True
+        self.file = h5py.File(filepath)
+
+    def __del__(self):
+
+        if self.loaded:
+            self.file.close()
+
+    def set_simulation(self, filename: str):
+        """
+        Initialise for a given simulation.
+        :param filename: Name of the simulation.
+        """
+
+        if not self.loaded:
+            return
+
+        if filename not in self.file:
+            self.active = False
+            return
+
+        self.active = True
+        self.data = self.file[filename]["data"]
+        self.step = self.file[filename]["step"][...]
+        self.inc = self.file[filename]["inc"][...]
+
+    def fastload(self, system: System, inc: int):
+        """
+        Provide FastLoad information if available. Does not (yet) modify the system.
+
+        :param system: The system for which on increment ``inc`` will be loaded (read-only).
+        :param inc: Increment number that will be loaded.
+        :return: If relevant FastLoad information is available, return a dictionary as follows::
+            state: FastLoad: state of the random number generator.
+            istate: FastLoad: index of ``state``.
+            y0: FastLoad: yield position of ``state``.
+        """
+
+        if not self.active:
+            return {}
+
+        distance = np.abs(self.inc - inc)
+        i = np.argmin(distance)
+
+        if distance[i] > np.abs(system.inc - inc):
+            return {}
+
+        return dict(
+            state=self.data[str(self.step[i])]["state"][...],
+            istate=self.data[str(self.step[i])]["istate"][...],
+            y0=self.data[str(self.step[i])]["y0"][...],
+        )
+
+
 def create_check_meta(
     file: h5py.File,
     path: str,
@@ -823,14 +901,14 @@ def cli_fastload(cli_args=None):
     )
 
     # input
-    parser.add_argument("info", type=str, help="EnsembleInfo")
+    parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
 
     args = tools._parse(parser, cli_args)
-    assert os.path.isfile(args.info)
+    assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
-    basedir = os.path.dirname(args.info)
+    basedir = os.path.dirname(args.ensembleinfo)
 
-    with h5py.File(args.info) as info, h5py.File(args.output, "w") as output:
+    with h5py.File(args.ensembleinfo) as info, h5py.File(args.output, "w") as output:
 
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
         paths = info["/lookup/filepath"].asstr()[...]
@@ -902,14 +980,15 @@ def cli_stateaftersystemspanning(cli_args=None):
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("info", type=str, help="EnsembleInfo")
+    parser.add_argument("-q", "--fastload", type=str, help=brief["cli_fastload"])
+    parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
 
     args = tools._parse(parser, cli_args)
-    assert os.path.isfile(args.info)
+    assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
-    basedir = os.path.dirname(args.info)
+    basedir = os.path.dirname(args.ensembleinfo)
 
-    with h5py.File(args.info) as info:
+    with h5py.File(args.ensembleinfo) as info:
 
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
 
