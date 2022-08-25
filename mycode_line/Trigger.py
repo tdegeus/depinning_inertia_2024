@@ -307,7 +307,6 @@ def cli_generate(cli_args=None):
         os.makedirs(args.outdir)
 
     basedir = os.path.dirname(args.ensembleinfo)
-    fastload = QuasiStatic.FastLoad(args.fastload)
 
     with h5py.File(args.ensembleinfo) as info:
 
@@ -326,7 +325,7 @@ def cli_generate(cli_args=None):
                 g5.copy(source, dest, ["/event_driven", "/param"])
 
                 system = QuasiStatic.System(source)
-                fastload.set_simulation(filename)
+                fastload = QuasiStatic.FastLoad(args.fastload, filename)
 
                 steadystate = info["full"][filename]["steadystate"][...]
                 A = info["full"][filename]["A"][...]
@@ -405,7 +404,7 @@ def cli_generate(cli_args=None):
 
                     if load:
                         system.restore_quasistatic_step(
-                            source, s, align_buffer=False, **fastload.inc(system, inc)
+                            source, s, align_buffer=False, fastload=fastload
                         )
                         system.advanceToFixedForce(f)
                         x = system.x

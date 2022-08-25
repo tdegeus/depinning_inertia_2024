@@ -58,10 +58,11 @@ class MyTests(unittest.TestCase):
         Store state of the random sequence at system spanning events for fast reloading.
         """
 
-        with h5py.File(filename) as file, h5py.File(fastname) as fastload:
+        with h5py.File(filename) as file:
 
+            fastload = QuasiStatic.FastLoad(fastname, idname)
             system = QuasiStatic.System(file)
-            step = fastload[idname]["step"][...][-1]
+            step = fastload.file[idname]["step"][...][-1]
 
             system.restore_quasistatic_step(file=file, step=step)
 
@@ -72,13 +73,8 @@ class MyTests(unittest.TestCase):
             yr = system.y[all, system.i]
             yrr = system.y[all, system.i + 1]
 
-            system.restore_quasistatic_step(
-                file=file,
-                step=step,
-                state=fastload[f"/{idname}/data/{step:d}/state"][...],
-                istate=fastload[f"/{idname}/data/{step:d}/istate"][...],
-                y0=fastload[f"/{idname}/data/{step:d}/y0"][...],
-            )
+            system.restore_quasistatic_step(file=file, step=0, fastload=fastload)
+            system.restore_quasistatic_step(file=file, step=step, fastload=fastload)
 
             self.assertTrue(np.all(np.equal(system.i + system.istart, i)))
             self.assertTrue(np.allclose(system.y[all, system.i - 2], yll))

@@ -191,9 +191,7 @@ class System(model.System):
         file: h5py.File,
         step: int,
         align_buffer: bool = True,
-        state: ArrayLike = None,
-        istate: ArrayLike = None,
-        y0: ArrayLike = None,
+        fastload: FastLoad = None,
     ):
         """
         Restore an a quasi-static step.
@@ -201,27 +199,16 @@ class System(model.System):
         :param file: Open simulation HDF5 archive (read-only).
         :param step: Step number.
         :param align: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
-        :param state: FastLoad: state of the random number generator.
-        :param istate: FastLoad: index of ``state``.
-        :param y0: FastLoad: yield position of ``state``.
+        :param fastload: FastLoad information (assumes it to be correctly allocated!!).
         """
-
-        if state is not None:
-            assert istate is not None
-            assert y0 is not None
-            self.state = np.copy(state)
-            self.istate = np.copy(istate)
-            self.istart = np.copy(istate)
-            self.generators.restore(self.state)
-            y = np.cumsum(self._draw_dy(self.y.shape[1]), axis=1)
-            dy = y0 - y[:, 0]
-            self.y = y + dy.reshape(-1, 1)
 
         x = file["x"][str(step)][...]
 
         if not align_buffer and np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
             pass
         else:
+            if fastload is not None:
+                fastload.step(self, step)
             self._chunk_goto(x)
 
         self.quench()
@@ -238,14 +225,15 @@ class FastLoad:
     See :py:func:`cli_fastload` to generate a 'FastLoad' file.
     """
 
-    def __init__(self, filepath: str):
+    def __init__(self, filepath: str, idname: str):
         """
-        Open 'FastLoad' file (HDF5 archive).
+        Open 'FastLoad' file (HDF5 archive) for a given simulation.
 
         Use :py:func:`set_simulation` to initialise for a specific simulation, before
         :py:func:`fastload` becomes available.
 
         :param file: Path to HDF5 archive (read-only), see :py:func:`cli_fastload`.
+        :param idname: Name of the simulation.
         """
 
         if filepath is None:
@@ -257,82 +245,59 @@ class FastLoad:
         self.loaded = True
         self.file = h5py.File(filepath)
 
+        if idname not in self.file:
+            self.active = False
+            return
+
+        self.active = True
+        self.data = self.file[idname]["data"]
+        self.steps = self.file[idname]["step"][...]
+        self.incs = self.file[idname]["inc"][...]
+
     def __del__(self):
 
         if self.loaded:
             self.file.close()
 
-    def set_simulation(self, filename: str):
-        """
-        Initialise for a given simulation.
-        :param filename: Name of the simulation.
-        """
-
-        if not self.loaded:
-            return
-
-        if filename not in self.file:
-            self.active = False
-            return
-
-        self.active = True
-        self.data = self.file[filename]["data"]
-        self.steps = self.file[filename]["step"][...]
-        self.incs = self.file[filename]["inc"][...]
-
     def inc(self, system: System, inc: int):
         """
-        Provide FastLoad information if available. Does not (yet) modify the system.
-
-        :param system: The system for which on increment ``inc`` will be loaded (read-only).
+        FastLoad new yield position sequence.
+        :param system: The system (modified).
         :param inc: Increment number that will be loaded.
-        :return: If relevant FastLoad information is available, return a dictionary as follows::
-            state: FastLoad: state of the random number generator.
-            istate: FastLoad: index of ``state``.
-            y0: FastLoad: yield position of ``state``.
         """
 
         if not self.active:
-            return {}
+            return
 
         distance = np.abs(self.incs - inc)
         i = np.argmin(distance)
 
         if distance[i] > np.abs(system.inc - inc):
-            return {}
+            return
 
-        key = str(self.steps[i])
-
-        return dict(
-            state=self.data[key]["state"][...],
-            istate=self.data[key]["istate"][...],
-            y0=self.data[key]["y0"][...],
-        )
+        self.step(system, self.steps[i])
 
     def step(self, system: System, step: int):
         """
-        Proved FastLoad information for based on the nearest available quasi-static step available.
-        :param system: The system (read-only).
+        FastLoad new yield position sequence.
+        :param system: The system (modified).
         :param step: Quasi-static load step that will be loaded.
-        :return: If relevant FastLoad information is available, return a dictionary as follows::
-            state: FastLoad: state of the random number generator.
-            istate: FastLoad: index of ``state``.
-            y0: FastLoad: yield position of ``state``.
         """
 
         if not self.active:
-            return {}
+            return
 
         distance = np.abs(self.steps - step)
         i = np.argmin(distance)
 
         key = str(self.steps[i])
-
-        return dict(
-            state=self.data[key]["state"][...],
-            istate=self.data[key]["istate"][...],
-            y0=self.data[key]["y0"][...],
-        )
+        system.state = self.data[key]["state"][...]
+        system.istate = self.data[key]["istate"][...]
+        system.istart = np.copy(system.istate)
+        system.generators.restore(system.state)
+        y = np.cumsum(system._draw_dy(system.y.shape[1]), axis=1)
+        dy = self.data[key]["y0"][...] - y[:, 0]
+        system.y = y + dy.reshape(-1, 1)
 
 
 def create_check_meta(
@@ -1014,7 +979,6 @@ def cli_stateaftersystemspanning(cli_args=None):
     assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
     basedir = os.path.dirname(args.ensembleinfo)
-    fastload = FastLoad(args.fastload)
 
     with h5py.File(args.ensembleinfo) as info:
 
@@ -1044,13 +1008,11 @@ def cli_stateaftersystemspanning(cli_args=None):
         with h5py.File(os.path.join(basedir, paths[f])) as source:
 
             system = System(source)
-            fastload.set_simulation(paths[f])
+            fastload = FastLoad(args.fastload, paths[f])
 
             for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                system.restore_quasistatic_step(
-                    source, s, align_buffer=False, **fastload.step(system, s)
-                )
+                system.restore_quasistatic_step(source, s, align_buffer=False, fastload=fastload)
 
                 xr = system.y_right() - system.x
                 xl = system.x - system.y_left()
