@@ -995,10 +995,10 @@ def cli_stateaftersystemspanning(cli_args=None):
         file = file[keep]
         step = step[keep]
 
-    bin_edges = np.logspace(-1, 1, 20001)
-    count_x = np.zeros(bin_edges.size + 1, dtype=np.int64)
-    count_xr = np.zeros(bin_edges.size + 1, dtype=np.int64)
-    count_xl = np.zeros(bin_edges.size + 1, dtype=np.int64)
+    bin_edges = np.logspace(-4, 1, 20001)
+    count_x = np.zeros(bin_edges.size - 1, dtype=np.int64)
+    count_xr = np.zeros(bin_edges.size - 1, dtype=np.int64)
+    count_xl = np.zeros(bin_edges.size - 1, dtype=np.int64)
 
     roi = int((N - N % 2) / 2)
     roi = int(roi - roi % 2 + 1)
@@ -1009,7 +1009,7 @@ def cli_stateaftersystemspanning(cli_args=None):
     if args.select is not None:
         if args.select < len(files):
             np.random.shuffle(files)
-            files = files[:args.select]
+            files = files[: args.select]
 
     for f in tqdm.tqdm(files):
 
@@ -1026,9 +1026,9 @@ def cli_stateaftersystemspanning(cli_args=None):
                 xl = system.x - system.y_left()
                 x = np.minimum(xl, xl)
 
-                count_x += np.bincount(np.digitize(x, bin_edges), minlength=count_x.size)
-                count_xr += np.bincount(np.digitize(xr, bin_edges), minlength=count_x.size)
-                count_xl += np.bincount(np.digitize(xl, bin_edges), minlength=count_x.size)
+                count_x += np.bincount(np.digitize(x, bin_edges) - 1, minlength=count_x.size)
+                count_xr += np.bincount(np.digitize(xr, bin_edges) - 1, minlength=count_x.size)
+                count_xl += np.bincount(np.digitize(xl, bin_edges) - 1, minlength=count_x.size)
 
                 ensemble.heightheight(system.x)
 
