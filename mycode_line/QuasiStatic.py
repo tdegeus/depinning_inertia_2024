@@ -1011,27 +1011,6 @@ def cli_stateaftersystemspanning(cli_args=None):
             np.random.shuffle(files)
             files = files[: args.select]
 
-    for f in tqdm.tqdm(files):
-
-        with h5py.File(os.path.join(basedir, paths[f])) as source:
-
-            system = System(source)
-            fastload = FastLoad(args.fastload, paths[f])
-
-            for s in tqdm.tqdm(np.sort(step[file == f])):
-
-                system.restore_quasistatic_step(source, s, align_buffer=False, fastload=fastload)
-
-                xr = system.y_right() - system.x
-                xl = system.x - system.y_left()
-                x = np.minimum(xl, xl)
-
-                count_x += np.bincount(np.digitize(x, bin_edges) - 1, minlength=count_x.size)
-                count_xr += np.bincount(np.digitize(xr, bin_edges) - 1, minlength=count_x.size)
-                count_xl += np.bincount(np.digitize(xl, bin_edges) - 1, minlength=count_x.size)
-
-                ensemble.heightheight(system.x)
-
     with h5py.File(args.output, "w") as output:
 
         output["/yield_distance/bin_edges"] = bin_edges
@@ -1040,12 +1019,50 @@ def cli_stateaftersystemspanning(cli_args=None):
         output["/yield_distance/count_any"] = count_x
 
         R = ensemble.result()
-        V = ensemble.variance()
+        V = np.zeros_like(R)
         A = ensemble.distance(0).astype(int)
 
         output["/heightheight/A"] = A[A >= 0]
         output["/heightheight/R"] = R[A >= 0]
         output["/heightheight/error"] = np.sqrt(V[A >= 0])
+
+        output.flush()
+
+        for f in tqdm.tqdm(files):
+
+            with h5py.File(os.path.join(basedir, paths[f])) as source:
+
+                system = System(source)
+                fastload = FastLoad(args.fastload, paths[f])
+
+                for s in tqdm.tqdm(np.sort(step[file == f])):
+
+                    system.restore_quasistatic_step(source, s, align_buffer=False, fastload=fastload)
+
+                    xr = system.y_right() - system.x
+                    xl = system.x - system.y_left()
+                    x = np.minimum(xl, xl)
+
+                    count_x += np.bincount(np.digitize(x, bin_edges) - 1, minlength=count_x.size)
+                    count_xr += np.bincount(np.digitize(xr, bin_edges) - 1, minlength=count_x.size)
+                    count_xl += np.bincount(np.digitize(xl, bin_edges) - 1, minlength=count_x.size)
+
+                    ensemble.heightheight(system.x)
+
+                output["/yield_distance/bin_edges"][...] = bin_edges
+                output["/yield_distance/count_right"][...] = count_xr
+                output["/yield_distance/count_left"][...] = count_xl
+                output["/yield_distance/count_any"][...] = count_x
+
+                R = ensemble.result()
+                V = ensemble.variance()
+                A = ensemble.distance(0).astype(int)
+
+                output["/heightheight/A"][...] = A[A >= 0]
+                output["/heightheight/R"][...] = R[A >= 0]
+                output["/heightheight/error"][...] = np.sqrt(V[A >= 0])
+
+                output.flush()
 
 
 def cli_plot(cli_args=None):
