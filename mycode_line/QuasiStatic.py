@@ -82,6 +82,13 @@ def interpret_filename(filename: str) -> dict:
 
     return info
 
+class DummyPrrng:
+
+    def __init__(self):
+        pass
+
+    def advance(self, shift) -> None:
+        pass
 
 class System(model.System):
     """
@@ -114,6 +121,15 @@ class System(model.System):
                 mean=file_yield["weibull"]["mean"][...],
                 k=file_yield["weibull"]["k"][...],
             )
+            x_yield = np.cumsum(self._draw_dy(nchunk), axis=1)
+        elif "delta" in file_yield:
+            self.distribution = dict(
+                type="delta",
+                mean=file_yield["delta"]["mean"][...],
+            )
+            n = initstate.size
+            x_yield = np.cumsum(np.ones([n, nchunk]), axis=1) + self.generators.random([1])
+            self.generators = DummyPrrng()
         else:
             raise OSError("Distribution not supported")
 
@@ -124,7 +140,7 @@ class System(model.System):
             k_neighbours=file["param"]["k_neighbours"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            x_yield=np.cumsum(self._draw_dy(nchunk), axis=1) + xoffset,
+            x_yield=x_yield + xoffset,
         )
 
     def _draw_dy(self, n):
@@ -141,6 +157,11 @@ class System(model.System):
             self.state = self.generators.state()
             self.istate += n
             return ret
+
+        if self.distribution["type"] == "delta":
+            return 2 * self.distribution["mean"] * np.ones([self.N, n])
+
+        raise OSError("Distribution not supported")
 
     def _chuck_shift(self, shift: ArrayLike):
         """
@@ -283,6 +304,8 @@ class FastLoad:
         :param system: The system (modified).
         :param step: Quasi-static load step that will be loaded.
         """
+
+        assert system.distribution["type"] != "delta"
 
         if not self.active:
             return
