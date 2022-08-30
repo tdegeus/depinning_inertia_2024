@@ -82,13 +82,14 @@ def interpret_filename(filename: str) -> dict:
 
     return info
 
-class DummyPrrng:
 
+class DummyPrrng:
     def __init__(self):
         pass
 
     def advance(self, shift) -> None:
         pass
+
 
 class System(model.System):
     """
@@ -1060,7 +1061,9 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                    system.restore_quasistatic_step(source, s, align_buffer=False, fastload=fastload)
+                    system.restore_quasistatic_step(
+                        source, s, align_buffer=False, fastload=fastload
+                    )
 
                     xr = system.y_right() - system.x
                     xl = system.x - system.y_left()
