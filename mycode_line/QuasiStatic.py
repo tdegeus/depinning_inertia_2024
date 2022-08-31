@@ -96,18 +96,23 @@ class System(model.System):
     Similar to :py:class:`model.System`, but with file interaction.
     """
 
-    def __init__(self, file: h5py.File, nchunk: int = None):
+    def __init__(self, file: h5py.File, nchunk: int = None, chunk_use_max: bool = True):
         """
         Initialise system.
 
-        :param nchunk: Overwrite the default chuck
+        :param nchunk: Overwrite the default chuck.
+        :param chunk_use_max: If True, use the maximum between the option and the value in the file.
         """
 
         file_yield = file["param"]["xyield"]
         initstate = file_yield["initstate"][...]
         initseq = file_yield["initseq"][...]
         xoffset = file_yield["xoffset"][...]
-        nchunk = file_yield["nchunk"][...] if nchunk is None else nchunk
+
+        if nchunk is None:
+            nchunk = file_yield["nchunk"][...]
+        elif chunk_use_max:
+            nchunk = max(file_yield["nchunk"][...] , nchunk)
 
         self.generators = prrng.pcg32_array(initstate, initseq)
         self.nbuffer = file_yield["nbuffer"][...]

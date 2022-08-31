@@ -102,10 +102,28 @@ def cli_run(cli_args=None):
     if os.path.realpath(args.file) != os.path.realpath(args.output):
 
         with h5py.File(args.file) as src, h5py.File(args.output, "w") as dest:
+
+            system = QuasiStatic.System(src)
+
+            if "branch" in src:
+                assert args.branch is not None
+                system.restore_quasistatic_step(src[f"/branch/{args.branch:d}"], 1)
+                i_n = np.copy(system.istart + system.i)
+                system.restore_quasistatic_step(src[f"/branch/{args.branch:d}"], 0)
+                nchunk = np.max(i_n - system.istart + system.i)
+            else:
+                assert args.step is not None
+                system.restore_quasistatic_step(src, args.step)
+                i_n = np.copy(system.istart + system.i)
+                system.restore_quasistatic_step(src, args.step - 1)
+                nchunk = np.max(i_n - system.istart + system.i)
+
             paths = list(GooseHDF5.getdatasets(src, fold="/x"))
             assert "/x/..." in paths
             paths.remove("/x/...")
+
             GooseHDF5.copy(src, dest, paths, expand_soft=False)
+
             dest[f"/x/{args.step - 1:d}"] = src[f"/x/{args.step - 1:d}"][:]
 
     with h5py.File(args.output, "a") as file:
@@ -137,16 +155,14 @@ def cli_run(cli_args=None):
 
         # restore state
 
-        system = QuasiStatic.System(file)
+        system = QuasiStatic.System(file, nchunk=int(1.5 * nchunk))
 
         if "branch" in file:
-            assert args.branch is not None
-            system.restore_quasistatic_step(file[f"/branch/{args.branch:d}"], 1)
+            system.restore_quasistatic_step(file[f"/branch/{args.branch:d}"], 0)
             p = file["/output/p"][args.branch]
             kick = None
             pbar = tqdm.tqdm()
         else:
-            assert args.step is not None
             system.restore_quasistatic_step(file, args.step - 1)
             kick = file["/event_driven/kick"][args.step]
             pbar = tqdm.tqdm(total=file["inc"][args.step] - file["inc"][args.step - 1])
@@ -226,7 +242,8 @@ def cli_run(cli_args=None):
             else:
 
                 inc_n = system.inc
-                ret = system.minimise(max_iter=args.t_step, max_iter_is_error=False)
+                ret = system.minimise(max_iter=args.t_step, max_iter_is_error=False, nmargin=5)
+                assert ret >= 0
                 iiter += system.inc - inc_n
                 stop = ret == 0
                 storage.dset_extend1d(file, "/dynamics/sync-t", t_istore, istore)
