@@ -4,7 +4,7 @@ dependencies:
 - autodocsumm
 - click
 - cmake
-- enstat
+- enstat >=0.6.0
 - gmattensor >0.10.1
 - goosefem
 - goosehdf5 >=0.17.1
