@@ -139,7 +139,9 @@ class MyTests(unittest.TestCase):
                 break
 
         out = os.path.join(dirname, "MeasureDynamics_s.h5")
-        MeasureDynamics.cli_run(["--dev", "-f", "-i", "20", "-o", out, "-s", str(s), path])
+        ens = os.path.join(dirname, "MeasureDynamics_average.h5")
+        MeasureDynamics.cli_run(["--dev", "-f", "--step", s, "-o", out, path])
+        MeasureDynamics.cli_average_systemspanning(["-f", "--dev", "-o", ens, out])
 
     def test_read(self):
         """

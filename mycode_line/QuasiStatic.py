@@ -325,8 +325,8 @@ class FastLoad:
 
 
 def create_check_meta(
-    file: h5py.File,
-    path: str,
+    file: h5py.File = None,
+    path: str = None,
     ver: str = version,
     deps: str = dependencies(model),
     dev: bool = False,
@@ -354,6 +354,9 @@ def create_check_meta(
 
     assert dev or not tag.has_uncommitted(ver)
     assert dev or not tag.any_has_uncommitted(deps)
+
+    if file is None:
+        return None
 
     if path not in file:
         meta = file.create_group(path)

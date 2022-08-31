@@ -292,6 +292,7 @@ def cli_average_systemspanning(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    progname = entry_points[funcname]
     output = file_defaults[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -303,6 +304,7 @@ def cli_average_systemspanning(cli_args=None):
     assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
     tools._check_overwrite_file(args.output, args.force)
+    QuasiStatic.create_check_meta(dev=args.develop)
 
     # get duration of each event and allocate binning on duration since system spanning
 
@@ -419,56 +421,57 @@ def cli_average_systemspanning(cli_args=None):
                 i = system.istart + system.i
                 broken = i != i_n
 
-                # synct
+                # synct / syncA
 
-                if t_ibin[item] >= 0:
+                for data, store, j in zip(
+                    [synct, syncA],
+                    [t_ibin[item] >= 0, item in items_syncA],
+                    [t_ibin[item], A[item]],
+                ):
 
-                    j = t_ibin[item]
-                    synct["f_potential"].add_point(np.mean(system.f_potential), j)
-                    synct["f_frame"].add_point(np.mean(system.f_frame), j)
-                    synct["f_neighbours"].add_point(np.mean(system.f_neighbours), j)
-                    synct["dx"].add_point(np.mean(system.x - x_n), j)
-                    synct["S"].add_point(np.mean(i - i_n), j)
-                    synct["f_potential_moving"].add_point(np.mean(system.f_potential[broken]), j)
-                    synct["f_frame_moving"].add_point(np.mean(system.f_frame[broken]), j)
-                    synct["f_neighbours_moving"].add_point(np.mean(system.f_neighbours[broken]), j)
-                    synct["dx_moving"].add_point(np.mean((system.x - x_n)[broken]), j)
+                    if not store:
+                        continue
 
-                # syncA
+                    data["f_potential"].add_point(np.mean(system.f_potential), j)
+                    data["f_frame"].add_point(np.mean(system.f_frame), j)
+                    data["f_neighbours"].add_point(np.mean(system.f_neighbours), j)
+                    data["dx"].add_point(np.mean(system.x - x_n), j)
+                    data["S"].add_point(np.mean(i - i_n), j)
 
-                if item in items_syncA:
+                    if np.sum(broken) == 0:
+                        continue
+
+                    data["f_potential_moving"].add_point(np.mean(system.f_potential[broken]), j)
+                    data["f_frame_moving"].add_point(np.mean(system.f_frame[broken]), j)
+                    data["f_neighbours_moving"].add_point(np.mean(system.f_neighbours[broken]), j)
+                    data["dx_moving"].add_point(np.mean((system.x - x_n)[broken]), j)
+
+                # syncA["align"]
+
+                if item in items_syncA and np.sum(broken) > 0:
 
                     j = A[item]
-                    syncA["f_potential"].add_point(np.mean(system.f_potential), j)
-                    syncA["f_frame"].add_point(np.mean(system.f_frame), j)
-                    syncA["f_neighbours"].add_point(np.mean(system.f_neighbours), j)
-                    syncA["dx"].add_point(np.mean(system.x - x_n), j)
-                    syncA["S"].add_point(np.sum(i - i_n), j)
-                    syncA["f_potential_moving"].add_point(np.mean(system.f_potential[broken]), j)
-                    syncA["f_frame_moving"].add_point(np.mean(system.f_frame[broken]), j)
-                    syncA["f_neighbours_moving"].add_point(np.mean(system.f_neighbours[broken]), j)
-                    syncA["dx_moving"].add_point(np.mean((system.x - x_n)[broken]), j)
-
                     roll = tools.center_avalanche(broken)
-
                     syncA["align"]["f_potential"].subsample(j, system.f_potential, roll, broken)
                     syncA["align"]["f_frame"].subsample(j, system.f_frame, roll, broken)
                     syncA["align"]["f_neighbours"].subsample(j, system.f_neighbours, roll, broken)
                     syncA["align"]["s"].subsample(j, i - i_n, roll, broken)
                     syncA["align"]["dx"].subsample(j, system.x - x_n, roll, broken)
 
-    with h5py.File(args.output, "w") as output:
+    with h5py.File(args.output, "w") as file:
+
+        QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
         for title, data in zip(["sync-t", "sync-A"], [synct, syncA]):
 
             for key in data:
                 if key in ["align"]:
                     continue
-                output[f"/{title}/{key}/first"] = data[key].first
-                output[f"/{title}/{key}/second"] = data[key].second
-                output[f"/{title}/{key}/norm"] = data[key].norm
+                file[f"/{title}/{key}/first"] = data[key].first
+                file[f"/{title}/{key}/second"] = data[key].second
+                file[f"/{title}/{key}/norm"] = data[key].norm
 
         for key in syncA["align"]:
-            output[f"/sync-A/align/{key}/first"] = syncA["align"][key].first
-            output[f"/sync-A/align/{key}/second"] = syncA["align"][key].second
-            output[f"/sync-A/align/{key}/norm"] = syncA["align"][key].norm
+            file[f"/sync-A/align/{key}/first"] = syncA["align"][key].first
+            file[f"/sync-A/align/{key}/second"] = syncA["align"][key].second
+            file[f"/sync-A/align/{key}/norm"] = syncA["align"][key].norm
