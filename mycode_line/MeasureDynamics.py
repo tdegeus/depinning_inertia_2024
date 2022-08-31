@@ -20,7 +20,6 @@ from . import storage
 from . import tools
 from ._version import version
 
-
 entry_points = dict(
     cli_average_systemspanning="MeasureDynamics_average_systemspanning",
     cli_run="MeasureDynamics_run",
@@ -103,28 +102,33 @@ def cli_run(cli_args=None):
 
         with h5py.File(args.file) as src, h5py.File(args.output, "w") as dest:
 
+            # copy all except positions
+            paths = list(GooseHDF5.getdatasets(src, fold="/x"))
+            assert "/x/..." in paths
+            paths.remove("/x/...")
+            GooseHDF5.copy(src, dest, paths, expand_soft=False)
+
+            dest[f"/x/{args.step - 1:d}"] = src[f"/x/{args.step - 1:d}"][:]
+
+            # ensure a chunk that will be big enough
             system = QuasiStatic.System(src)
 
             if "branch" in src:
                 assert args.branch is not None
                 system.restore_quasistatic_step(src[f"/branch/{args.branch:d}"], 1)
-                i_n = np.copy(system.istart + system.i)
+                i_n = system.istart + system.i
                 system.restore_quasistatic_step(src[f"/branch/{args.branch:d}"], 0)
                 nchunk = np.max(i_n - system.istart + system.i)
             else:
                 assert args.step is not None
                 system.restore_quasistatic_step(src, args.step)
-                i_n = np.copy(system.istart + system.i)
+                i_n = system.istart + system.i
                 system.restore_quasistatic_step(src, args.step - 1)
                 nchunk = np.max(i_n - system.istart + system.i)
 
-            paths = list(GooseHDF5.getdatasets(src, fold="/x"))
-            assert "/x/..." in paths
-            paths.remove("/x/...")
-
-            GooseHDF5.copy(src, dest, paths, expand_soft=False)
-
-            dest[f"/x/{args.step - 1:d}"] = src[f"/x/{args.step - 1:d}"][:]
+            dest["/param/xyield/nchunk"][...] = int(
+                max(1.5 * nchunk, dest["/param/xyield/nchunk"][...])
+            )
 
     with h5py.File(args.output, "a") as file:
 
@@ -155,7 +159,7 @@ def cli_run(cli_args=None):
 
         # restore state
 
-        system = QuasiStatic.System(file, nchunk=int(1.5 * nchunk))
+        system = QuasiStatic.System(file)
 
         if "branch" in file:
             system.restore_quasistatic_step(file[f"/branch/{args.branch:d}"], 0)
@@ -168,7 +172,7 @@ def cli_run(cli_args=None):
             pbar = tqdm.tqdm(total=file["inc"][args.step] - file["inc"][args.step - 1])
 
         dx = file["/event_driven/dx"][...]
-        i_n = np.copy(system.istart + system.i)
+        i_n = system.istart + system.i
         i = np.copy(i_n)
         N = system.N
 
@@ -193,7 +197,7 @@ def cli_run(cli_args=None):
             if store:
 
                 if iiter != last_stored_iiter:
-                    file[f"/dynamics/x/{istore:d}"] = np.copy(system.x)
+                    file[f"/dynamics/x/{istore:d}"] = system.x
                     storage.dset_extend1d(file, "/dynamics/inc", istore, system.inc)
                     storage.dset_extend1d(file, "/dynamics/A", istore, np.sum(np.not_equal(i, i_n)))
                     storage.dset_extend1d(file, "/dynamics/stored", istore, istore)
@@ -439,7 +443,7 @@ def cli_average_systemspanning(cli_args=None):
                 system.x = file[f"/dynamics/x/{item:d}"][...]
 
                 if item == 0:
-                    i_n = np.copy(system.istart + system.i)
+                    i_n = system.istart + system.i
                     x_n = np.copy(system.x)
 
                 i = system.istart + system.i
@@ -478,16 +482,16 @@ def cli_average_systemspanning(cli_args=None):
                     roll = tools.center_avalanche(broken)
 
                     data = syncA["align"]
-                    data["f_potential"].subsample(j, np.copy(system.f_potential), roll)
-                    data["f_frame"].subsample(j, np.copy(system.f_frame), roll)
-                    data["f_neighbours"].subsample(j, np.copy(system.f_neighbours), roll)
+                    data["f_potential"].subsample(j, system.f_potential, roll)
+                    data["f_frame"].subsample(j, system.f_frame, roll)
+                    data["f_neighbours"].subsample(j, system.f_neighbours, roll)
                     data["s"].subsample(j, i - i_n, roll)
                     data["dx"].subsample(j, system.x - x_n, roll)
 
                     data = syncA["align_moving"]
-                    data["f_potential"].subsample(j, np.copy(system.f_potential), roll, broken)
-                    data["f_frame"].subsample(j, np.copy(system.f_frame), roll, broken)
-                    data["f_neighbours"].subsample(j, np.copy(system.f_neighbours), roll, broken)
+                    data["f_potential"].subsample(j, system.f_potential, roll, broken)
+                    data["f_frame"].subsample(j, system.f_frame, roll, broken)
+                    data["f_neighbours"].subsample(j, system.f_neighbours, roll, broken)
                     data["s"].subsample(j, i - i_n, roll, broken)
                     data["dx"].subsample(j, system.x - x_n, roll, broken)
 

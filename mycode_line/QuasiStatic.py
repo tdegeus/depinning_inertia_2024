@@ -112,7 +112,7 @@ class System(model.System):
         if nchunk is None:
             nchunk = file_yield["nchunk"][...]
         elif chunk_use_max:
-            nchunk = max(file_yield["nchunk"][...] , nchunk)
+            nchunk = max(file_yield["nchunk"][...], nchunk)
 
         self.generators = prrng.pcg32_array(initstate, initseq)
         self.nbuffer = file_yield["nbuffer"][...]
