@@ -320,11 +320,17 @@ def cli_average_systemspanning(cli_args=None):
                 system = QuasiStatic.System(file)
                 N = system.N
                 t_step = file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
+                norm = QuasiStatic.normalisation(file)
+                norm.pop("seed")
+                dt = norm["dt"]
 
             else:
 
                 assert N == system.N
                 assert t_step == file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
+                n = QuasiStatic.normalisation(file)
+                for key in norm:
+                    assert norm[key] == n[key]
 
             t = file["/dynamics/inc"][...]
             A = file["/dynamics/A"][...]
@@ -356,13 +362,14 @@ def cli_average_systemspanning(cli_args=None):
     synct = allocate(t_bin.size - 1)
     syncA = allocate(N + 1)
 
-    syncA["align"] = dict(
-        f_potential=AlignedAverage(shape=(N + 1, N)),
-        f_frame=AlignedAverage(shape=(N + 1, N)),
-        f_neighbours=AlignedAverage(shape=(N + 1, N)),
-        dx=AlignedAverage(shape=(N + 1, N)),
-        s=AlignedAverage(shape=(N + 1, N)),
-    )
+    for title in ["align", "align_moving"]:
+        syncA[title] = dict(
+            f_potential=AlignedAverage(shape=(N + 1, N)),
+            f_frame=AlignedAverage(shape=(N + 1, N)),
+            f_neighbours=AlignedAverage(shape=(N + 1, N)),
+            dx=AlignedAverage(shape=(N + 1, N)),
+            s=AlignedAverage(shape=(N + 1, N)),
+        )
 
     # averages
 
@@ -404,8 +411,8 @@ def cli_average_systemspanning(cli_args=None):
             # add averages
 
             keep = t_ibin >= 0
-            synct["delta_t"].add_point(delta_t[keep], t_ibin[keep])
-            syncA["delta_t"].add_point(delta_t[items_syncA], A[items_syncA])
+            synct["delta_t"].add_point(dt * delta_t[keep], t_ibin[keep])
+            syncA["delta_t"].add_point(dt * delta_t[items_syncA], A[items_syncA])
 
             for item in tqdm.tqdm(range(nitem)):
 
@@ -446,32 +453,47 @@ def cli_average_systemspanning(cli_args=None):
                     data["f_neighbours_moving"].add_point(np.mean(system.f_neighbours[broken]), j)
                     data["dx_moving"].add_point(np.mean((system.x - x_n)[broken]), j)
 
-                # syncA["align"]
+                # syncA["align_moving"]
 
                 if item in items_syncA and np.sum(broken) > 0:
 
                     j = A[item]
                     roll = tools.center_avalanche(broken)
-                    syncA["align"]["f_potential"].subsample(j, system.f_potential, roll, broken)
-                    syncA["align"]["f_frame"].subsample(j, system.f_frame, roll, broken)
-                    syncA["align"]["f_neighbours"].subsample(j, system.f_neighbours, roll, broken)
-                    syncA["align"]["s"].subsample(j, i - i_n, roll, broken)
-                    syncA["align"]["dx"].subsample(j, system.x - x_n, roll, broken)
+
+                    data = syncA["align"]
+                    data["f_potential"].subsample(j, system.f_potential, roll)
+                    data["f_frame"].subsample(j, system.f_frame, roll)
+                    data["f_neighbours"].subsample(j, system.f_neighbours, roll)
+                    data["s"].subsample(j, i - i_n, roll)
+                    data["dx"].subsample(j, system.x - x_n, roll)
+
+                    data = syncA["align_moving"]
+                    data["f_potential"].subsample(j, system.f_potential, roll, broken)
+                    data["f_frame"].subsample(j, system.f_frame, roll, broken)
+                    data["f_neighbours"].subsample(j, system.f_neighbours, roll, broken)
+                    data["s"].subsample(j, i - i_n, roll, broken)
+                    data["dx"].subsample(j, system.x - x_n, roll, broken)
 
     with h5py.File(args.output, "w") as file:
 
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
+        file["files"] = [os.path.relpath(i, os.path.dirname(args.output)) for i in args.files]
+
+        for key in norm:
+            file[f"/normalisation/{key}"] = norm[key]
+
         for title, data in zip(["sync-t", "sync-A"], [synct, syncA]):
 
             for key in data:
-                if key in ["align"]:
+                if key in ["align", "align_moving"]:
                     continue
                 file[f"/{title}/{key}/first"] = data[key].first
                 file[f"/{title}/{key}/second"] = data[key].second
                 file[f"/{title}/{key}/norm"] = data[key].norm
 
-        for key in syncA["align"]:
-            file[f"/sync-A/align/{key}/first"] = syncA["align"][key].first
-            file[f"/sync-A/align/{key}/second"] = syncA["align"][key].second
-            file[f"/sync-A/align/{key}/norm"] = syncA["align"][key].norm
+        for title in ["align", "align_moving"]:
+            for key in syncA["align_moving"]:
+                file[f"/sync-A/{title}/{key}/first"] = syncA[title][key].first
+                file[f"/sync-A/{title}/{key}/second"] = syncA[title][key].second
+                file[f"/sync-A/{title}/{key}/norm"] = syncA[title][key].norm
