@@ -138,12 +138,15 @@ def cli_run(cli_args=None):
         meta.attrs["file"] = os.path.basename(args.file)
         meta.attrs["A-step"] = args.A_step
         meta.attrs["t-step"] = args.t_step
+        meta.attrs["step"] = args.step
+        if args.branch is not None:
+            meta.attrs["branch"] = args.branch
 
         storage.create_extendible(
             file, "/dynamics/stored", np.uint64, desc="List with stored items"
         )
         storage.create_extendible(
-            file, "/dynamics/inc", float, desc="Increment (time) of each stored item (real units)"
+            file, "/dynamics/inc", np.uint64, desc="Increment (time) of each stored item"
         )
         storage.create_extendible(
             file, "/dynamics/A", np.uint64, desc='Size "A" of each stored item'
@@ -338,22 +341,20 @@ def cli_average_systemspanning(cli_args=None):
 
             if ifile == 0:
 
-                system = QuasiStatic.System(file)
-                N = system.N
                 t_step = file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
                 norm = QuasiStatic.normalisation(file)
                 norm.pop("seed")
+                N = norm["N"]
                 dt = norm["dt"]
 
             else:
 
-                assert N == system.N
                 assert t_step == file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
                 n = QuasiStatic.normalisation(file)
                 for key in norm:
                     assert norm[key] == n[key]
 
-            t = file["/dynamics/inc"][...]
+            t = file["/dynamics/inc"][...].astype(float)
             A = file["/dynamics/A"][...]
             assert np.sum(A == N) > 0
             t = np.sort(t) - np.min(t[A == N])
@@ -406,6 +407,13 @@ def cli_average_systemspanning(cli_args=None):
 
             system = QuasiStatic.System(file)
 
+            if "branch" in file:
+                branch = file[f"/meta/{entry_points['cli_run']}"].attrs["branch"]
+                system.restore_quasistatic_step(file[f"/branch/{branch:d}"], 0)
+            else:
+                step = file[f"/meta/{entry_points['cli_run']}"].attrs["step"]
+                system.restore_quasistatic_step(file, step - 1)
+
             # determine duration bin, ensure that only one measurement per bin is added
             # (take the one closest to the middle of the bin)
 
@@ -441,6 +449,7 @@ def cli_average_systemspanning(cli_args=None):
                     continue
 
                 system.x = file[f"/dynamics/x/{item:d}"][...]
+                assert np.all(system.i > 5) and np.all(system.i < system.y.shape[1] - 5)
 
                 if item == 0:
                     i_n = system.istart + system.i
@@ -482,16 +491,16 @@ def cli_average_systemspanning(cli_args=None):
                     roll = tools.center_avalanche(broken)
 
                     data = syncA["align"]
-                    data["f_potential"].subsample(j, system.f_potential, roll)
-                    data["f_frame"].subsample(j, system.f_frame, roll)
-                    data["f_neighbours"].subsample(j, system.f_neighbours, roll)
+                    data["f_potential"].subsample(j, np.copy(system.f_potential), roll)
+                    data["f_frame"].subsample(j, np.copy(system.f_frame), roll)
+                    data["f_neighbours"].subsample(j, np.copy(system.f_neighbours), roll)
                     data["s"].subsample(j, i - i_n, roll)
                     data["dx"].subsample(j, system.x - x_n, roll)
 
                     data = syncA["align_moving"]
-                    data["f_potential"].subsample(j, system.f_potential, roll, broken)
-                    data["f_frame"].subsample(j, system.f_frame, roll, broken)
-                    data["f_neighbours"].subsample(j, system.f_neighbours, roll, broken)
+                    data["f_potential"].subsample(j, np.copy(system.f_potential), roll, broken)
+                    data["f_frame"].subsample(j, np.copy(system.f_frame), roll, broken)
+                    data["f_neighbours"].subsample(j, np.copy(system.f_neighbours), roll, broken)
                     data["s"].subsample(j, i - i_n, roll, broken)
                     data["dx"].subsample(j, system.x - x_n, roll, broken)
 
