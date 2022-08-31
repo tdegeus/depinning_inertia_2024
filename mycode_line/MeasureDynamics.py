@@ -177,7 +177,7 @@ def cli_run(cli_args=None):
             if store:
 
                 if iiter != last_stored_iiter:
-                    file[f"/dynamics/x/{istore:d}"] = system.x
+                    file[f"/dynamics/x/{istore:d}"] = np.copy(system.x)
                     storage.dset_extend1d(file, "/dynamics/inc", istore, system.inc)
                     storage.dset_extend1d(file, "/dynamics/A", istore, np.sum(np.not_equal(i, i_n)))
                     storage.dset_extend1d(file, "/dynamics/stored", istore, istore)
@@ -461,16 +461,16 @@ def cli_average_systemspanning(cli_args=None):
                     roll = tools.center_avalanche(broken)
 
                     data = syncA["align"]
-                    data["f_potential"].subsample(j, system.f_potential, roll)
-                    data["f_frame"].subsample(j, system.f_frame, roll)
-                    data["f_neighbours"].subsample(j, system.f_neighbours, roll)
+                    data["f_potential"].subsample(j, np.copy(system.f_potential), roll)
+                    data["f_frame"].subsample(j, np.copy(system.f_frame), roll)
+                    data["f_neighbours"].subsample(j, np.copy(system.f_neighbours), roll)
                     data["s"].subsample(j, i - i_n, roll)
                     data["dx"].subsample(j, system.x - x_n, roll)
 
                     data = syncA["align_moving"]
-                    data["f_potential"].subsample(j, system.f_potential, roll, broken)
-                    data["f_frame"].subsample(j, system.f_frame, roll, broken)
-                    data["f_neighbours"].subsample(j, system.f_neighbours, roll, broken)
+                    data["f_potential"].subsample(j, np.copy(system.f_potential), roll, broken)
+                    data["f_frame"].subsample(j, np.copy(system.f_frame), roll, broken)
+                    data["f_neighbours"].subsample(j, np.copy(system.f_neighbours), roll, broken)
                     data["s"].subsample(j, i - i_n, roll, broken)
                     data["dx"].subsample(j, system.x - x_n, roll, broken)
 
