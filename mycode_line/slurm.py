@@ -234,11 +234,7 @@ def serial_group(
             flush=False,
         )
 
-        if group > 1:
-            index = ("{0:0" + fmt + "d}-of-{1:d}").format(g + 1, njob)
-        else:
-            index = os.path.splitext(os.path.basename("".join(selection).split(" ")[-1]))[0]
-        jobname = basename.format(index=index, **info)
+        jobname = basename.format(index=("{0:0" + fmt + "d}-of-{1:d}").format(g + 1, njob), **info)
         sbatch["job-name"] = jobname
         sbatch["out"] = jobname + "_%j.out"
 
