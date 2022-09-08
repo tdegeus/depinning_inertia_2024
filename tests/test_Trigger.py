@@ -5,6 +5,7 @@ import unittest
 
 import GooseHDF5 as g5
 import h5py
+import numpy as np
 
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
@@ -88,7 +89,7 @@ class MyTests(unittest.TestCase):
         with h5py.File(tfile, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 10000
             file["param"]["xyield"]["nbuffer"][...] = 300
-            branch = file["stored"][...]
+            branch = np.arange(file["/branch/step"].size)
 
         Trigger.cli_run(["--dev", tfile, "--check", branch[0]])
         shutil.rmtree(workdir)
