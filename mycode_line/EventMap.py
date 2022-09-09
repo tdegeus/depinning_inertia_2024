@@ -42,7 +42,8 @@ def replace_ep(doc: str) -> str:
 
 def cli_run(cli_args=None):
     """
-    Rerun increment and store basic event info as follows::
+    Rerun a quasistatic step (loaded using QuasiStatic, or triggered using Trigger)
+    and store basic event info as follows::
 
         r: Position of yielding event (block index).
         t: Time of each yielding event (real units).
@@ -75,27 +76,25 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "r") as file:
 
-        stored = file["/stored"][...]
-        assert args.step in stored
-
         system = QuasiStatic.System(file)
 
         if args.smax is None:
             args.smax = sys.maxsize
 
-        if "branch" in file:
-            system.restore_quasistatic_step(file[f"/branch/{args.step:d}"], 0)  # Trigger
+        if "Trigger" in file:
+            root = file[f"/Trigger/items/{args.step:d}"]
+            system.restore_quasistatic_step(root, 0)
         else:
-            assert args.step - 1 in stored
-            system.restore_quasistatic_step(file, args.step - 1)  # QuasiStatic
+            root = file["QuasiStatic"]
+            system.restore_quasistatic_step(root, args.step - 1)
 
         i_n = system.istart + system.i
-        dx = file["/event_driven/dx"][...]
+        dx = file["/param/xyield/dx"][...]
 
-        if "branch" in file:
-            system.trigger(p=file["/output/p"][args.step], eps=dx, direction=1)
+        if "Trigger" in file:
+            system.trigger(p=root["p"][1], eps=dx, direction=1)
         else:
-            system.eventDrivenStep(dx, file["/event_driven/kick"][args.step])
+            system.eventDrivenStep(dx, root["kick"][args.step])
 
         R = []
         T = []
