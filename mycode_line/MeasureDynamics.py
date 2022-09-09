@@ -21,12 +21,12 @@ from . import tools
 from ._version import version
 
 entry_points = dict(
-    cli_average_systemspanning="MeasureDynamics_average_systemspanning",
-    cli_run="MeasureDynamics_run",
+    cli_average_systemspanning="Dynamics_AverageSystemSpanning",
+    cli_run="Dynamics_Run",
 )
 
 file_defaults = dict(
-    cli_average_systemspanning="MeasureDynamics_average_systemspanning.h5",
+    cli_average_systemspanning="Dynamics_AverageSystemSpanning.h5",
 )
 
 
@@ -51,13 +51,13 @@ def cli_run(cli_args=None):
 
     Storage:
     *   An exact copy of the input file.
-    *   The position of all particles ("/dynamics/x/{iiter:d}").
+    *   The position of all particles ("/Dynamics/x/{iiter:d}").
     *   Metadata:
-        - "/dynamics/inc": Increment number (-> time).
-        - "/dynamics/A": Actual number of blocks that yielded at least once.
-        - "/dynamics/stored": The stored "iiter".
-        - "/dynamics/sync-A": List of "iiter" stored due to given "A".
-        - "/dynamics/sync-t": List of "iiter" stored due to given "inc" after checking for "A".
+        - "/Dynamics/inc": Increment number (-> time).
+        - "/Dynamics/A": Actual number of blocks that yielded at least once.
+        - "/Dynamics/stored": The stored "iiter".
+        - "/Dynamics/sync-A": List of "iiter" stored due to given "A".
+        - "/Dynamics/sync-t": List of "iiter" stored due to given "inc" after checking for "A".
     """
 
     class MyFmt(
@@ -93,96 +93,79 @@ def cli_run(cli_args=None):
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
+    assert os.path.abspath(args.file) != os.path.abspath(args.output)
     tools._check_overwrite_file(args.output, args.force)
     assert args.A_step > 0 or args.t_step > 0
 
-    # copy file
+    # basic assertions
+    with h5py.File(args.file) as src:
+        if args.branch is not None:
+            assert f"/Trigger/branches/{args.branch:d}/x/{args.step - 1:d}" in src
+        else:
+            assert f"/QuasiStatic/x/{args.step - 1:d}" in src
 
-    if os.path.realpath(args.file) != os.path.realpath(args.output):
+    with h5py.File(args.output, "w") as file:
 
-        with h5py.File(args.file) as src, h5py.File(args.output, "w") as dest:
+        # copy from input
 
-            # copy all except positions
-            paths = list(GooseHDF5.getdatasets(src, fold="/QuasiStatic/x"))
-            assert "/QuasiStatic/x/..." in paths
-            paths.remove("/QuasiStatic/x/...")
-            GooseHDF5.copy(src, dest, paths, expand_soft=False)
+        with h5py.File(args.file) as src:
 
-            dest[f"/QuasiStatic/x/{args.step - 1:d}"] = src[f"/QuasiStatic/x/{args.step - 1:d}"][:]
+            GooseHDF5.copy(src, file, ["/param", "/meta"])
+            root = file.create_group("Dynamics")
+            root.create_group("x")
+
+            meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+            meta.attrs["file"] = os.path.basename(args.file)
+            meta.attrs["A-step"] = args.A_step
+            meta.attrs["t-step"] = args.t_step
+            meta.attrs["step"] = args.step
+
+            if args.branch is not None:
+                sroot = src[f"/Trigger/branches/{args.branch:d}"]
+                p = sroot["p"][args.step]
+                meta.attrs["branch"] = args.branch
+                meta.attrs["p"] = p
+            else:
+                sroot = src["/QuasiStatic"]
+                kick = sroot["kick"][args.step]
+
+            root.create_dataset("x_frame", data=[sroot["x_frame"][args.step - 1]], maxshape=(None,))
+            root.create_dataset("inc", data=[sroot["inc"][args.step - 1]], maxshape=(None,))
 
             # ensure a chunk that will be big enough
-            system = QuasiStatic.System(src)
-
-            if "branch" in src:
-                assert args.branch is not None
-                system.restore_quasistatic_step(src[f"/branch/{args.branch:d}"], 1)
-                i_n = system.istart + system.i
-                system.restore_quasistatic_step(src[f"/branch/{args.branch:d}"], 0)
-                nchunk = np.max(i_n - system.istart + system.i)
-            else:
-                assert args.step is not None
-                system.restore_quasistatic_step(src["QuasiStatic"], args.step)
-                i_n = system.istart + system.i
-                system.restore_quasistatic_step(src["QuasiStatic"], args.step - 1)
-                nchunk = np.max(i_n - system.istart + system.i)
-
-            dest["/param/xyield/nchunk"][...] = int(
-                max(1.5 * nchunk, dest["/param/xyield/nchunk"][...])
+            system = QuasiStatic.System(file)
+            system.restore_quasistatic_step(sroot, args.step)
+            i_n = system.istart + system.i
+            system.restore_quasistatic_step(sroot, args.step - 1)
+            nchunk = np.max(i_n - system.istart + system.i)
+            file["/param/xyield/nchunk"][...] = int(
+                max(1.5 * nchunk, file["/param/xyield/nchunk"][...])
             )
 
-    with h5py.File(args.output, "a") as file:
+            # estimate number of steps
+            maxinc = sroot["inc"][args.step] - sroot["inc"][args.step - 1]
 
-        # metadata & storage preparation
-
-        meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
-        meta.attrs["file"] = os.path.basename(args.file)
-        meta.attrs["A-step"] = args.A_step
-        meta.attrs["t-step"] = args.t_step
-        meta.attrs["step"] = args.step
-        if args.branch is not None:
-            meta.attrs["branch"] = args.branch
+        # storage preparation
 
         storage.create_extendible(
-            file, "/dynamics/stored", np.uint64, desc="List with stored items"
+            root, "A", np.uint64, desc='Size "A" of each stored item'
         )
         storage.create_extendible(
-            file, "/dynamics/inc", np.uint64, desc="Increment (time) of each stored item"
+            root, "sync-A", np.uint64, desc="Items stored due to sync-A"
         )
         storage.create_extendible(
-            file, "/dynamics/A", np.uint64, desc='Size "A" of each stored item'
-        )
-        storage.create_extendible(
-            file, "/dynamics/sync-A", np.uint64, desc="Items stored due to sync-A"
-        )
-        storage.create_extendible(
-            file, "/dynamics/sync-t", np.uint64, desc="Items stored due to sync-t"
+            root, "sync-t", np.uint64, desc="Items stored due to sync-t"
         )
 
-        file["dynamics"].create_group("x").attrs["desc"] = 'Positions for each item in "/stored"'
+        # rerun dynamics and store every other time
 
-        # restore state
-
-        system = QuasiStatic.System(file)
-
-        if "branch" in file:
-            system.restore_quasistatic_step(file[f"/branch/{args.branch:d}"], 0)
-            p = file["/output/p"][args.branch]
-            kick = None
-            pbar = tqdm.tqdm()
-        else:
-            root = file["QuasiStatic"]
-            system.restore_quasistatic_step(root, args.step - 1)
-            kick = root["kick"][args.step]
-            pbar = tqdm.tqdm(total=root["inc"][args.step] - root["inc"][args.step - 1])
+        pbar = tqdm.tqdm(total=maxinc)
+        pbar.set_description(args.output)
 
         dx = file["/param/xyield/dx"][...]
         i_n = system.istart + system.i
         i = np.copy(i_n)
         N = system.N
-
-        pbar.set_description(args.output)
-
-        # rerun dynamics and store every other time
 
         A = 0  # maximal A encountered so far
         A_next = 0  # next A at which to write output
@@ -201,10 +184,10 @@ def cli_run(cli_args=None):
             if store:
 
                 if iiter != last_stored_iiter:
-                    file[f"/dynamics/x/{istore:d}"] = system.x
-                    storage.dset_extend1d(file, "/dynamics/inc", istore, system.inc)
-                    storage.dset_extend1d(file, "/dynamics/A", istore, np.sum(np.not_equal(i, i_n)))
-                    storage.dset_extend1d(file, "/dynamics/stored", istore, istore)
+                    root["x"][str(istore)] = system.x
+                    storage.dset_extend1d(root, "x_frame", istore, system.x_frame)
+                    storage.dset_extend1d(root, "inc", istore, system.inc)
+                    storage.dset_extend1d(root, "A", istore, np.sum(np.not_equal(i, i_n)))
                     file.flush()
                     istore += 1
                     last_stored_iiter = iiter
@@ -234,13 +217,13 @@ def cli_run(cli_args=None):
                 A = max(A, a)
 
                 if (A >= A_next and A % args.A_step == 0) or A == N:
-                    storage.dset_extend1d(file, "/dynamics/sync-A", A_istore, istore)
+                    storage.dset_extend1d(root, "sync-A", A_istore, istore)
                     A_istore += 1
                     store = True
                     A_next += args.A_step
 
                 if A == N:
-                    storage.dset_extend1d(file, "/dynamics/sync-t", t_istore, istore)
+                    storage.dset_extend1d(root, "sync-t", t_istore, istore)
                     t_istore += 1
                     store = True
                     A_check = False
@@ -254,7 +237,7 @@ def cli_run(cli_args=None):
                 assert ret >= 0
                 iiter += system.inc - inc_n
                 stop = ret == 0
-                storage.dset_extend1d(file, "/dynamics/sync-t", t_istore, istore)
+                storage.dset_extend1d(root, "sync-t", t_istore, istore)
                 t_istore += 1
                 store = True
 
@@ -355,8 +338,8 @@ def cli_average_systemspanning(cli_args=None):
                 for key in norm:
                     assert norm[key] == n[key]
 
-            t = file["/dynamics/inc"][...].astype(float)
-            A = file["/dynamics/A"][...]
+            t = file["/Dynamics/inc"][...].astype(float)
+            A = file["/Dynamics/A"][...]
             assert np.sum(A == N) > 0
             t = np.sort(t) - np.min(t[A == N])
             t_start.append(t[0])
@@ -406,25 +389,17 @@ def cli_average_systemspanning(cli_args=None):
 
         with h5py.File(filepath, "r") as file:
 
+            root = file["Dynamics"]
             system = QuasiStatic.System(file)
-
-            if "branch" in file:
-                branch = file[f"/meta/{entry_points['cli_run']}"].attrs["branch"]
-                system.restore_quasistatic_step(file[f"/branch/{branch:d}"], 0)
-            else:
-                step = file[f"/meta/{entry_points['cli_run']}"].attrs["step"]
-                root = file["QuasiStatic"]
-                system.restore_quasistatic_step(root, step - 1)
+            system.restore_quasistatic_step(root, 0)
 
             # determine duration bin, ensure that only one measurement per bin is added
             # (take the one closest to the middle of the bin)
 
-            nitem = file["/dynamics/stored"].size
-            assert np.all(np.equal(file["/dynamics/stored"][...], np.arange(nitem)))
-
-            items_syncA = file["/dynamics/sync-A"][...]
-            A = file["/dynamics/A"][...]
-            t = file["/dynamics/inc"][...].astype(np.int64)
+            nitem = root["inc"].size
+            items_syncA = file["/Dynamics/sync-A"][...]
+            A = file["/Dynamics/A"][...]
+            t = file["/Dynamics/inc"][...].astype(np.int64)
             delta_t = t - np.min(t[A == N])
             t_ibin = np.digitize(delta_t, t_bin) - 1
             d = np.abs(delta_t - t_mid[t_ibin])
@@ -450,7 +425,7 @@ def cli_average_systemspanning(cli_args=None):
                 if item not in items_syncA and t_ibin[item] < 0 and item > 0:
                     continue
 
-                system.x = file[f"/dynamics/x/{item:d}"][...]
+                system.x = file[f"/Dynamics/x/{item:d}"][...]
                 assert np.all(system.i > 5) and np.all(system.i < system.y.shape[1] - 5)
 
                 if item == 0:
