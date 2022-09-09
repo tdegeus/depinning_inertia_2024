@@ -23,10 +23,10 @@ from ._version import version
 basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
-    cli_ensembleinfo="Flow_ensembleinfo",
-    cli_generate="Flow_generate",
-    cli_plot="Flow_plot",
-    cli_run="Flow_run",
+    cli_ensembleinfo="Flow_EnsembleInfo",
+    cli_generate="Flow_Generate",
+    cli_plot="Flow_Plot",
+    cli_run="Flow_Run",
 )
 
 
@@ -103,10 +103,10 @@ def cli_ensembleinfo(cli_args=None):
 
             with h5py.File(filepath) as file:
 
-                output[f"{fname}/f_frame"] = file["/output/f_frame"][...]
-                output[f"{fname}/f_potential"] = file["/output/f_potential"][...]
-                output[f"{fname}/f_damping"] = file["/output/f_damping"][...]
-                output[f"{fname}/gammadot"] = file["/flow/gammadot"][...]
+                output[f"{fname}/f_frame"] = file["/Flow/output/f_frame"][...]
+                output[f"{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
+                output[f"{fname}/f_damping"] = file["/Flow/output/f_damping"][...]
+                output[f"{fname}/gammadot"] = file["/Flow/gammadot"][...]
                 output[f"{fname}/eta"] = file["/param/eta"][...]
 
 
@@ -234,9 +234,9 @@ def cli_generate(cli_args=None):
                 eta=args.eta,
                 dt=args.dt,
             )
-            file["/flow/gammadot"] = args.gammadot
-            file["/output/interval"] = args.output
-            file["/snapshot/interval"] = args.output * args.snapshot
+            file["/Flow/gammadot"] = args.gammadot
+            file["/Flow/output/interval"] = args.output
+            file["/Flow/snapshot/interval"] = args.output * args.snapshot
 
     executable = entry_points["cli_run"]
     slurm.serial_group(
@@ -253,12 +253,12 @@ def run_create_extendible(file: h5py.File):
     Create extendible datasets used in :py:func:`cli_run`.
     """
 
-    storage.create_extendible(file, "/output/f_frame", np.float64)
-    storage.create_extendible(file, "/output/f_potential", np.float64)
-    storage.create_extendible(file, "/output/f_damping", np.float64)
-    storage.create_extendible(file, "/output/x", np.float64)
-    storage.create_extendible(file, "/output/inc", np.uint32)
-    storage.create_extendible(file, "/snapshot/inc", np.uint32)
+    storage.create_extendible(file, "/Flow/output/f_frame", np.float64)
+    storage.create_extendible(file, "/Flow/output/f_potential", np.float64)
+    storage.create_extendible(file, "/Flow/output/f_damping", np.float64)
+    storage.create_extendible(file, "/Flow/output/x", np.float64)
+    storage.create_extendible(file, "/Flow/output/inc", np.uint32)
+    storage.create_extendible(file, "/Flow/snapshot/inc", np.uint32)
 
 
 def cli_run(cli_args=None):
@@ -290,20 +290,20 @@ def cli_run(cli_args=None):
     with h5py.File(args.file, "a") as file:
 
         inc = 0
-        snapshot = file["/snapshot/interval"][...]
-        output = file["/output/interval"][...]
-        gammadot = file["/flow/gammadot"][...]
+        snapshot = file["/Flow/snapshot/interval"][...]
+        output = file["/Flow/output/interval"][...]
+        gammadot = file["/Flow/gammadot"][...]
         assert snapshot % output == 0
         run_create_extendible(file)
 
         system = QuasiStatic.System(file)
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
         output_fields = [
-            "/output/inc",
-            "/output/f_frame",
-            "/output/f_potential",
-            "/output/f_damping",
-            "/output/x",
+            "/Flow/output/inc",
+            "/Flow/output/f_frame",
+            "/Flow/output/f_potential",
+            "/Flow/output/f_damping",
+            "/Flow/output/x",
         ]
 
         for istep in pbar:
@@ -317,12 +317,12 @@ def cli_run(cli_args=None):
             if snapshot > 0:
                 if inc % snapshot == 0:
                     i = int(inc / snapshot)
-                    for key in ["/snapshot/inc"]:
+                    for key in ["/Flow/snapshot/inc"]:
                         file[key].resize((i + 1,))
-                    file["/snapshot/inc"][i] = inc
-                    file[f"/snapshot/x/{inc:d}"] = system.x
-                    file[f"/snapshot/v/{inc:d}"] = system.v
-                    file[f"/snapshot/a/{inc:d}"] = system.a
+                    file["/Flow/snapshot/inc"][i] = inc
+                    file[f"/Flow/snapshot/x/{inc:d}"] = system.x
+                    file[f"/Flow/snapshot/v/{inc:d}"] = system.v
+                    file[f"/Flow/snapshot/a/{inc:d}"] = system.a
                     file.flush()
 
             if output > 0:
@@ -330,11 +330,11 @@ def cli_run(cli_args=None):
                     i = int(inc / output)
                     for key in output_fields:
                         file[key].resize((i + 1,))
-                    file["/output/inc"][i] = inc
-                    file["/output/f_frame"][i] = np.mean(system.f_frame)
-                    file["/output/f_potential"][i] = np.mean(system.f_potential)
-                    file["/output/f_damping"][i] = np.mean(system.f_damping)
-                    file["/output/x"][i] = np.mean(system.x)
+                    file["/Flow/output/inc"][i] = inc
+                    file["/Flow/output/f_frame"][i] = np.mean(system.f_frame)
+                    file["/Flow/output/f_potential"][i] = np.mean(system.f_potential)
+                    file["/Flow/output/f_damping"][i] = np.mean(system.f_damping)
+                    file["/Flow/output/x"][i] = np.mean(system.x)
                     file.flush()
 
 
@@ -367,9 +367,9 @@ def cli_plot(cli_args=None):
 
     with h5py.File(args.file) as file:
 
-        x_frame = file["/flow/gammadot"][...] * file["/param/dt"] * file["/output/inc"][...]
-        f_frame = file["/output/f_frame"][...]
-        f_potential = file["/output/f_potential"][...]
+        x_frame = file["/Flow/gammadot"][...] * file["/param/dt"] * file["/Flow/output/inc"][...]
+        f_frame = file["/Flow/output/f_frame"][...]
+        f_potential = file["/Flow/output/f_potential"][...]
 
     opts = {}
     if args.marker is not None:
