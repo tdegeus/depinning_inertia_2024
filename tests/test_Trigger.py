@@ -77,7 +77,7 @@ class MyTests(unittest.TestCase):
         # generate using "--fastload" and check
         Trigger.cli_generate(["--dev", "--delta-f", 0.1, "-o", workdir, "-q", fastname, infoname])
         cmp = g5.compare(os.path.join(workdir, idname), os.path.join(bakdir, idname))
-        cmp["!="].remove("/meta/Trigger_generate")
+        cmp["!="].remove("/meta/Trigger_Generate")
         self.assertEqual(len(cmp["<-"]), 0)
         self.assertEqual(len(cmp["->"]), 0)
         self.assertEqual(len(cmp["!="]), 0)
@@ -89,7 +89,7 @@ class MyTests(unittest.TestCase):
         with h5py.File(tfile, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 10000
             file["param"]["xyield"]["nbuffer"][...] = 300
-            branch = np.arange(file["/branch/step"].size)
+            branch = np.arange(file["/Trigger/step"].size)
 
         Trigger.cli_run(["--dev", tfile, "--check", branch[0]])
         shutil.rmtree(workdir)
