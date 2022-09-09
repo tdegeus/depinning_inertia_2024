@@ -372,7 +372,7 @@ def cli_generate(cli_args=None):
                 os.path.join(args.outdir, filename), "w"
             ) as dest:
 
-                g5.copy(source, dest, ["/event_driven/dx", "/param"])
+                g5.copy(source, dest, ["/event_driven/dx", "/param", "/meta"])
 
                 system = QuasiStatic.System(source)
                 fastload = QuasiStatic.FastLoad(args.fastload, filename)
@@ -440,22 +440,22 @@ def cli_generate(cli_args=None):
                     dest["/branch/step_c"][ibranch] = start
                     dest["/branch/loaded"][ibranch] = load
 
-                    group = dest.create_group(f"/branch/items/{ibranch:d}")
+                    root = dest.create_group(f"/branch/items/{ibranch:d}")
 
-                    group.create_group("x").create_dataset("0", data=x)
-                    group.create_dataset("inc", data=[inc], maxshape=(None,), dtype=np.uint64)
-                    group.create_dataset(
+                    root.create_group("x").create_dataset("0", data=x)
+                    root.create_dataset("inc", data=[inc], maxshape=(None,), dtype=np.uint64)
+                    root.create_dataset(
                         "x_frame", data=[x_frame], maxshape=(None,), dtype=np.float64
                     )
 
-                    group.create_dataset("try_p", data=[-1, 0], maxshape=(None,), dtype=np.int64)
-                    group.create_dataset("p", data=[-1, -1], maxshape=(None,), dtype=np.int64)
-                    group.create_dataset("completed", data=[True], maxshape=(None,), dtype=bool)
+                    root.create_dataset("try_p", data=[-1, 0], maxshape=(None,), dtype=np.int64)
+                    root.create_dataset("p", data=[-1, -1], maxshape=(None,), dtype=np.int64)
+                    root.create_dataset("completed", data=[True], maxshape=(None,), dtype=bool)
 
-                    group.create_dataset("f_frame", data=[f], maxshape=(None,), dtype=np.float64)
-                    group.create_dataset("A", data=[0], maxshape=(None,), dtype=np.int64)
-                    group.create_dataset("S", data=[0], maxshape=(None,), dtype=np.int64)
-                    group.create_dataset("T", data=[0], maxshape=(None,), dtype=np.int64)
+                    root.create_dataset("f_frame", data=[f], maxshape=(None,), dtype=np.float64)
+                    root.create_dataset("A", data=[0], maxshape=(None,), dtype=np.int64)
+                    root.create_dataset("S", data=[0], maxshape=(None,), dtype=np.int64)
+                    root.create_dataset("T", data=[0], maxshape=(None,), dtype=np.int64)
 
                     dest.flush()
 
