@@ -64,7 +64,7 @@ class MyTests(unittest.TestCase):
             system = QuasiStatic.System(file)
             step = fastload.file[idname]["step"][...][-1]
 
-            system.restore_quasistatic_step(file=file, step=step)
+            system.restore_quasistatic_step(file["QuasiStatic"], step=step)
 
             i = np.copy(system.i + system.istart)
             all = np.arange(system.N)
@@ -73,8 +73,8 @@ class MyTests(unittest.TestCase):
             yr = system.y[all, system.i]
             yrr = system.y[all, system.i + 1]
 
-            system.restore_quasistatic_step(file=file, step=0, fastload=fastload)
-            system.restore_quasistatic_step(file=file, step=step, fastload=fastload)
+            system.restore_quasistatic_step(file["QuasiStatic"], step=0, fastload=fastload)
+            system.restore_quasistatic_step(file["QuasiStatic"], step=step, fastload=fastload)
 
             self.assertTrue(np.all(np.equal(system.i + system.istart, i)))
             self.assertTrue(np.allclose(system.y[all, system.i - 2], yll))

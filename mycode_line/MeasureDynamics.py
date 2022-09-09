@@ -53,7 +53,7 @@ def cli_run(cli_args=None):
     *   An exact copy of the input file.
     *   The position of all particles ("/dynamics/x/{iiter:d}").
     *   Metadata:
-        - "/dynamics/inc": Increment number (time).
+        - "/dynamics/inc": Increment number (-> time).
         - "/dynamics/A": Actual number of blocks that yielded at least once.
         - "/dynamics/stored": The stored "iiter".
         - "/dynamics/sync-A": List of "iiter" stored due to given "A".
@@ -82,7 +82,7 @@ def cli_run(cli_args=None):
 
     # input selection
     parser.add_argument("--step", type=int, help="Quasistatic step to run")
-    parser.add_argument("--branch", type=int, help="Select branch to run")
+    parser.add_argument("--branch", type=int, help="Select branch to run (first trigger)")
 
     # output file
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -103,12 +103,12 @@ def cli_run(cli_args=None):
         with h5py.File(args.file) as src, h5py.File(args.output, "w") as dest:
 
             # copy all except positions
-            paths = list(GooseHDF5.getdatasets(src, fold="/x"))
-            assert "/x/..." in paths
-            paths.remove("/x/...")
+            paths = list(GooseHDF5.getdatasets(src, fold="/QuasiStatic/x"))
+            assert "/QuasiStatic/x/..." in paths
+            paths.remove("/QuasiStatic/x/...")
             GooseHDF5.copy(src, dest, paths, expand_soft=False)
 
-            dest[f"/x/{args.step - 1:d}"] = src[f"/x/{args.step - 1:d}"][:]
+            dest[f"/QuasiStatic/x/{args.step - 1:d}"] = src[f"/QuasiStatic/x/{args.step - 1:d}"][:]
 
             # ensure a chunk that will be big enough
             system = QuasiStatic.System(src)
@@ -121,9 +121,9 @@ def cli_run(cli_args=None):
                 nchunk = np.max(i_n - system.istart + system.i)
             else:
                 assert args.step is not None
-                system.restore_quasistatic_step(src, args.step)
+                system.restore_quasistatic_step(src["QuasiStatic"], args.step)
                 i_n = system.istart + system.i
-                system.restore_quasistatic_step(src, args.step - 1)
+                system.restore_quasistatic_step(src["QuasiStatic"], args.step - 1)
                 nchunk = np.max(i_n - system.istart + system.i)
 
             dest["/param/xyield/nchunk"][...] = int(
@@ -170,11 +170,12 @@ def cli_run(cli_args=None):
             kick = None
             pbar = tqdm.tqdm()
         else:
-            system.restore_quasistatic_step(file, args.step - 1)
-            kick = file["/event_driven/kick"][args.step]
-            pbar = tqdm.tqdm(total=file["inc"][args.step] - file["inc"][args.step - 1])
+            root = file["QuasiStatic"]
+            system.restore_quasistatic_step(root, args.step - 1)
+            kick = root["kick"][args.step]
+            pbar = tqdm.tqdm(total=root["inc"][args.step] - root["inc"][args.step - 1])
 
-        dx = file["/event_driven/dx"][...]
+        dx = file["/param/xyield/dx"][...]
         i_n = system.istart + system.i
         i = np.copy(i_n)
         N = system.N
@@ -412,7 +413,8 @@ def cli_average_systemspanning(cli_args=None):
                 system.restore_quasistatic_step(file[f"/branch/{branch:d}"], 0)
             else:
                 step = file[f"/meta/{entry_points['cli_run']}"].attrs["step"]
-                system.restore_quasistatic_step(file, step - 1)
+                root = file["QuasiStatic"]
+                system.restore_quasistatic_step(root, step - 1)
 
             # determine duration bin, ensure that only one measurement per bin is added
             # (take the one closest to the middle of the bin)
@@ -422,7 +424,7 @@ def cli_average_systemspanning(cli_args=None):
 
             items_syncA = file["/dynamics/sync-A"][...]
             A = file["/dynamics/A"][...]
-            t = file["/dynamics/inc"][...]
+            t = file["/dynamics/inc"][...].astype(np.int64)
             delta_t = t - np.min(t[A == N])
             t_ibin = np.digitize(delta_t, t_bin) - 1
             d = np.abs(delta_t - t_mid[t_ibin])

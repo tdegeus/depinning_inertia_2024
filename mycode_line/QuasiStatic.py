@@ -1,5 +1,5 @@
 """
-??
+QuasiStatic simulations, and tools to run those simulators.
 """
 from __future__ import annotations
 
@@ -27,12 +27,12 @@ from . import tools
 from ._version import version
 
 entry_points = dict(
-    cli_ensembleinfo="EnsembleInfo",
+    cli_ensembleinfo="QS_EnsembleInfo",
     cli_fastload="EnsembleFastLoad",
-    cli_generate="Run_generate",
-    cli_plot="Run_plot",
-    cli_run="Run",
-    cli_stateaftersystemspanning="StateAfterSystemSpanning",
+    cli_generate="QS_Generate",
+    cli_plot="QS_Plot",
+    cli_run="QS_Run",
+    cli_stateaftersystemspanning="QS_StateAfterSystemSpanning",
 )
 
 
@@ -42,9 +42,9 @@ brief = dict(
 
 
 file_defaults = dict(
-    cli_ensembleinfo="EnsembleInfo.h5",
+    cli_ensembleinfo="QS_EnsembleInfo.h5",
     cli_fastload="EnsembleFastLoad.h5",
-    cli_stateaftersystemspanning="StateAfterSystemSpanning.h5",
+    cli_stateaftersystemspanning="QS_StateAfterSystemSpanning.h5",
 )
 
 
@@ -215,21 +215,25 @@ class System(model.System):
 
     def restore_quasistatic_step(
         self,
-        file: h5py.File,
+        root: h5py.Group,
         step: int,
         align_buffer: bool = True,
         fastload: FastLoad = None,
     ):
         """
-        Restore an a quasi-static step.
+        Restore an a quasi-static step for the relevant root. That Group should contain::
 
-        :param file: Open simulation HDF5 archive (read-only).
+            root["x"][str(step)]   # Positions
+            root["inc"][step]      # Increment (-> time)
+            root["x_frame"][step]  # Loading frame position
+
+        :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
         :param align: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
         :param fastload: FastLoad information (assumes it to be correctly allocated!!).
         """
 
-        x = file["x"][str(step)][...]
+        x = root["x"][str(step)][...]
 
         if not align_buffer and np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
             pass
@@ -239,8 +243,8 @@ class System(model.System):
             self._chunk_goto(x)
 
         self.quench()
-        self.inc = file["inc"][step]
-        self.x_frame = file["x_frame"][step]
+        self.inc = root["inc"][step]
+        self.x_frame = root["x_frame"][step]
         self.x = x
 
 
@@ -419,7 +423,7 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     file["/param/xyield/weibull/offset"] = 1e-5
     file["/param/xyield/weibull/mean"] = 1.0
     file["/param/xyield/weibull/k"] = 2.0
-    file["/event_driven/dx"] = 1e-3
+    file["/param/xyield/dx"] = 1e-3
 
 
 def cli_generate(cli_args=None):
@@ -538,32 +542,33 @@ def cli_run(cli_args=None):
 
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
 
-        if "stored" not in file:
+        if "QuasiStatic" not in file:
             ret = minimise(nmargin=10)
             assert ret == 0
             system.t = 0.0
-            file["/x/0"] = system.x
-            storage.create_extendible(file, "/stored", np.uint64, desc="List of stored load-steps")
-            storage.create_extendible(file, "/inc", np.uint64, desc="'Time' (increment number).")
-            storage.create_extendible(file, "/x_frame", np.float64, desc="Position of load frame.")
-            storage.create_extendible(file, "/event_driven/kick", bool, desc="Kick used.")
-            storage.dset_extend1d(file, "/stored", 0, 0)
-            storage.dset_extend1d(file, "/inc", 0, system.inc)
-            storage.dset_extend1d(file, "/x_frame", 0, system.x_frame)
-            storage.dset_extend1d(file, "/event_driven/kick", 0, True)
+
+            file.create_group("/QuasiStatic/x").create_dataset("0", data=system.x)
+            root = file["/QuasiStatic"]
+            storage.create_extendible(root, "inc", np.uint64, desc="'Time' (increment number).")
+            storage.create_extendible(root, "x_frame", np.float64, desc="Position of load frame.")
+            storage.create_extendible(root, "kick", bool, desc="Kick used.")
+            storage.dset_extend1d(root, "inc", 0, system.inc)
+            storage.dset_extend1d(root, "x_frame", 0, system.x_frame)
+            storage.dset_extend1d(root, "kick", 0, True)
             file.flush()
+        else:
+            root = file["/QuasiStatic"]
 
         if args.check is not None:
-            assert args.check - 1 in file["/stored"][...]
-            assert args.check in file["/stored"][...]
+            assert args.check < root["inc"].size
             args.nstep = 1
             step = args.check
         else:
-            step = int(file["/stored"][-1]) + 1
+            step = root["inc"].size
 
-        kick = file["/event_driven/kick"][step - 1]
-        dx = file["/event_driven/dx"][...]
-        system.restore_quasistatic_step(file, step - 1)
+        kick = root["kick"][step - 1]
+        dx = file["/param/xyield/dx"][...]
+        system.restore_quasistatic_step(root, step - 1)
 
         desc = f"{basename}: step = {step:8d}, niter = {'-':8s}"
         pbar = tqdm.tqdm(range(step, step + args.nstep), desc=desc)
@@ -590,22 +595,21 @@ def cli_run(cli_args=None):
                 pbar.refresh()
 
             if args.check is not None:
-                assert file["/inc"][step] == system.inc
-                assert file["/event_driven/kick"][step] == kick
-                assert np.isclose(file["/x_frame"][step], system.x_frame)
-                assert np.allclose(file[f"/x/{step:d}"][...], system.x)
+                assert root["inc"][step] == system.inc
+                assert root["kick"][step] == kick
+                assert np.isclose(root["x_frame"][step], system.x_frame)
+                assert np.allclose(root["x"][str(step)][...], system.x)
             else:
-                storage.dset_extend1d(file, "/stored", step, step)
-                storage.dset_extend1d(file, "/inc", step, system.inc)
-                storage.dset_extend1d(file, "/x_frame", step, system.x_frame)
-                storage.dset_extend1d(file, "/event_driven/kick", step, kick)
-                file[f"/x/{step:d}"] = system.x
+                storage.dset_extend1d(root, "inc", step, system.inc)
+                storage.dset_extend1d(root, "x_frame", step, system.x_frame)
+                storage.dset_extend1d(root, "kick", step, kick)
+                root["x"][str(step)] = system.x
                 file.flush()
 
 
 def normalisation(file: h5py.File):
     """
-    Read normalisation from file (or use default value in "classic" mode).
+    Read normalisation from file.
 
     :param file: Open simulation HDF5 archive (read-only).
     :return: Basic information as follows::
@@ -634,6 +638,7 @@ def normalisation(file: h5py.File):
 def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwargs) -> int:
     """
     Estimate the first step of the steady-state. Constraints:
+
     -   Start with elastic loading.
     -   Sufficiently low tangent modulus.
     -   All blocks yielded at least once.
@@ -645,7 +650,7 @@ def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwarg
     :param x_frame: Position of the load frame [nstep].
     :param f_frame: Average driving force [nstep].
     :param kick: Whether a kick was applied [nstep].
-    :return: Increment number.
+    :return: QuasiStatic step number.
     """
 
     if f_frame.size <= 3:
@@ -697,23 +702,23 @@ def basic_output(file: h5py.File) -> dict:
     system = System(file)
     ret = normalisation(file)
 
-    if "stored" not in file:
+    if "QuasiStatic" not in file:
         return ret
 
-    steps = file["/stored"][...]
-    nstep = steps.size
-    assert all(steps == np.arange(nstep))
-    ret["x_frame"] = file["x_frame"][...]
+    root = file["QuasiStatic"]
+    nstep = root["inc"].size
+    steps = np.arange(nstep)
+    ret["x_frame"] = root["x_frame"][...]
     ret["f_frame"] = np.empty((nstep), dtype=float)
     ret["f_potential"] = np.empty((nstep), dtype=float)
     ret["S"] = np.empty((nstep), dtype=int)
     ret["A"] = np.empty((nstep), dtype=int)
-    ret["kick"] = file["event_driven"]["kick"][...].astype(bool)
+    ret["kick"] = root["kick"][...].astype(bool)
     ret["step"] = steps
 
     for i, step in enumerate(tqdm.tqdm(steps)):
 
-        system.restore_quasistatic_step(file, step, align_buffer=False)
+        system.restore_quasistatic_step(root, step, align_buffer=False)
 
         if i == 0:
             i_n = system.istart + system.i
@@ -965,7 +970,7 @@ def cli_fastload(cli_args=None):
 
                 for i, s in enumerate(tqdm.tqdm(steps)):
 
-                    system.restore_quasistatic_step(source, s, align_buffer=False)
+                    system.restore_quasistatic_step(source["QuasiStatic"], s, align_buffer=False)
                     system.chunk_rshift()
 
                     shift = system.istart - system.istate
@@ -1070,7 +1075,7 @@ def cli_stateaftersystemspanning(cli_args=None):
                 for s in tqdm.tqdm(np.sort(step[file == f])):
 
                     system.restore_quasistatic_step(
-                        source, s, align_buffer=False, fastload=fastload
+                        source["QuasiStatic"], s, align_buffer=False, fastload=fastload
                     )
 
                     xr = system.y_right() - system.x
