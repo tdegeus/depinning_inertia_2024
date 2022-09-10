@@ -27,12 +27,12 @@ from . import tools
 from ._version import version
 
 entry_points = dict(
-    cli_ensembleinfo="QS_EnsembleInfo",
+    cli_ensembleinfo="QuasiStatic_EnsembleInfo",
     cli_fastload="EnsembleFastLoad",
-    cli_generate="QS_Generate",
-    cli_plot="QS_Plot",
-    cli_run="QS_Run",
-    cli_stateaftersystemspanning="QS_StateAfterSystemSpanning",
+    cli_generate="QuasiStatic_Generate",
+    cli_plot="QuasiStatic_Plot",
+    cli_run="QuasiStatic_Run",
+    cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
 )
 
 
@@ -42,9 +42,9 @@ brief = dict(
 
 
 file_defaults = dict(
-    cli_ensembleinfo="QS_EnsembleInfo.h5",
+    cli_ensembleinfo="QuasiStatic_EnsembleInfo.h5",
     cli_fastload="EnsembleFastLoad.h5",
-    cli_stateaftersystemspanning="QS_StateAfterSystemSpanning.h5",
+    cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning.h5",
 )
 
 
