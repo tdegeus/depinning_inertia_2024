@@ -11,8 +11,8 @@ root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
+from mycode_line import Dynamics  # noqa: E402
 from mycode_line import EventMap  # noqa: E402
-from mycode_line import MeasureDynamics  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
@@ -140,8 +140,8 @@ class MyTests(unittest.TestCase):
 
         out = os.path.join(dirname, "MeasureDynamics_s.h5")
         ens = os.path.join(dirname, "MeasureDynamics_average.h5")
-        MeasureDynamics.cli_run(["--dev", "-f", "--step", s, "-o", out, path])
-        MeasureDynamics.cli_average_systemspanning(["-f", "--dev", "-o", ens, out])
+        Dynamics.cli_run(["--dev", "-f", "--step", s, "-o", out, path])
+        Dynamics.cli_average_systemspanning(["-f", "--dev", "-o", ens, out])
 
     def test_read(self):
         """
