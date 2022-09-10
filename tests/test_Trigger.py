@@ -11,6 +11,7 @@ root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
+from mycode_line import Dynamics  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 from mycode_line import Trigger  # noqa: E402
 
@@ -21,6 +22,8 @@ idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
 fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
+dynsim = os.path.join(dirname, "Dynamics_1.h5")
+dynav = os.path.join(dirname, "Dynamics_av.h5")
 
 tfile = os.path.join(workdir, idname)
 tinfo = os.path.join(workdir, "EnsembleInfo.h5")
@@ -92,6 +95,10 @@ class MyTests(unittest.TestCase):
             branch = np.arange(file["/Trigger/step"].size)
 
         Trigger.cli_run(["--dev", tfile, "--check", branch[0]])
+
+        # run dynamics
+        Dynamics.cli_run(["--dev", "-f", "--step", 1, "--branch", 0, "-o", dynsim, tfile])
+
         shutil.rmtree(workdir)
 
 

@@ -147,15 +147,9 @@ def cli_run(cli_args=None):
 
         # storage preparation
 
-        storage.create_extendible(
-            root, "A", np.uint64, desc='Size "A" of each stored item'
-        )
-        storage.create_extendible(
-            root, "sync-A", np.uint64, desc="Items stored due to sync-A"
-        )
-        storage.create_extendible(
-            root, "sync-t", np.uint64, desc="Items stored due to sync-t"
-        )
+        storage.create_extendible(root, "A", np.uint64, desc='Size "A" of each stored item')
+        storage.create_extendible(root, "sync-A", np.uint64, desc="Items stored due to sync-A")
+        storage.create_extendible(root, "sync-t", np.uint64, desc="Items stored due to sync-t")
 
         # rerun dynamics and store every other time
 
@@ -202,7 +196,7 @@ def cli_run(cli_args=None):
             if trigger:
 
                 trigger = False
-                if kick is None:
+                if args.branch is not None:
                     system.trigger(p=p, eps=dx, direction=1)
                 else:
                     system.eventDrivenStep(dx, kick)
