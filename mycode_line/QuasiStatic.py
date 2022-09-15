@@ -105,7 +105,7 @@ class System(model.System):
         """
 
         file_yield = file["param"]["xyield"]
-        initstate = file_yield["initstate"][...]
+        initstate = file["realisation"]["seed"][...] * file_yield["initstate"][...]
         initseq = file_yield["initseq"][...]
         xoffset = file_yield["xoffset"][...]
 
@@ -221,7 +221,8 @@ class System(model.System):
         fastload: FastLoad = None,
     ):
         """
-        Restore an a quasi-static step for the relevant root. That Group should contain::
+        Quench and restore an a quasi-static step for the relevant root.
+        The ``root`` group should contain::
 
             root["x"][str(step)]   # Positions
             root["inc"][step]      # Increment (-> time)
@@ -352,6 +353,7 @@ def create_check_meta(
         "uuid": A unique identifier that can be used to distinguish simulations if needed.
         "version": The current version of this code (see below).
         "dependencies": The current version of all relevant dependencies (see below).
+        "compiler": Compiler information.
 
     :param file: HDF5 archive.
     :param path: Path in ``file`` to store/read metadata.
@@ -407,15 +409,14 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     else:
         assert eta is not None
 
-    file["/meta/normalisation/N"] = N
-    file["/meta/seed_base"] = seed
+    file["/realisation/seed"] = seed
     file["/param/m"] = 1.0
     file["/param/eta"] = eta
     file["/param/mu"] = 1.0
     file["/param/k_neighbours"] = 1.0
     file["/param/k_frame"] = 1.0 / N
     file["/param/dt"] = dt
-    file["/param/xyield/initstate"] = seed + np.arange(N).astype(np.int64)
+    file["/param/xyield/initstate"] = np.arange(N).astype(np.int64)
     file["/param/xyield/initseq"] = np.zeros(N, dtype=np.int64)
     file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * N)))
     file["/param/xyield/nbuffer"] = 300
@@ -424,6 +425,7 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     file["/param/xyield/weibull/mean"] = 1.0
     file["/param/xyield/weibull/k"] = 2.0
     file["/param/xyield/dx"] = 1e-3
+    file["/param/normalisation/N"] = N
 
 
 def cli_generate(cli_args=None):
@@ -629,8 +631,8 @@ def normalisation(file: h5py.File):
     ret["k_neighbours"] = file["param"]["k_neighbours"][...]
     ret["eta"] = file["param"]["eta"][...]
     ret["m"] = file["param"]["m"][...]
-    ret["seed"] = file["meta"]["seed_base"][...]
-    ret["N"] = file["meta"]["normalisation"]["N"][...]
+    ret["seed"] = file["realisation"]["seed"][...]
+    ret["N"] = file["param"]["normalisation"]["N"][...]
     ret["dt"] = file["param"]["dt"][...]
     return ret
 
