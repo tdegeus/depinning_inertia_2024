@@ -111,7 +111,7 @@ def cli_run(cli_args=None):
                 S = np.sum(system.istart + system.i - i_n)
 
                 if args.check is not None:
-                    assert S > 0
+                    assert S >= 0
 
                 if S > 0:
                     break
@@ -371,7 +371,7 @@ def cli_generate(cli_args=None):
                 os.path.join(args.outdir, filename), "w"
             ) as dest:
 
-                GooseHDF5.copy(source, dest, ["/param", "/meta"])
+                GooseHDF5.copy(source, dest, ["/param", "/meta", "/realisation"])
 
                 system = QuasiStatic.System(source)
                 fastload = QuasiStatic.FastLoad(args.fastload, filename)

@@ -110,7 +110,7 @@ def cli_run(cli_args=None):
 
         with h5py.File(args.file) as src:
 
-            GooseHDF5.copy(src, file, ["/param", "/meta"])
+            GooseHDF5.copy(src, file, ["/param", "/meta", "/realisation"])
             root = file.create_group("Dynamics")
             root.create_group("x")
 
