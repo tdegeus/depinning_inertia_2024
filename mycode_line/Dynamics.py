@@ -141,6 +141,7 @@ def cli_run(cli_args=None):
             file["/param/xyield/nchunk"][...] = int(
                 max(1.5 * nchunk, file["/param/xyield/nchunk"][...])
             )
+            system.restore_quasistatic_step(sroot, args.step - 1)
 
             # estimate number of steps
             maxinc = sroot["inc"][args.step] - sroot["inc"][args.step - 1]
