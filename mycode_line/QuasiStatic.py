@@ -105,7 +105,7 @@ class System(model.System):
         """
 
         file_yield = file["param"]["xyield"]
-        initstate = file["realisation"]["seed"][...] * file_yield["initstate"][...]
+        initstate = file["realisation"]["seed"][...] + file_yield["initstate"][...]
         initseq = file_yield["initseq"][...]
         xoffset = file_yield["xoffset"][...]
 
