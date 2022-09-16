@@ -230,6 +230,8 @@ def cli_ensembleinfo(cli_args=None):
                 if i == 0:
                     output["N"] = file["/param/xyield/initseq"].size
 
+        assert len(output["source"]) > 0
+
         output["S"] = S
         output["A"] = A
         output["T"] = T
