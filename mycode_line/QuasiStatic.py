@@ -636,7 +636,9 @@ def normalisation(file: h5py.File):
     return ret
 
 
-def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs) -> int:
+def steadystate(
+    x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs
+) -> int:
     """
     Estimate the first step of the steady-state. Constraints:
 
