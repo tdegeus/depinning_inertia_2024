@@ -1042,12 +1042,11 @@ def cli_stateaftersystemspanning(cli_args=None):
     roi = int(roi - roi % 2 + 1)
     ensemble = eye.Ensemble([roi], variance=True, periodic=True)
 
-    files = np.unique(file)
-
     if args.select is not None:
-        if args.select < len(files):
-            np.random.shuffle(files)
-            files = files[: args.select]
+        if args.select < step.size:
+            idx = np.sort(np.random.choice(np.arange(step.size), args.select, replace=False))
+            file = file[idx]
+            step = step[idx]
 
     with h5py.File(args.output, "w") as output:
 
@@ -1066,7 +1065,7 @@ def cli_stateaftersystemspanning(cli_args=None):
 
         output.flush()
 
-        for f in tqdm.tqdm(files):
+        for f in tqdm.tqdm(np.unique(file)):
 
             with h5py.File(os.path.join(basedir, paths[f])) as source:
 
