@@ -636,7 +636,7 @@ def normalisation(file: h5py.File):
     return ret
 
 
-def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwargs) -> int:
+def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs) -> int:
     """
     Estimate the first step of the steady-state. Constraints:
 
@@ -651,7 +651,9 @@ def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwarg
     :param x_frame: Position of the load frame [nstep].
     :param f_frame: Average driving force [nstep].
     :param kick: Whether a kick was applied [nstep].
-    :return: QuasiStatic step number.
+    :param A: Number of blocks that yielded at least once [nstep].
+    :param N: Number of blocks.
+    :return: Step number.
     """
 
     if f_frame.size <= 3:
@@ -660,9 +662,12 @@ def steadystate(x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, **kwarg
     tangent = np.empty_like(f_frame)
     tangent[0] = np.inf
     tangent[1:] = (f_frame[1:] - f_frame[0]) / (x_frame[1:] - x_frame[0])
-    steadystate = np.argmax(tangent <= 0.95 * tangent[3])
 
-    if steadystate == 0:
+    i_yield = np.argmax(A == N)
+    i_tangent = np.argmax(tangent <= 0.95 * tangent[1])
+    steadystate = max(i_yield + 1, i_tangent)
+
+    if i_yield == 0 or i_tangent == 0:
         return None
 
     if steadystate >= kick.size - 1:
