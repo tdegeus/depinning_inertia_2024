@@ -133,8 +133,7 @@ class System(model.System):
                 type="delta",
                 mean=file_yield["delta"]["mean"][...],
             )
-            n = initstate.size
-            x_yield = np.cumsum(np.ones([n, nchunk]), axis=1) + self.generators.random([1])
+            x_yield = np.cumsum(self._draw_dy(nchunk), axis=1) + self.generators.random([1])
             self.generators = DummyPrrng()
         else:
             raise OSError("Distribution not supported")
@@ -158,7 +157,7 @@ class System(model.System):
 
         if self.distribution["type"] == "weibull":
             ret = self.generators.weibull([n], self.distribution["k"])
-            ret *= 2.0 * self.distribution["mean"]
+            ret *= 2 * self.distribution["mean"]
             ret += self.distribution["offset"]
             self.state = self.generators.state()
             self.istate += n
@@ -236,7 +235,7 @@ class System(model.System):
 
         x = root["x"][str(step)][...]
 
-        if not align_buffer and np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
+        if not align_buffer and np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] >= x)):
             pass
         else:
             if fastload is not None:
