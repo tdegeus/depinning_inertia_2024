@@ -700,7 +700,7 @@ def cli_run(cli_args=None):
         if args.fixed_step:
             meta["loading"] = "fixed-step"
             dxframe = (
-                1e-1
+                1e-3
                 * system.normalisation.x
                 * (system.normalisation.k_frame + system.normalisation.mu)
                 / system.normalisation.k_frame
