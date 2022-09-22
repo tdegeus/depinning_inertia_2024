@@ -76,7 +76,7 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "r") as file:
 
-        system = QuasiStatic.System(file)
+        system = QuasiStatic.allocate_system(file)
 
         if args.smax is None:
             args.smax = sys.maxsize

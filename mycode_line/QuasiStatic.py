@@ -91,9 +91,77 @@ class DummyPrrng:
         pass
 
 
-class System(model.System):
+class Normalisation:
+    def __init__(self, file: h5py.File):
+        """
+        Read normalisation from file.
+
+        :param file: Open simulation HDF5 archive (read-only).
+        :return: Basic information as follows::
+            mu: Elastic stiffness (float).
+            k_frame: Stiffness of the load-frame (float).
+            k_neighbours: Stiffness of the neighbour interactions (float).
+            eta: Damping (float).
+            m: Mass (float).
+            seed: Base seed (uint64) or uuid (str).
+            N: Number of blocks (int).
+            dt: Time step of time discretisation.
+        """
+
+        self.kappa = None
+        self.mu = file["param"]["mu"][...]
+        self.k_frame = file["param"]["k_frame"][...]
+        self.k_neighbours = file["param"]["k_neighbours"][...]
+        self.eta = file["param"]["eta"][...]
+        self.m = file["param"]["m"][...]
+        self.seed = file["realisation"]["seed"][...]
+        self.N = file["param"]["normalisation"]["N"][...]
+        self.dt = file["param"]["dt"][...]
+        self.x = 1
+
+        if "x" in file["param"]["normalisation"]:
+            self.x = file["param"]["normalisation"]["x"][...]
+
+        if "potential" not in file["param"]:
+            self.name = "Cusp"
+        else:
+            self.name = file["/param/potential/name"].asstr()[...]
+
+        if self.name == "Cusp":
+            self.f = self.mu * self.x
+        elif self.name == "SemiSmooth":
+            self.f = self.mu * self.x * (1 - self.mu / (self.mu + self.kappa))
+        elif self.name == "Smooth":
+            self.f = self.mu * self.x / np.pi
+        else:
+            raise ValueError(f"Unknown potential: {self.name:s}")
+
+    def asdict(self):
+        """
+        Return relevant parameters as dictionary.
+        """
+        ret = dict(
+            mu=self.mu,
+            k_frame=self.k_frame,
+            k_neighbours=self.k_neighbours,
+            eta=self.eta,
+            m=self.m,
+            seed=self.seed,
+            N=self.N,
+            dt=self.dt,
+            x=self.x,
+            name=self.name,
+        )
+
+        if self.kappa is not None:
+            ret["kappa"] = self.kappa
+
+        return ret
+
+
+class DataMap:
     """
-    Similar to :py:class:`model.System`, but with file interaction.
+    File interaction needed to allocate a System (or one of its subclasses).
     """
 
     def __init__(self, file: h5py.File, nchunk: int = None, chunk_use_max: bool = True):
@@ -127,26 +195,19 @@ class System(model.System):
                 mean=file_yield["weibull"]["mean"][...],
                 k=file_yield["weibull"]["k"][...],
             )
-            x_yield = np.cumsum(self._draw_dy(nchunk), axis=1)
+            self.yinit = np.cumsum(self._draw_dy(nchunk), axis=1)
         elif "delta" in file_yield:
             self.distribution = dict(
                 type="delta",
                 mean=file_yield["delta"]["mean"][...],
             )
-            x_yield = np.cumsum(self._draw_dy(nchunk), axis=1) + self.generators.random([1])
+            self.yinit = np.cumsum(self._draw_dy(nchunk), axis=1) + self.generators.random([1])
             self.generators = DummyPrrng()
         else:
             raise OSError("Distribution not supported")
 
-        super().__init__(
-            m=file["param"]["m"][...],
-            eta=file["param"]["eta"][...],
-            mu=file["param"]["mu"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
-            k_frame=file["param"]["k_frame"][...],
-            dt=file["param"]["dt"][...],
-            x_yield=x_yield + xoffset,
-        )
+        self.yinit += xoffset
+        self.normalisation = Normalisation(file)
 
     def _draw_dy(self, n):
         """
@@ -248,9 +309,93 @@ class System(model.System):
         self.x = x
 
 
+class System(model.System, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.System.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            x_yield=self.yinit,
+        )
+
+        self.yinit = None
+
+
+class SystemSemiSmooth(model.SystemSemiSmooth, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.SystemSemiSmooth.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            kappa=file["param"]["kappa"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            x_yield=self.yinit,
+        )
+
+        self.yinit = None
+
+
+class SystemSmooth(model.SystemSmooth, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.SystemSmooth.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            x_yield=self.yinit,
+        )
+
+        self.yinit = None
+
+
+def allocate_system(file: h5py.File, **kwargs):
+    """
+    Allocate system.
+    """
+
+    norm = Normalisation(file)
+
+    if norm.name == "Cusp":
+        return System(file, **kwargs)
+
+    if norm.name == "SemiSmooth":
+        return SystemSemiSmooth(file, **kwargs)
+
+    if norm.name == "Smooth":
+        return SystemSmooth(file, **kwargs)
+
+
 class FastLoad:
     """
-    Provide an easy API to provide e.g. :py:func:`System.restore_quasistatic_step` with 'FastLoad'
+    Provide an easy API to provide e.g. :py:func:`DataMap.restore_quasistatic_step` with 'FastLoad'
     information.
 
     See :py:func:`cli_fastload` to generate a 'FastLoad' file.
@@ -290,7 +435,7 @@ class FastLoad:
         if self.loaded:
             self.file.close()
 
-    def inc(self, system: System, inc: int):
+    def inc(self, system: model.System, inc: int):
         """
         FastLoad new yield position sequence.
         :param system: The system (modified).
@@ -308,7 +453,7 @@ class FastLoad:
 
         self.step(system, self.steps[i])
 
-    def step(self, system: System, step: int):
+    def step(self, system: model.System, step: int):
         """
         FastLoad new yield position sequence.
         :param system: The system (modified).
@@ -419,12 +564,14 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     file["/param/xyield/initseq"] = np.zeros(N, dtype=np.int64)
     file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * N)))
     file["/param/xyield/nbuffer"] = 300
-    file["/param/xyield/xoffset"] = -100.0
+    file["/param/xyield/xoffset"] = -100
     file["/param/xyield/weibull/offset"] = 1e-5
-    file["/param/xyield/weibull/mean"] = 1.0
-    file["/param/xyield/weibull/k"] = 2.0
+    file["/param/xyield/weibull/mean"] = 1
+    file["/param/xyield/weibull/k"] = 2
     file["/param/xyield/dx"] = 1e-3
+    file["/param/potential/name"] = "Cusp"
     file["/param/normalisation/N"] = N
+    file["/param/normalisation/x"] = 1
 
 
 def cli_generate(cli_args=None):
@@ -515,11 +662,18 @@ def cli_run(cli_args=None):
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-v", "--version", action="version", version=version)
 
-    # different dynammics
+    # different dynamics
     parser.add_argument(
         "--nopassing",
         action="store_true",
         help="Use no-passing rule (instead of inertial dynamics: assume m = 0)",
+    )
+
+    # different loading
+    parser.add_argument(
+        "--fixed-step",
+        action="store_true",
+        help="Use a fixed loading-step instead for the event-driven protocol",
     )
 
     # simulation parameters
@@ -532,16 +686,25 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "a") as file:
 
-        system = System(file)
+        system = allocate_system(file)
+        meta = dict(dynamics="normal", loading="event-driven")
 
         if args.nopassing:
             minimise = system.minimise_nopassing
-            dynamics = "nopassing"
+            meta["dynamics"] = "nopassing"
         else:
             minimise = system.minimise
-            dynamics = "normal"
 
-        create_check_meta(file, f"/meta/{progname}", dev=args.develop, dynamics=dynamics)
+        if args.fixed_step:
+            meta["loading"] = "fixed-step"
+            dxframe = (
+                1e-1
+                * system.normalisation.x
+                * (system.normalisation.k_frame + system.normalisation.mu)
+                / system.normalisation.k_frame
+            )
+
+        create_check_meta(file, f"/meta/{progname}", dev=args.develop, **meta)
 
         if "QuasiStatic" not in file:
             ret = minimise(nmargin=10)
@@ -579,8 +742,12 @@ def cli_run(cli_args=None):
             if np.any(system.i > system.y.shape[1] - system.nbuffer):
                 system.chunk_rshift()
 
-            kick = not kick
-            system.eventDrivenStep(dx, kick)
+            if args.fixed_step:
+                kick = True
+                system.x_frame += dxframe
+            else:
+                kick = not kick
+                system.eventDrivenStep(dx, kick)
 
             if kick:
                 inc_n = system.inc
@@ -606,34 +773,6 @@ def cli_run(cli_args=None):
                 storage.dset_extend1d(root, "kick", step, kick)
                 root["x"][str(step)] = system.x
                 file.flush()
-
-
-def normalisation(file: h5py.File):
-    """
-    Read normalisation from file.
-
-    :param file: Open simulation HDF5 archive (read-only).
-    :return: Basic information as follows::
-        mu: Elastic stiffness (float).
-        k_frame: Stiffness of the load-frame (float).
-        k_neighbours: Stiffness of the neighbour interactions (float).
-        eta: Damping (float).
-        m: Mass (float).
-        seed: Base seed (uint64) or uuid (str).
-        N: Number of blocks (int).
-        dt: Time step of time discretisation.
-    """
-
-    ret = {}
-    ret["mu"] = file["param"]["mu"][...]
-    ret["k_frame"] = file["param"]["k_frame"][...]
-    ret["k_neighbours"] = file["param"]["k_neighbours"][...]
-    ret["eta"] = file["param"]["eta"][...]
-    ret["m"] = file["param"]["m"][...]
-    ret["seed"] = file["realisation"]["seed"][...]
-    ret["N"] = file["param"]["normalisation"]["N"][...]
-    ret["dt"] = file["param"]["dt"][...]
-    return ret
 
 
 def steadystate(
@@ -696,19 +835,10 @@ def basic_output(file: h5py.File) -> dict:
         kick: Step started with a kick (True), or contains only elastic loading (False) [nstep].
         step: Step numbers == np.arange(nstep).
         steadystate: Increment number where the steady state starts (int).
-        seed: Base seed (uint64).
-        mu: Elastic stiffness (float).
-        k_frame: Stiffness of the load-frame (float).
-        k_neighbours: Stiffness of the neighbour interactions (float).
-        eta: Damping (float).
-        m: Mass (float).
-        seed: Base seed (uint64) or uuid (str).
-        N: Number of blocks (int).
-        dt: Time step of time discretisation.
     """
 
-    system = System(file)
-    ret = normalisation(file)
+    system = allocate_system(file)
+    ret = {}
 
     if "QuasiStatic" not in file:
         return ret
@@ -739,7 +869,10 @@ def basic_output(file: h5py.File) -> dict:
         ret["A"][step] = np.sum(i != i_n)
         i_n = np.copy(i)
 
-    ret["steadystate"] = steadystate(**ret)
+    ret["steadystate"] = steadystate(N=system.N, **ret)
+    ret["x_frame"] /= system.normalisation.x
+    ret["f_frame"] /= system.normalisation.f
+    ret["f_potential"] /= system.normalisation.f
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
@@ -788,12 +921,6 @@ def cli_ensembleinfo(cli_args=None):
         dependencies=[],
     )
 
-    fields_full = ["x_frame", "f_frame", "f_potential", "S", "A", "kick", "step"]
-    combine_load = {key: [] for key in fields_full}
-    combine_kick = {key: [] for key in fields_full}
-    file_load = []
-    file_kick = []
-
     fmt = "{:" + str(max(len(i) for i in info["filepath"])) + "s}"
     pbar = tqdm.tqdm(info["filepath"], desc=fmt.format(""))
 
@@ -808,16 +935,24 @@ def cli_ensembleinfo(cli_args=None):
             with h5py.File(filepath) as file:
 
                 if i == 0:
-                    norm = normalisation(file)
+                    norm = Normalisation(file).asdict()
+                    seed = norm.pop("seed")
                 else:
-                    test = normalisation(file)
+                    test = Normalisation(file).asdict()
+                    seed = test.pop("seed")
                     for key in norm:
-                        if key not in ["seed"]:
-                            assert np.isclose(norm[key], test[key])
+                        assert np.isclose(norm[key], test[key])
 
                 out = basic_output(file)
 
-                info["seed"].append(out["seed"])
+                if i == 0:
+                    fields_full = [key for key in out if key not in ["steadystate"]]
+                    combine_load = {key: [] for key in fields_full}
+                    combine_kick = {key: [] for key in fields_full}
+                    file_load = []
+                    file_kick = []
+
+                info["seed"].append(seed)
 
                 meta = file[f"/meta/{entry_points['cli_run']}"]
                 for key in ["uuid", "version", "dependencies", "dynamics"]:
@@ -833,6 +968,9 @@ def cli_ensembleinfo(cli_args=None):
                 output.flush()
 
                 if out["steadystate"] is None:
+                    continue
+
+                if all(out["kick"]):
                     continue
 
                 assert all(out["kick"][::2])
@@ -972,7 +1110,7 @@ def cli_fastload(cli_args=None):
                 else:
                     raise ValueError("No step selection specified")
 
-                system = System(source)
+                system = allocate_system(source)
                 output[f"/{path}/step"] = steps
                 incs = np.empty(steps.shape, dtype=int)
 
@@ -1076,7 +1214,7 @@ def cli_stateaftersystemspanning(cli_args=None):
 
             with h5py.File(os.path.join(basedir, paths[f])) as source:
 
-                system = System(source)
+                system = allocate_system(source)
                 fastload = FastLoad(args.fastload, paths[f])
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):

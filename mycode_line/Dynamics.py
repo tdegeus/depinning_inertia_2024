@@ -133,7 +133,7 @@ def cli_run(cli_args=None):
             root.create_dataset("inc", data=[sroot["inc"][args.step - 1]], maxshape=(None,))
 
             # ensure a chunk that will be big enough
-            system = QuasiStatic.System(file)
+            system = QuasiStatic.allocate_system(file)
             system.restore_quasistatic_step(sroot, args.step)
             i_n = system.istart + system.i
             system.restore_quasistatic_step(sroot, args.step - 1)
@@ -321,7 +321,7 @@ def cli_average_systemspanning(cli_args=None):
             if ifile == 0:
 
                 t_step = file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
-                norm = QuasiStatic.normalisation(file)
+                norm = QuasiStatic.Normalisation(file).asdict()
                 norm.pop("seed")
                 N = norm["N"]
                 dt = norm["dt"]
@@ -329,7 +329,7 @@ def cli_average_systemspanning(cli_args=None):
             else:
 
                 assert t_step == file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
-                n = QuasiStatic.normalisation(file)
+                n = QuasiStatic.Normalisation(file).asdict()
                 for key in norm:
                     assert norm[key] == n[key]
 
@@ -385,7 +385,7 @@ def cli_average_systemspanning(cli_args=None):
         with h5py.File(filepath, "r") as file:
 
             root = file["Dynamics"]
-            system = QuasiStatic.System(file)
+            system = QuasiStatic.allocate_system(file)
             system.restore_quasistatic_step(root, 0)
 
             # determine duration bin, ensure that only one measurement per bin is added

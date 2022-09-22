@@ -296,7 +296,7 @@ def cli_run(cli_args=None):
         assert snapshot % output == 0
         run_create_extendible(file)
 
-        system = QuasiStatic.System(file)
+        system = QuasiStatic.allocate_system(file)
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
         output_fields = [
             "/Flow/output/inc",
