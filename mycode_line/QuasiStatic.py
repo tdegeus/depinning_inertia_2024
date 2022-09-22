@@ -543,6 +543,8 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     :param dt: Time step.
     """
 
+    N = int(N)
+
     if eta is None and dt is None:
         eta = 1
         dt = 1
