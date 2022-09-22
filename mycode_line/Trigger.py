@@ -80,7 +80,7 @@ def cli_run(cli_args=None):
             branches = [i for i in args.check]
 
         dx = file["/param/xyield/dx"][...]
-        system = QuasiStatic.System(file)
+        system = QuasiStatic.allocate_system(file)
         pbar = tqdm.tqdm(branches, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, S = {-1:8d}")
 
         for ibranch in pbar:
@@ -375,7 +375,7 @@ def cli_generate(cli_args=None):
 
                 GooseHDF5.copy(source, dest, ["/param", "/meta", "/realisation"])
 
-                system = QuasiStatic.System(source)
+                system = QuasiStatic.allocate_system(source)
                 fastload = QuasiStatic.FastLoad(args.fastload, filename)
 
                 steadystate = info["full"][filename]["steadystate"][...]
