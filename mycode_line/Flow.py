@@ -84,6 +84,7 @@ def cli_ensembleinfo(cli_args=None):
     output = file_defaults[funcname]
 
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("files", nargs="*", type=str, help="Input files")
 
