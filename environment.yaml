@@ -3,11 +3,15 @@ channels:
 dependencies:
 - autodocsumm
 - click
+- cmake  # FrictionQPotSpringBlock
 - enstat >=0.6.0
+- gmattensor >0.10.1  # FrictionQPotSpringBlock
+- goosefem  # FrictionQPotSpringBlock
 - goosehdf5 >=0.17.1
 - goosempl
 - gooseslurm
 - h5py
+- ninja  # FrictionQPotSpringBlock
 - numpy
 - parallel
 - pre-commit
@@ -19,9 +23,13 @@ dependencies:
 - python-goosefem >=1.1.0
 - python-prrng
 - python-qpot >=0.12.1
+- qpot >=0.12.1  # FrictionQPotSpringBlock
 - scikit-build
 - setuptools_scm
 - shelephant
 - sphinx_rtd_theme
 - tqdm
 - xdmfwrite_h5py
+- xsimd
+- xtensor >=0.24.2  # FrictionQPotSpringBlock
+- xtensor-python  # FrictionQPotSpringBlock
