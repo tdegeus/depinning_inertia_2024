@@ -225,7 +225,7 @@ class DataMap:
             return ret
 
         if self.distribution["type"] == "delta":
-            return 2 * self.distribution["mean"] * np.ones([self.N, n])
+            return 2 * self.distribution["mean"] * np.ones([self.istate.size, n])
 
         raise OSError("Distribution not supported")
 
