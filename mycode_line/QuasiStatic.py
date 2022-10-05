@@ -130,6 +130,7 @@ class Normalisation:
         if self.name == "Cusp":
             self.f = self.mu * self.x
         elif self.name == "SemiSmooth":
+            self.kappa = file["param"]["kappa"][...]
             self.f = self.mu * self.x * (1 - self.mu / (self.mu + self.kappa))
         elif self.name == "Smooth":
             self.f = self.mu * self.x / np.pi
