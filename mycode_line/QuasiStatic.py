@@ -944,7 +944,10 @@ def cli_ensembleinfo(cli_args=None):
                     test = Normalisation(file).asdict()
                     seed = test.pop("seed")
                     for key in norm:
-                        assert np.isclose(norm[key], test[key])
+                        if key in ["name"]:
+                            assert str(norm[key]) == str(test[key])
+                        else:
+                            assert np.isclose(norm[key], test[key])
 
                 out = basic_output(file)
 
