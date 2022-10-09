@@ -63,7 +63,7 @@ class MyTests(unittest.TestCase):
             jump = QuasiStatic.allocate_system(file)
 
         dx = system.y[..., -1] * 0.5
-        n = 100
+        n = 50
 
         for i in range(1, n):
             system._chunk_goto(dx * i)
@@ -97,7 +97,7 @@ class MyTests(unittest.TestCase):
             jump = QuasiStatic.allocate_system(file)
 
         dx = system.y[..., -1] * 0.5
-        n = 100
+        n = 50
 
         for i in range(1, n):
             system._chunk_goto(dx * i)

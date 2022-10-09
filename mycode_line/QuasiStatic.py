@@ -251,6 +251,11 @@ class DataMap:
         assert np.all(advance >= 0)
 
         if self.distribution["type"] == "weibull":
+            dist = self.istart + self.y.shape[1] - self.istate
+            dist = np.where(dist < 0, dist, 0)
+            self.generators.advance(dist)
+            self.istate += dist
+
             offset = self.generators.cumsum_weibull(advance, self.distribution["k"])
             offset *= 2 * self.distribution["mean"]
             offset += advance * self.distribution["offset"]
