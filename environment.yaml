@@ -17,7 +17,7 @@ dependencies:
 - python-frictionqpotspringblock >=0.17.0
 - python-gooseeye
 - python-goosefem >=1.1.0
-- python-prrng
+- python-prrng >=1.3.0
 - python-qpot >=0.12.1
 - scikit-build
 - setuptools_scm

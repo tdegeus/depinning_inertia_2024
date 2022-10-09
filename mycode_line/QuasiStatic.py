@@ -210,6 +210,20 @@ class DataMap:
         self.yinit += xoffset
         self.normalisation = Normalisation(file)
 
+    def _approx_mean_width(self) -> float:
+        """
+        Return approximative mean width of the potential distribution.
+        """
+
+        if self.distribution["type"] == "weibull":
+            return 2 * self.distribution["mean"] + self.distribution["offset"]
+
+        if self.distribution["type"] == "delta":
+            return 2 * self.distribution["mean"]
+
+        raise OSError("Distribution not supported")
+
+
     def _draw_dy(self, n):
         """
         Draw chunk of yield distances.
@@ -229,6 +243,32 @@ class DataMap:
             return 2 * self.distribution["mean"] * np.ones([self.istate.size, n])
 
         raise OSError("Distribution not supported")
+
+    def _chunk_rjump(self, advance):
+        """
+        Return cumulative sum of yield distances.
+        :param advance: Number of yield distances to advance, per particle,
+        """
+        assert np.all(advance >= 0)
+
+        if self.distribution["type"] == "weibull":
+            offset = self.generators.cumsum_weibull(advance, self.distribution["k"])
+            offset *= 2 * self.distribution["mean"]
+            offset += advance * self.distribution["offset"]
+            self.state = self.generators.state()
+            offset += self.y[np.arange(self.y.shape[0]), self.istate - self.istart - 1]
+            self.istate += advance
+            self.istart = np.copy(self.istate)
+            self.y = offset.reshape(-1, 1) + np.cumsum(self._draw_dy(self.y.shape[-1]), axis=1)
+
+        elif self.distribution["type"] == "delta":
+            offset = 2 * self.distribution["mean"] * advance * np.ones([self.istate.size])
+            offset += self.y[:, -1]
+            self.istart += self.y.shape[-1] + advance
+            self.y = offset.reshape(-1, 1) + np.cumsum(self._draw_dy(self.y.shape[-1]), axis=1)
+
+        else:
+            raise OSError("Distribution not supported")
 
     def _chuck_shift(self, shift: ArrayLike):
         """
@@ -265,6 +305,10 @@ class DataMap:
         Shift until the chunk encompasses a target position ``x``.
         Note that this function does not update position itself.
         """
+
+        jump = np.round(x / self._approx_mean_width()).astype(np.int64) - self.istate
+        if not np.any(jump <= self.y.shape[-1]) and np.all(jump >= 0):
+            self._chunk_rjump(jump)
 
         while True:
             shift = np.argmax(self.y >= x.reshape(-1, 1), axis=1) - self.nbuffer

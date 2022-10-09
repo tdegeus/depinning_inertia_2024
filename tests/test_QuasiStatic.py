@@ -53,6 +53,61 @@ class MyTests(unittest.TestCase):
 
         shutil.rmtree(dirname)
 
+    def test_y(self):
+        """
+        Jumping in yield history.
+        """
+
+        with h5py.File(filename) as file:
+            system = QuasiStatic.allocate_system(file)
+            jump = QuasiStatic.allocate_system(file)
+
+        dx = system.y[..., -1] * 0.5
+        n = 100
+
+        for i in range(1, n):
+            system._chunk_goto(dx * i)
+            system.x = dx * i
+
+        jump._chunk_goto(system.x)
+        jump.x = system.x
+
+        self.assertTrue(np.all(np.equal(system.istart + system.i, jump.istart + jump.i)))
+        self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
+        self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
+
+    def test_y_delta(self):
+        """
+        Jumping in yield history: delta distribution.
+        """
+
+        deltaname = os.path.join(dirname, "id=delta.h5")
+
+        with h5py.File(filename) as file, h5py.File(deltaname, "w") as delta:
+            datasets = list(g5.getdatapaths(file, root="/param", fold="/param/xyield/weibull", fold_symbol=""))
+            datasets.remove("/param/xyield/weibull")
+            g5.copy(file, delta, datasets)
+            g5.copy(file, delta, g5.getdatapaths(file, root="/realisation"))
+            delta["/param/xyield/delta/mean"] = 2.0
+
+        with h5py.File(deltaname) as file:
+            system = QuasiStatic.allocate_system(file)
+            jump = QuasiStatic.allocate_system(file)
+
+        dx = system.y[..., -1] * 0.5
+        n = 100
+
+        for i in range(1, n):
+            system._chunk_goto(dx * i)
+            system.x = dx * i
+
+        jump._chunk_goto(system.x)
+        jump.x = system.x
+
+        self.assertTrue(np.all(np.equal(system.istart + system.i, jump.istart + jump.i)))
+        self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
+        self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
+
     def test_fastload(self):
         """
         Store state of the random sequence at system spanning events for fast reloading.
