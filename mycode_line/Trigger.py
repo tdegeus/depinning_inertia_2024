@@ -13,6 +13,7 @@ import GooseHDF5
 import h5py
 import numpy as np
 import tqdm
+import itertools
 
 from . import QuasiStatic
 from . import slurm
@@ -87,6 +88,13 @@ def cli_run(cli_args=None):
 
             root = file[f"/Trigger/branches/{ibranch:d}"]
 
+            if args.check is None:
+                if len(root["completed"]) >= 2:
+                    if root["completed"][1]:
+                        continue
+            else:
+                assert len(root["completed"]) >= 2
+
             if root["p"][1] > 0 or args.check is not None:
                 try_p = np.array([root["p"][1]])
                 assert np.all(np.logical_and(try_p >= 0, try_p < system.N))
@@ -96,7 +104,7 @@ def cli_run(cli_args=None):
 
             for p in try_p:
 
-                system.restore_quasistatic_step(root, 0)
+                system.restore_quasistatic_step(root=root, step=0)
                 inc = system.inc
                 i_n = system.istart + system.i
 
@@ -151,6 +159,21 @@ def cli_run(cli_args=None):
 
                 file.flush()
 
+
+def _to_ranges(mylist):
+    mylist = sorted(set(mylist))
+    for _, group in itertools.groupby(enumerate(mylist), lambda t: t[1] - t[0]):
+        group = list(group)
+        yield group[0][1], group[-1][1]
+
+def _to_str_ranges(mylist):
+    groups = list(_to_ranges(mylist))
+    for i in range(len(groups)):
+        if groups[i][0] == groups[i][1]:
+            groups[i] = str(groups[i][0])
+        else:
+            groups[i] = str(groups[i][0]) + "-" + str(groups[i][1])
+    return groups
 
 def cli_ensembleinfo(cli_args=None):
     """
@@ -209,11 +232,18 @@ def cli_ensembleinfo(cli_args=None):
 
             with h5py.File(filepath) as file:
 
+                ignore = []
+
                 for ibranch in np.arange(file["/Trigger/step"].size):
 
                     root = file[f"/Trigger/branches/{ibranch:d}"]
 
+                    if len(root["completed"]) < 2:
+                        ignore.append(ibranch)
+                        continue
+
                     if not root["completed"][1]:
+                        ignore.append(ibranch)
                         continue
 
                     S.append(root["S"][1])
@@ -229,6 +259,9 @@ def cli_ensembleinfo(cli_args=None):
 
                 if i == 0:
                     output["N"] = file["/param/xyield/initseq"].size
+
+                if len(ignore) > 0:
+                    print(f"{filepath} ignoring: " + ", ".join(_to_str_ranges(ignore)))
 
         assert len(source) > 0
 
