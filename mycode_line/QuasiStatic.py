@@ -300,7 +300,7 @@ class DataMap:
         assert np.all(self.y[:, -1] > self.x)
         self._chuck_shift(self.i - self.nbuffer + 1)
 
-    def _chunk_goto(self, x: ArrayLike):
+    def _chunk_goto(self, x: ArrayLike, nmargin: int = 5):
         """
         Shift until the chunk encompasses a target position ``x``.
         Note that this function does not update position itself.
@@ -315,7 +315,7 @@ class DataMap:
             shift = np.where(self.y[:, -1] <= x, self.y.shape[1] - self.nbuffer, shift)
             shift = np.where(self.y[:, 0] >= x, self.nbuffer - self.y.shape[1], shift)
             self._chuck_shift(shift)
-            if np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] > x)):
+            if np.all(np.logical_and(self.y[:, 0 + nmargin] < x, self.y[:, -(1 + nmargin)] > x)):
                 return
 
     def restore_quasistatic_step(
@@ -324,6 +324,7 @@ class DataMap:
         step: int,
         align_buffer: bool = True,
         fastload: FastLoad = None,
+        nmargin: int = 5,
     ):
         """
         Quench and restore an a quasi-static step for the relevant root.
@@ -337,6 +338,7 @@ class DataMap:
         :param step: Step number.
         :param align: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
         :param fastload: FastLoad information (assumes it to be correctly allocated!!).
+        :param nmargin: Number of yield potentials to leave as margin.
         """
 
         x = root["x"][str(step)][...]
@@ -346,7 +348,7 @@ class DataMap:
         else:
             if fastload is not None:
                 fastload.step(self, step)
-            self._chunk_goto(x)
+            self._chunk_goto(x, nmargin=nmargin)
 
         self.quench()
         self.inc = root["inc"][step]
