@@ -82,7 +82,7 @@ def cli_run(cli_args=None):
 
         dx = file["/param/xyield/dx"][...]
         system = QuasiStatic.allocate_system(file)
-        pbar = tqdm.tqdm(branches, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, S = {-1:8d}")
+        pbar = tqdm.tqdm(branches, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, A = {-1:8d}")
 
         for ibranch in pbar:
 
@@ -116,18 +116,18 @@ def cli_run(cli_args=None):
                         break
                     system.chunk_rshift()
 
-                S = np.sum(system.istart + system.i - i_n)
+                A = np.sum(system.istart + system.i != i_n)
 
                 if args.check is not None:
-                    assert S >= 0
+                    assert A >= 0
 
-                if S > 0:
+                if A > 1:
                     break
 
-            pbar.set_description(f"{basename}: branch = {ibranch:8d}, p = {p:8d}, S = {S:8d}")
+            pbar.set_description(f"{basename}: branch = {ibranch:8d}, p = {p:8d}, A = {A:8d}")
             pbar.refresh()
 
-            A = np.sum(system.istart + system.i != i_n)
+            S = np.sum(system.istart + system.i - i_n)
             T = system.quasistaticActivityLast() - inc
             f_frame = np.mean(system.f_frame)
 
