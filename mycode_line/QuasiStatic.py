@@ -223,7 +223,6 @@ class DataMap:
 
         raise OSError("Distribution not supported")
 
-
     def _draw_dy(self, n):
         """
         Draw chunk of yield distances.

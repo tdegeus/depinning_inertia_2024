@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import itertools
 import os
 import textwrap
 
@@ -13,7 +14,6 @@ import GooseHDF5
 import h5py
 import numpy as np
 import tqdm
-import itertools
 
 from . import QuasiStatic
 from . import slurm
@@ -166,6 +166,7 @@ def _to_ranges(mylist):
         group = list(group)
         yield group[0][1], group[-1][1]
 
+
 def _to_str_ranges(mylist):
     groups = list(_to_ranges(mylist))
     for i in range(len(groups)):
@@ -174,6 +175,7 @@ def _to_str_ranges(mylist):
         else:
             groups[i] = str(groups[i][0]) + "-" + str(groups[i][1])
     return groups
+
 
 def cli_ensembleinfo(cli_args=None):
     """

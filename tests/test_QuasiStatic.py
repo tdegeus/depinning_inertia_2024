@@ -84,7 +84,9 @@ class MyTests(unittest.TestCase):
         deltaname = os.path.join(dirname, "id=delta.h5")
 
         with h5py.File(filename) as file, h5py.File(deltaname, "w") as delta:
-            datasets = list(g5.getdatapaths(file, root="/param", fold="/param/xyield/weibull", fold_symbol=""))
+            datasets = list(
+                g5.getdatapaths(file, root="/param", fold="/param/xyield/weibull", fold_symbol="")
+            )
             datasets.remove("/param/xyield/weibull")
             g5.copy(file, delta, datasets)
             g5.copy(file, delta, g5.getdatapaths(file, root="/realisation"))
