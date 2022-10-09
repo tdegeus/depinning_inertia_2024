@@ -185,7 +185,6 @@ class DataMap:
 
         self.generators = prrng.pcg32_array(initstate, initseq)
         self.nbuffer = file_yield["nbuffer"][...]
-        self.state = self.generators.state()
         self.istate = np.zeros(initstate.size, dtype=int)
         self.istart = np.zeros(initstate.size, dtype=int)
 
@@ -234,7 +233,6 @@ class DataMap:
             ret = self.generators.weibull([n], self.distribution["k"])
             ret *= 2 * self.distribution["mean"]
             ret += self.distribution["offset"]
-            self.state = self.generators.state()
             self.istate += n
             return ret
 
@@ -259,7 +257,6 @@ class DataMap:
             offset = self.generators.cumsum_weibull(advance, self.distribution["k"])
             offset *= 2 * self.distribution["mean"]
             offset += advance * self.distribution["offset"]
-            self.state = self.generators.state()
             offset += self.y[np.arange(self.y.shape[0]), self.istate - self.istart - 1]
             self.istate += advance
             self.istart = np.copy(self.istate)
@@ -520,10 +517,9 @@ class FastLoad:
         i = np.argmin(distance)
 
         key = str(self.steps[i])
-        system.state = self.data[key]["state"][...]
         system.istate = self.data[key]["istate"][...]
         system.istart = np.copy(system.istate)
-        system.generators.restore(system.state)
+        system.generators.restore(self.data[key]["state"][...])
         y = np.cumsum(system._draw_dy(system.y.shape[1]), axis=1)
         dy = self.data[key]["y0"][...] - y[:, 0]
         system.y = y + dy.reshape(-1, 1)
@@ -1178,10 +1174,9 @@ def cli_fastload(cli_args=None):
                     shift = system.istart - system.istate
                     system.generators.advance(shift)
                     system.istate += shift
-                    system.state = system.generators.state()
 
                     incs[i] = system.inc
-                    output[f"/{path}/data/{s:d}/state"] = np.copy(system.state)
+                    output[f"/{path}/data/{s:d}/state"] = np.copy(system.generators.state())
                     output[f"/{path}/data/{s:d}/istate"] = np.copy(system.istate)
                     output[f"/{path}/data/{s:d}/y0"] = system.y[:, 0]
 
