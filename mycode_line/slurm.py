@@ -149,6 +149,7 @@ def serial(
     sbatch.setdefault("ntasks", 1)
     sbatch.setdefault("cpus-per-task", 1)
     sbatch.setdefault("time", "24h")
+    sbatch.setdefault("mem", "2G")
     sbatch.setdefault("account", slurm_defaults["account"])
     sbatch.setdefault("partition", "serial")
 
@@ -204,6 +205,7 @@ def serial_group(
     sbatch.setdefault("ntasks", 1)
     sbatch.setdefault("cpus-per-task", 1)
     sbatch.setdefault("time", "24h")
+    sbatch.setdefault("mem", "2G")
     sbatch.setdefault("account", slurm_defaults["account"])
     sbatch.setdefault("partition", "serial")
 
