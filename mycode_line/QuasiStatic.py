@@ -525,11 +525,20 @@ class FastLoad:
         system.y = y + dy.reshape(-1, 1)
 
 
+def _compare_versions(ver, cmpver):
+
+    if tag.greater_equal(cmpver, "6.0"):
+        if tag.greater_equal(ver, cmpver):
+            return True
+    else:
+        return tag.equal(ver, cmpver)
+
+    return False
+
+
 def create_check_meta(
     file: h5py.File = None,
     path: str = None,
-    ver: str = version,
-    deps: str = dependencies(model),
     dev: bool = False,
     **kwargs,
 ) -> h5py.Group:
@@ -548,13 +557,13 @@ def create_check_meta(
 
     :param file: HDF5 archive.
     :param path: Path in ``file`` to store/read metadata.
-    :param ver: Version string.
-    :param deps: List of dependencies.
     :param dev: Allow uncommitted changes.
     :return: Group to metadata.
     """
 
-    assert dev or not tag.has_uncommitted(ver)
+    deps = sorted(list(set(list(model.version_dependencies()) + ["prrng=" + prrng.version()])))
+
+    assert dev or not tag.has_uncommitted(version)
     assert dev or not tag.any_has_uncommitted(deps)
 
     if file is None:
@@ -563,7 +572,7 @@ def create_check_meta(
     if path not in file:
         meta = file.create_group(path)
         meta.attrs["uuid"] = str(uuid.uuid4())
-        meta.attrs["version"] = ver
+        meta.attrs["version"] = version
         meta.attrs["dependencies"] = deps
         meta.attrs["compiler"] = model.version_compiler()
         for key in kwargs:
@@ -571,11 +580,15 @@ def create_check_meta(
         return meta
 
     meta = file[path]
-    assert dev or tag.equal(ver, meta.attrs["version"])
-    assert dev or tag.all_equal(deps, meta.attrs["dependencies"])
-    for key in kwargs:
-        assert meta.attrs[key] == kwargs[key]
-
+    if file.mode in ["r+", "w", "a"]:
+        assert dev or _compare_versions(version, meta.attrs["version"])
+        assert dev or tag.all_greater_equal(deps, meta.attrs["dependencies"])
+        meta.attrs["version"] = version
+        meta.attrs["dependencies"] = deps
+        meta.attrs["compiler"] = model.version_compiler()
+    else:
+        assert dev or tag.equal(version, meta.attrs["version"])
+        assert dev or tag.all_equal(deps, meta.attrs["dependencies"])
     return meta
 
 
