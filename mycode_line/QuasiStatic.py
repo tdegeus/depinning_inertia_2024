@@ -28,22 +28,15 @@ from ._version import version
 
 entry_points = dict(
     cli_ensembleinfo="QuasiStatic_EnsembleInfo",
-    cli_fastload="EnsembleFastLoad",
+    cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
     cli_plot="QuasiStatic_Plot",
     cli_run="QuasiStatic_Run",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
 )
 
-
-brief = dict(
-    cli_fastload="State at some steps in the ensemble, helps to speed-up (random) loading",
-)
-
-
 file_defaults = dict(
     cli_ensembleinfo="QuasiStatic_EnsembleInfo.h5",
-    cli_fastload="EnsembleFastLoad.h5",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning.h5",
 )
 
@@ -81,6 +74,15 @@ def interpret_filename(filename: str) -> dict:
         info[key] = int(info[key])
 
     return info
+
+
+def filename2fastload(filepath):
+    """
+    Convert a filepath to the corresponding fastload filepath.
+    """
+    if not re.match(r"(.*)(id=[0-9]*)(\.h5)", filepath):
+        return None
+    return re.sub(r"(.*)(id=[0-9]*)(\.h5)", r"\1\2_fastload\3", filepath)
 
 
 class DummyPrrng:
@@ -301,31 +303,89 @@ class DataMap:
         assert np.all(self.y[:, -1] > self.x)
         self._chuck_shift(self.i - self.nbuffer + 1)
 
-    def _chunk_goto(self, x: ArrayLike, nmargin: int = 5):
+    def _align_buffer(self, x: ArrayLike, nmargin: int = 5):
         """
-        Shift until the chunk encompasses a target position ``x``.
-        Note that this function does not update position itself.
+        Shift until the chunk encompasses a target position ``x`` in the margin, leaving a
+        certain buffer with respect to the last drawn yield positions.
+        Note: the position is not updated!
         """
 
-        jump = np.round(x / self._approx_mean_width()).astype(np.int64) - self.istate
-        if not np.any(jump <= self.y.shape[-1]) and np.all(jump >= 0):
-            self._chunk_rjump(jump)
+        if not np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] >= x)):
+            jump = np.round(x / self._approx_mean_width()).astype(np.int64) - self.istate
+            if not np.any(jump <= self.y.shape[-1]) and np.all(jump >= 0):
+                self._chunk_rjump(jump)
 
         while True:
             shift = np.argmax(self.y >= x.reshape(-1, 1), axis=1) - self.nbuffer
             shift = np.where(self.y[:, -1] <= x, self.y.shape[1] - self.nbuffer, shift)
             shift = np.where(self.y[:, 0] >= x, self.nbuffer - self.y.shape[1], shift)
             self._chuck_shift(shift)
-            if np.all(np.logical_and(self.y[:, 0 + nmargin] < x, self.y[:, -(1 + nmargin)] > x)):
+            if np.all(np.logical_and(self.y[:, nmargin] < x, self.y[:, -(1 + nmargin)] > x)):
                 return
+
+    def fastload(self, root: h5py.Group):
+
+        self.generators.restore(root["state"][...])
+        self.istate = root["i"][...]
+        self.istart = np.copy(self.istate)
+        self.y = np.cumsum(self._draw_dy(self.y.shape[-1]), axis=1)
+        self.y += (root["y"][...] - self.y[:, 0]).reshape(-1, 1)
+
+    def chunk_goto(
+        self,
+        x: ArrayLike,
+        align_buffer: bool = True,
+        nmargin: int = 5,
+        fastload: tuple(str, str) = None,
+    ):
+        """
+        Update the yield positions to be able to accommodate a target position ``x``.
+        Note: the position is not updated!
+
+        :param x: Target position.
+        :param align_buffer: Contain ``x`` in buffer (``True``) or just in chunk (``False``).
+        :param nmargin: Number of yield potentials to leave as margin (not the same as buffer!).
+        :param fastload: If available ``(filename, groupname)`` of the closest fastload info.
+        """
+
+        if not align_buffer:
+            if np.all(np.logical_and(self.y[:, nmargin] < x, self.y[:, -(1 + nmargin)] >= x)):
+                return
+
+        if np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] >= x)):
+            return self._align_buffer(x, nmargin)
+
+        if fastload is None:
+            return self._align_buffer(x, nmargin)
+
+        if len(fastload) != 2:
+            return self._align_buffer(x, nmargin)
+
+        if fastload[0] is None:
+            return self._align_buffer(x, nmargin)
+
+        if not os.path.exists(fastload[0]):
+            return self._align_buffer(x, nmargin)
+
+        dy = self.y[:, -1] - self.y[:, 0]
+        if np.all(np.logical_and(x > self.y[:, 0], x < self.y[:, -1] + dy)):
+            return self._align_buffer(x, nmargin)
+
+        with h5py.File(fastload[0]) as loadfile:
+            if fastload[1] in loadfile:
+                self._fastload(loadfile[fastload[1]])
+                if not align_buffer:
+                    return
+
+        return self._align_buffer(x, nmargin)
 
     def restore_quasistatic_step(
         self,
         root: h5py.Group,
         step: int,
         align_buffer: bool = True,
-        fastload: FastLoad = None,
         nmargin: int = 5,
+        fastload: bool = True,
     ):
         """
         Quench and restore an a quasi-static step for the relevant root.
@@ -337,20 +397,21 @@ class DataMap:
 
         :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
-        :param align: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
-        :param fastload: FastLoad information (assumes it to be correctly allocated!!).
+        :param align_buffer: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
         :param nmargin: Number of yield potentials to leave as margin.
+        :param fastload: Use fastload file, see :py:func:`cli_generatefastload`.
         """
 
         x = root["x"][str(step)][...]
 
-        if not align_buffer and np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] >= x)):
+        if type(fastload) == tuple or type(fastload) == list:
             pass
+        elif fastload:
+            fastload = (filename2fastload(root.file.filename), f"/QuasiStatic/{step:d}")
         else:
-            if fastload is not None:
-                fastload.step(self, step)
-            self._chunk_goto(x, nmargin=nmargin)
+            fastload = None
 
+        self.chunk_goto(x, align_buffer, nmargin, fastload)
         self.quench()
         self.inc = root["inc"][step]
         self.x_frame = root["x_frame"][step]
@@ -439,90 +500,6 @@ def allocate_system(file: h5py.File, **kwargs):
 
     if norm.name == "Smooth":
         return SystemSmooth(file, **kwargs)
-
-
-class FastLoad:
-    """
-    Provide an easy API to provide e.g. :py:func:`DataMap.restore_quasistatic_step` with 'FastLoad'
-    information.
-
-    See :py:func:`cli_fastload` to generate a 'FastLoad' file.
-    """
-
-    def __init__(self, filepath: str, idname: str):
-        """
-        Open 'FastLoad' file (HDF5 archive) for a given simulation.
-
-        Use :py:func:`set_simulation` to initialise for a specific simulation, before
-        :py:func:`fastload` becomes available.
-
-        :param file: Path to HDF5 archive (read-only), see :py:func:`cli_fastload`.
-        :param idname: Name of the simulation.
-        """
-
-        if filepath is None:
-            self.loaded = False
-            self.active = False
-            return
-
-        assert os.path.isfile(filepath)
-        self.loaded = True
-        self.file = h5py.File(filepath)
-
-        if idname not in self.file:
-            self.active = False
-            return
-
-        self.active = True
-        self.data = self.file[idname]["data"]
-        self.steps = self.file[idname]["step"][...]
-        self.incs = self.file[idname]["inc"][...]
-
-    def __del__(self):
-
-        if self.loaded:
-            self.file.close()
-
-    def inc(self, system: model.System, inc: int):
-        """
-        FastLoad new yield position sequence.
-        :param system: The system (modified).
-        :param inc: Increment number that will be loaded.
-        """
-
-        if not self.active:
-            return
-
-        distance = np.abs(self.incs - inc)
-        i = np.argmin(distance)
-
-        if distance[i] > np.abs(system.inc - inc):
-            return
-
-        self.step(system, self.steps[i])
-
-    def step(self, system: model.System, step: int):
-        """
-        FastLoad new yield position sequence.
-        :param system: The system (modified).
-        :param step: Quasi-static load step that will be loaded.
-        """
-
-        assert system.distribution["type"] != "delta"
-
-        if not self.active:
-            return
-
-        distance = np.abs(self.steps - step)
-        i = np.argmin(distance)
-
-        key = str(self.steps[i])
-        system.istate = self.data[key]["istate"][...]
-        system.istart = np.copy(system.istate)
-        system.generators.restore(self.data[key]["state"][...])
-        y = np.cumsum(system._draw_dy(system.y.shape[1]), axis=1)
-        dy = self.data[key]["y0"][...] - y[:, 0]
-        system.y = y + dy.reshape(-1, 1)
 
 
 def _compare_versions(ver, cmpver):
@@ -722,6 +699,7 @@ def cli_run(cli_args=None):
     # development options
     parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--fastload", action="store_true", help="Append fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
 
     # different dynamics
@@ -835,6 +813,13 @@ def cli_run(cli_args=None):
                 storage.dset_extend1d(root, "kick", step, kick)
                 root["x"][str(step)] = system.x
                 file.flush()
+
+                if args.fastload:
+                    with h5py.File(filename2fastload(args.file), "a") as fload:
+                        if f"/QuasiStatic/{step:d}" not in fload:
+                            fload[f"/QuasiStatic/{step:d}/state"] = system.generators.state()
+                            fload[f"/QuasiStatic/{step:d}/i"] = system.istate
+                            fload[f"/QuasiStatic/{step:d}/y"] = system.y[:, 0]
 
 
 def steadystate(
@@ -1100,21 +1085,16 @@ def cli_ensembleinfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
-def cli_fastload(cli_args=None):
+def cli_generatefastload(cli_args=None):
     """
-    Save the state of the random generators for fast loading of simulations.
+    Save the state of the random generators for fast loading of the simulation.
     The data created by this function is just to speed-up processing,
     it is completely obsolete and can be removed without hesitation.
-
-    Data can be stored at:
-    - system spanning events (--system-spanning)
-    - a regular interval (--interval or --number)
     """
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     progname = entry_points[funcname]
-    output = file_defaults[funcname]
 
     class MyFmt(
         argparse.RawDescriptionHelpFormatter,
@@ -1124,77 +1104,34 @@ def cli_fastload(cli_args=None):
         pass
 
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-
-    # developer options
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-v", "--version", action="version", version=version)
-
-    # output
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
-    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-
-    # step selection
-    parser.add_argument("-i", "--interval", type=int, help="Storage interval")
-    parser.add_argument("-n", "--number", type=int, help="Number of steps to store")
-    parser.add_argument(
-        "-s", "--system-spanning", action="store_true", help="Save at system spanning events"
-    )
-
-    # input
-    parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
-
+    parser.add_argument("file", type=str, help="Simulation file")
     args = tools._parse(parser, cli_args)
-    assert os.path.isfile(args.ensembleinfo)
-    tools._check_overwrite_file(args.output, args.force)
-    basedir = os.path.dirname(args.ensembleinfo)
 
-    with h5py.File(args.ensembleinfo) as info, h5py.File(args.output, "w") as output:
+    output = filename2fastload(args.file)
+    tools._check_overwrite_file(output, args.force)
 
-        assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
-        paths = info["/lookup/filepath"].asstr()[...]
-        N = info["/normalisation/N"][...]
+    with h5py.File(args.file) as file, h5py.File(output, "w") as output:
 
         create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
-        for path in tqdm.tqdm(paths):
+        system = allocate_system(file)
+        root = file["QuasiStatic"]
 
-            with h5py.File(os.path.join(basedir, path)) as source:
+        for step in range(root["inc"].size):
 
-                steps = info[f"/full/{path}/step"][...]
+            system.restore_quasistatic_step(root, step)
 
-                if args.interval is not None:
-                    n = np.ceil((1 + np.max(steps)) / args.interval)
-                    steps = args.interval * np.arange(1, n).astype(int)
-                    assert np.all(np.in1d(steps, info[f"/full/{path}/step"][...]))
-                elif args.number is not None:
-                    idx = np.round(np.linspace(0, steps.size - 1, args.number + 1)).astype(int)
-                    steps = steps[idx][1:]
-                elif args.system_spanning:
-                    A = info[f"/full/{path}/A"][...]
-                    steps = steps[A == N]
-                else:
-                    raise ValueError("No step selection specified")
+            shift = system.istart - system.istate
+            system.generators.advance(shift)
+            system.istate += shift
 
-                system = allocate_system(source)
-                output[f"/{path}/step"] = steps
-                incs = np.empty(steps.shape, dtype=int)
-
-                for i, s in enumerate(tqdm.tqdm(steps)):
-
-                    system.restore_quasistatic_step(source["QuasiStatic"], s, align_buffer=False)
-                    system.chunk_rshift()
-
-                    shift = system.istart - system.istate
-                    system.generators.advance(shift)
-                    system.istate += shift
-
-                    incs[i] = system.inc
-                    output[f"/{path}/data/{s:d}/state"] = np.copy(system.generators.state())
-                    output[f"/{path}/data/{s:d}/istate"] = np.copy(system.istate)
-                    output[f"/{path}/data/{s:d}/y0"] = system.y[:, 0]
-
-                output[f"/{path}/inc"] = incs
-                output.flush()
+            output[f"/QuasiStatic/{step:d}/state"] = system.generators.state()
+            output[f"/QuasiStatic/{step:d}/i"] = system.istate
+            output[f"/QuasiStatic/{step:d}/y"] = system.y[:, 0]
+            output.flush()
 
 
 def cli_stateaftersystemspanning(cli_args=None):
@@ -1220,7 +1157,6 @@ def cli_stateaftersystemspanning(cli_args=None):
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-n", "--select", type=int, help="Select random subset")
-    parser.add_argument("-q", "--fastload", type=str, help=brief["cli_fastload"])
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
 
     args = tools._parse(parser, cli_args)
@@ -1279,13 +1215,10 @@ def cli_stateaftersystemspanning(cli_args=None):
             with h5py.File(os.path.join(basedir, paths[f])) as source:
 
                 system = allocate_system(source)
-                fastload = FastLoad(args.fastload, paths[f])
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                    system.restore_quasistatic_step(
-                        source["QuasiStatic"], s, align_buffer=False, fastload=fastload
-                    )
+                    system.restore_quasistatic_step(source["QuasiStatic"], s, align_buffer=False)
 
                     xr = system.y_right() - system.x
                     xl = system.x - system.y_left()

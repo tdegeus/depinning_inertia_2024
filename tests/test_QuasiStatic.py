@@ -19,7 +19,6 @@ dirname = os.path.join(os.path.dirname(__file__), "output")
 idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
-fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
 
 
 class MyTests(unittest.TestCase):
@@ -43,7 +42,6 @@ class MyTests(unittest.TestCase):
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
-        QuasiStatic.cli_fastload(["--dev", "-f", "-o", fastname, infoname, "-s"])
 
     @classmethod
     def tearDownClass(self):
@@ -66,10 +64,10 @@ class MyTests(unittest.TestCase):
         n = 50
 
         for i in range(1, n):
-            system._chunk_goto(dx * i)
+            system.chunk_goto(dx * i)
             system.x = dx * i
 
-        jump._chunk_goto(system.x)
+        jump.chunk_goto(system.x)
         jump.x = system.x
 
         self.assertTrue(np.all(np.equal(system.istart + system.i, jump.istart + jump.i)))
@@ -100,10 +98,10 @@ class MyTests(unittest.TestCase):
         n = 50
 
         for i in range(1, n):
-            system._chunk_goto(dx * i)
+            system.chunk_goto(dx * i)
             system.x = dx * i
 
-        jump._chunk_goto(system.x)
+        jump.chunk_goto(system.x)
         jump.x = system.x
 
         self.assertTrue(np.all(np.equal(system.istart + system.i, jump.istart + jump.i)))
@@ -111,33 +109,25 @@ class MyTests(unittest.TestCase):
         self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
 
     def test_fastload(self):
-        """
-        Store state of the random sequence at system spanning events for fast reloading.
-        """
 
         with h5py.File(filename) as file:
+            system = QuasiStatic.allocate_system(file)
+            step = int(0.2 * file["/QuasiStatic/inc"].size)
+            system.restore_quasistatic_step(file["QuasiStatic"], step)
+            yleft = system.y_left()
+            yright = system.y_right()
+            fpot = system.f_potential
 
-            fastload = QuasiStatic.FastLoad(fastname, idname)
-            system = QuasiStatic.System(file)
-            step = fastload.file[idname]["step"][...][-1]
+        QuasiStatic.cli_generatefastload(["--dev", filename])
 
-            system.restore_quasistatic_step(file["QuasiStatic"], step=step)
-
-            i = np.copy(system.i + system.istart)
-            all = np.arange(system.N)
-            yll = system.y[all, system.i - 2]
-            yl = system.y[all, system.i - 1]
-            yr = system.y[all, system.i]
-            yrr = system.y[all, system.i + 1]
-
-            system.restore_quasistatic_step(file["QuasiStatic"], step=0, fastload=fastload)
-            system.restore_quasistatic_step(file["QuasiStatic"], step=step, fastload=fastload)
-
-            self.assertTrue(np.all(np.equal(system.i + system.istart, i)))
-            self.assertTrue(np.allclose(system.y[all, system.i - 2], yll))
-            self.assertTrue(np.allclose(system.y[all, system.i - 1], yl))
-            self.assertTrue(np.allclose(system.y[all, system.i], yr))
-            self.assertTrue(np.allclose(system.y[all, system.i + 1], yrr))
+        with h5py.File(filename) as file:
+            system = QuasiStatic.allocate_system(file)
+            with h5py.File(QuasiStatic.filename2fastload(filename)) as load:
+                system.fastload(load[f"/QuasiStatic/{step:d}"])
+            system.restore_quasistatic_step(file["QuasiStatic"], step)
+            self.assertTrue(np.allclose(yleft, system.y_left()))
+            self.assertTrue(np.allclose(yright, system.y_right()))
+            self.assertTrue(np.allclose(fpot, system.f_potential))
 
     def test_chunk(self):
 
@@ -206,9 +196,7 @@ class MyTests(unittest.TestCase):
         """
 
         ss = os.path.join(dirname, "AfterSystemSpanning.h5")
-        QuasiStatic.cli_stateaftersystemspanning(
-            ["--dev", "-f", "-q", fastname, "-o", ss, infoname]
-        )
+        QuasiStatic.cli_stateaftersystemspanning(["--dev", "-f", "-o", ss, infoname])
 
 
 if __name__ == "__main__":

@@ -21,7 +21,6 @@ bakdir = os.path.join(dirname, "trigger_bak")
 idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
-fastname = os.path.join(dirname, "EnsembleFastLoad.h5")
 dynsim = os.path.join(dirname, "Dynamics_1.h5")
 dynav = os.path.join(dirname, "Dynamics_av.h5")
 
@@ -50,7 +49,6 @@ class MyTests(unittest.TestCase):
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
-        QuasiStatic.cli_fastload(["--dev", "-s", "-o", fastname, infoname])
 
     @classmethod
     def tearDownClass(self):
@@ -78,7 +76,7 @@ class MyTests(unittest.TestCase):
         shutil.rmtree(workdir)
 
         # generate using "--fastload" and check
-        Trigger.cli_generate(["--dev", "--delta-f", 0.1, "-o", workdir, "-q", fastname, infoname])
+        Trigger.cli_generate(["--dev", "--delta-f", 0.1, "-o", workdir, infoname])
         cmp = g5.compare(os.path.join(workdir, idname), os.path.join(bakdir, idname))
         cmp["!="].remove("/meta/Trigger_Generate")
         self.assertEqual(len(cmp["<-"]), 0)

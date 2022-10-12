@@ -383,7 +383,6 @@ def cli_generate(cli_args=None):
     parser.add_argument("-o", "--outdir", type=str, default=".", help="Output directory")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-w", "--time", type=str, default="72h", help="Walltime")
-    parser.add_argument("-q", "--fastload", type=str, help=QuasiStatic.brief["cli_fastload"])
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo (read-only)")
 
     args = tools._parse(parser, cli_args)
@@ -411,7 +410,6 @@ def cli_generate(cli_args=None):
                 GooseHDF5.copy(source, dest, ["/param", "/meta", "/realisation"])
 
                 system = QuasiStatic.allocate_system(source)
-                fastload = QuasiStatic.FastLoad(args.fastload, filename)
 
                 steadystate = info["full"][filename]["steadystate"][...]
                 A = info["full"][filename]["A"][...]
@@ -466,9 +464,7 @@ def cli_generate(cli_args=None):
                     inc = qsroot["inc"][s]
 
                     if load:
-                        system.restore_quasistatic_step(
-                            qsroot, s, align_buffer=False, fastload=fastload
-                        )
+                        system.restore_quasistatic_step(qsroot, s, align_buffer=False)
                         system.advanceToFixedForce(f)
                         x = system.x
                         x_frame = system.x_frame
