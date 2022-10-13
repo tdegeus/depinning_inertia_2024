@@ -80,9 +80,9 @@ def filename2fastload(filepath):
     """
     Convert a filepath to the corresponding fastload filepath.
     """
-    if not re.match(r"(.*)(id=[0-9]*)(\.h5)", filepath):
+    if not re.match(r"(.*)(id=[0-9]*\.h5)", filepath):
         return None
-    return re.sub(r"(.*)(id=[0-9]*)(\.h5)", r"\1\2_fastload\3", filepath)
+    return re.sub(r"(.*)(id=[0-9]*\.h5)", r"\1fastload_\2", filepath)
 
 
 class DummyPrrng:
