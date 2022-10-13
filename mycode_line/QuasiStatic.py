@@ -1120,7 +1120,7 @@ def cli_generatefastload(cli_args=None):
         system = allocate_system(file)
         root = file["QuasiStatic"]
 
-        for step in range(root["inc"].size):
+        for step in tqdm.tqdm(range(root["inc"].size)):
 
             system.restore_quasistatic_step(root, step)
 
