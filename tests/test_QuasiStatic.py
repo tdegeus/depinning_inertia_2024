@@ -129,6 +129,12 @@ class MyTests(unittest.TestCase):
             self.assertTrue(np.allclose(yright, system.y_right()))
             self.assertTrue(np.allclose(fpot, system.f_potential))
 
+        # just a call
+        with h5py.File(filename) as file:
+            system = QuasiStatic.allocate_system(file)
+            step = file["/QuasiStatic/inc"].size - 1
+            system.restore_quasistatic_step(file["QuasiStatic"], step)
+
     def test_chunk(self):
 
         with h5py.File(filename, "a") as file:

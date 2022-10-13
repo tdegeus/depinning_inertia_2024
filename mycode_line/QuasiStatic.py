@@ -373,7 +373,7 @@ class DataMap:
 
         with h5py.File(fastload[0]) as loadfile:
             if fastload[1] in loadfile:
-                self._fastload(loadfile[fastload[1]])
+                self.fastload(loadfile[fastload[1]])
                 if not align_buffer:
                     return
 
