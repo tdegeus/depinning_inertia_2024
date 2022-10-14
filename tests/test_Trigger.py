@@ -48,6 +48,7 @@ class MyTests(unittest.TestCase):
             file["param"]["xyield"]["nbuffer"][...] = 20
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
+        QuasiStatic.cli_generatefastload(["--dev", filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
     @classmethod

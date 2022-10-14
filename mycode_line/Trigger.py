@@ -7,6 +7,7 @@ import argparse
 import inspect
 import itertools
 import os
+import pathlib
 import textwrap
 
 import FrictionQPotSpringBlock  # noqa: F401
@@ -102,9 +103,16 @@ def cli_run(cli_args=None):
                 try_p = root["try_p"][1] + np.arange(system.N)
                 try_p = np.where(try_p < system.N, try_p, try_p - system.N)
 
+            fastload = False
+            if os.path.exists(QuasiStatic.filename2fastload(args.file)):
+                fastload = (
+                    QuasiStatic.filename2fastload(args.file),
+                    f"/QuastiStatic/{file['/Trigger/step'][ibranch]:d}",
+                )
+
             for p in try_p:
 
-                system.restore_quasistatic_step(root=root, step=0, nmargin=10)
+                system.restore_quasistatic_step(root=root, step=0, nmargin=10, fastload=fastload)
                 inc = system.inc
                 i_n = system.istart + system.i
 
@@ -398,6 +406,12 @@ def cli_generate(cli_args=None):
         files = sorted(info["full"])
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in files])
         assert not np.any([os.path.exists(os.path.join(args.outdir, file)) for file in files])
+        assert not np.any(
+            [
+                os.path.exists(QuasiStatic.filename2fastload(os.path.join(args.outdir, file)))
+                for file in files
+            ]
+        )
 
         N = info["/normalisation/N"][...]
 
@@ -406,6 +420,10 @@ def cli_generate(cli_args=None):
             with h5py.File(os.path.join(basedir, filename)) as source, h5py.File(
                 os.path.join(args.outdir, filename), "w"
             ) as dest:
+
+                path = pathlib.Path(QuasiStatic.filename2fastload(source.filename))
+                if path.exists():
+                    pathlib.Path(QuasiStatic.filename2fastload(dest.filename)).symlink_to(path)
 
                 GooseHDF5.copy(source, dest, ["/param", "/meta", "/realisation"])
 
