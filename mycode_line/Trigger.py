@@ -413,6 +413,15 @@ def cli_generate(cli_args=None):
             ]
         )
 
+        executable = entry_points["cli_run"]
+        slurm.serial_group(
+            [f"{executable} {file}" for file in files],
+            basename=executable,
+            group=1,
+            outdir=args.outdir,
+            sbatch={"time": args.time},
+        )
+
         N = info["/normalisation/N"][...]
 
         for filename in tqdm.tqdm(files):
@@ -509,14 +518,3 @@ def cli_generate(cli_args=None):
                     root.create_dataset("T", data=[0], maxshape=(None,), dtype=np.int64)
 
                     dest.flush()
-
-    executable = entry_points["cli_run"]
-    commands = [f"{executable} {file}" for file in files]
-
-    slurm.serial_group(
-        commands,
-        basename=executable,
-        group=1,
-        outdir=args.outdir,
-        sbatch={"time": args.time},
-    )
