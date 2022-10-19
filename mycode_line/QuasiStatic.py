@@ -817,6 +817,11 @@ def cli_run(cli_args=None):
                 if args.fastload:
                     with h5py.File(filename2fastload(args.file), "a") as fload:
                         if f"/QuasiStatic/{step:d}" not in fload:
+
+                            shift = system.istart - system.istate
+                            system.generators.advance(shift)
+                            system.istate += shift
+
                             fload[f"/QuasiStatic/{step:d}/state"] = system.generators.state()
                             fload[f"/QuasiStatic/{step:d}/i"] = system.istate
                             fload[f"/QuasiStatic/{step:d}/y"] = system.y[:, 0]
