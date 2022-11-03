@@ -432,7 +432,8 @@ def cli_generate(cli_args=None):
 
                 path = pathlib.Path(QuasiStatic.filename2fastload(source.filename))
                 if path.exists():
-                    pathlib.Path(QuasiStatic.filename2fastload(dest.filename)).symlink_to(path)
+                    dfile = pathlib.Path(QuasiStatic.filename2fastload(dest.filename))
+                    dfile.symlink_to(os.path.relpath(path, dfile.parent))
 
                 GooseHDF5.copy(source, dest, ["/param", "/meta", "/realisation"])
 
