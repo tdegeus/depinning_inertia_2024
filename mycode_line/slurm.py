@@ -62,6 +62,7 @@ def snippet_load_conda(condabase: str = default_condabase):
 
     ret = ["# Activate hardware optimised environment (or fallback environment)"]
     ret += [f'conda_activate_first_existing "{condabase}$(get_simd_envname)" "{condabase}"']
+    ret += ["conda list"]
     ret += []
 
     return "\n".join(ret)
