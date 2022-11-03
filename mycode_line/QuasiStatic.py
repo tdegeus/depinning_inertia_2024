@@ -1124,10 +1124,22 @@ def cli_generatefastload(cli_args=None):
 
         system = allocate_system(file)
         root = file["QuasiStatic"]
+        last_istart = None
+        last_step = None
 
         for step in tqdm.tqdm(range(root["inc"].size)):
 
-            system.restore_quasistatic_step(root, step)
+            system.restore_quasistatic_step(root, step, align_buffer=False)
+
+            if last_istart is not None:
+                if np.all(np.equal(last_istart, system.istart)):
+                    output[f"/QuasiStatic/{step:d}"] = output[f"/QuasiStatic/{last_step:d}"]
+                    continue
+
+            state = system.generators.state()
+            istate = np.copy(system.istate)
+            last_istart = np.copy(system.istart)
+            last_step = step
 
             shift = system.istart - system.istate
             system.generators.advance(shift)
@@ -1138,6 +1150,8 @@ def cli_generatefastload(cli_args=None):
             output[f"/QuasiStatic/{step:d}/y"] = system.y[:, 0]
             output.flush()
 
+            system.generators.restore(state)
+            system.istate = np.copy(istate)
 
 def cli_stateaftersystemspanning(cli_args=None):
     """
