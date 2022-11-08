@@ -309,7 +309,7 @@ def cli_run(cli_args=None):
 
         for istep in pbar:
 
-            system.chunk_rshift()
+            system.align_chunk(system.x)
             ret = system.flowSteps(output, gammadot, nmargin=10)
             if ret == 0:
                 raise RuntimeError("Ran out-of-bounds: reduce output interval")

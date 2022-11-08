@@ -88,7 +88,7 @@ def cli_run(cli_args=None):
             root = file["QuasiStatic"]
             system.restore_quasistatic_step(root, args.step - 1)
 
-        i_n = system.istart + system.i
+        i_n = system.generators.start + system.i
         dx = file["/param/xyield/dx"][...]
 
         if "Trigger" in file:
@@ -103,12 +103,12 @@ def cli_run(cli_args=None):
         while True:
 
             if np.any(system.i > system.y.shape[1] - system.nbuffer):
-                system.chunk_rshift()
+                system.align_chunk(system.x)
 
-            i_t = system.istart + system.i
+            i_t = system.generators.start + system.i
             ret = system.timeStepsUntilEvent()
             assert np.all(np.logical_and(system.i > 10, system.i < system.y.shape[1] - 10))
-            i = system.istart + system.i
+            i = system.generators.start + system.i
             t = system.t
 
             for r in np.argwhere(i != i_t).ravel():

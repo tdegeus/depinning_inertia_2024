@@ -135,9 +135,9 @@ def cli_run(cli_args=None):
             # ensure a chunk that will be big enough
             system = QuasiStatic.allocate_system(file)
             system.restore_quasistatic_step(sroot, args.step)
-            i_n = system.istart + system.i
+            i_n = system.generators.start + system.i
             system.restore_quasistatic_step(sroot, args.step - 1)
-            nchunk = np.max(i_n - system.istart + system.i)
+            nchunk = np.max(i_n - system.generators.start + system.i)
             file["/param/xyield/nchunk"][...] = int(
                 max(1.5 * nchunk, file["/param/xyield/nchunk"][...])
             )
@@ -158,7 +158,7 @@ def cli_run(cli_args=None):
         pbar.set_description(args.output)
 
         dx = file["/param/xyield/dx"][...]
-        i_n = system.istart + system.i
+        i_n = system.generators.start + system.i
         i = np.copy(i_n)
         N = system.N
 
@@ -207,7 +207,7 @@ def cli_run(cli_args=None):
                 niter = system.timeStepsUntilEvent()
                 iiter += niter
                 stop = niter == 0
-                i = np.copy(system.istart + system.i)
+                i = np.copy(system.generators.start + system.i)
                 a = np.sum(np.not_equal(i, i_n))
                 A = max(A, a)
 
@@ -424,10 +424,10 @@ def cli_average_systemspanning(cli_args=None):
                 assert np.all(system.i > 5) and np.all(system.i < system.y.shape[1] - 5)
 
                 if item == 0:
-                    i_n = system.istart + system.i
+                    i_n = system.generators.start + system.i
                     x_n = np.copy(system.x)
 
-                i = system.istart + system.i
+                i = system.generators.start + system.i
                 broken = i != i_n
 
                 # synct / syncA

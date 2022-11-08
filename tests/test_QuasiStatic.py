@@ -70,7 +70,9 @@ class MyTests(unittest.TestCase):
         jump.chunk_goto(system.x)
         jump.x = system.x
 
-        self.assertTrue(np.all(np.equal(system.istart + system.i, jump.istart + jump.i)))
+        self.assertTrue(
+            np.all(np.equal(system.generators.start + system.i, jump.generators.start + jump.i))
+        )
         self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
         self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
 
@@ -104,7 +106,9 @@ class MyTests(unittest.TestCase):
         jump.chunk_goto(system.x)
         jump.x = system.x
 
-        self.assertTrue(np.all(np.equal(system.istart + system.i, jump.istart + jump.i)))
+        self.assertTrue(
+            np.all(np.equal(system.generators.start + system.i, jump.generators.start + jump.i))
+        )
         self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
         self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
 
