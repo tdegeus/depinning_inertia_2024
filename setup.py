@@ -37,7 +37,7 @@ setup(
     author="Tom de Geus",
     author_email="tom@geus.me",
     description="Code for examining Line1d",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests"]),
     use_scm_version={"write_to": f"{library}/_version.py"},
     setup_requires=["setuptools_scm"],
     entry_points={"console_scripts": entry_points},
