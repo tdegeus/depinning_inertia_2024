@@ -5,14 +5,11 @@ import unittest
 
 import GooseHDF5 as g5
 import h5py
-import numpy as np
 
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
-from mycode_line import Dynamics  # noqa: E402
-from mycode_line import EventMap  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
@@ -56,7 +53,7 @@ class MyTests(unittest.TestCase):
 
         ret = g5.compare(infoname, historic)
 
-        for key in ['/lookup/uuid', '/meta/QuasiStatic_EnsembleInfo', '/lookup/version/value']:
+        for key in ["/lookup/uuid", "/meta/QuasiStatic_EnsembleInfo", "/lookup/version/value"]:
             if key in ret["!="]:
                 ret["!="].remove(key)
 
