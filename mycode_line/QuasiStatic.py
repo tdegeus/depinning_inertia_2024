@@ -194,10 +194,14 @@ class DataMap:
         else:
             raise OSError("Distribution not supported")
 
-        self.yinit = np.copy(self.draw_chunk(xoffset))
+        self.yinit = np.copy(self._draw_chunk(xoffset))
         self.normalisation = Normalisation(file)
 
-    def draw_chunk(self, offset: ArrayLike = None):
+    def _draw_chunk(self, offset: ArrayLike = None):
+        """
+        Draw a chunk of random numbers, and return it.
+        :param offset: Offset the sequence by this value.
+        """
         if self.distribution["type"] == "weibull":
             self.generators.draw_chunk_weibull(
                 k=self.distribution["k"],
@@ -272,7 +276,7 @@ class DataMap:
     def fastload(self, root: h5py.Group):
 
         self.generators.restore(root["state"][...], root["value"][...], root["index"][...])
-        self.y = self.draw_chunk()
+        self.y = self._draw_chunk()
 
     def chunk_goto(
         self,
@@ -327,7 +331,7 @@ class DataMap:
         root: h5py.Group,
         step: int,
         align_buffer: bool = True,
-        nmargin: int = 20,
+        margin: int = 20,
         fastload: bool = True,
     ):
         """
@@ -341,7 +345,7 @@ class DataMap:
         :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
         :param align_buffer: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
-        :param nmargin: Number of yield potentials to leave as margin.
+        :param margin: Number of yield potentials to leave as margin.
         :param fastload: Use fastload file, see :py:func:`cli_generatefastload`.
         """
 
@@ -354,7 +358,7 @@ class DataMap:
         else:
             fastload = None
 
-        self.chunk_goto(x, align_buffer, nmargin, fastload)
+        self.chunk_goto(x, align_buffer, margin, fastload)
         self.quench()
         self.inc = root["inc"][step]
         self.x_frame = root["x_frame"][step]

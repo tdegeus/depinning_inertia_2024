@@ -56,7 +56,7 @@ class MyTests(unittest.TestCase):
 
         ret = g5.compare(infoname, historic)
 
-        for key in ['/lookup/uuid', '/meta/QuasiStatic_EnsembleInfo']:
+        for key in ['/lookup/uuid', '/meta/QuasiStatic_EnsembleInfo', '/lookup/version/value']:
             if key in ret["!="]:
                 ret["!="].remove(key)
 

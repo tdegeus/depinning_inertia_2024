@@ -112,7 +112,7 @@ def cli_run(cli_args=None):
 
             for p in try_p:
 
-                system.restore_quasistatic_step(root=root, step=0, nmargin=10, fastload=fastload)
+                system.restore_quasistatic_step(root=root, step=0, margin=10, fastload=fastload)
                 inc = system.inc
                 i_n = system.generators.start + system.i
 
