@@ -60,7 +60,7 @@ class MyTests(unittest.TestCase):
             system = QuasiStatic.allocate_system(file)
             jump = QuasiStatic.allocate_system(file)
 
-        dx = system.y[..., -1] * 0.5
+        dx = system.chunk.data[..., -1] * 0.5
         n = 50
 
         for i in range(1, n):
@@ -70,9 +70,7 @@ class MyTests(unittest.TestCase):
         jump.chunk_goto(system.x)
         jump.x = system.x
 
-        self.assertTrue(
-            np.all(np.equal(system.generators.start + system.i, jump.generators.start + jump.i))
-        )
+        self.assertTrue(np.all(np.equal(system.i, jump.i)))
         self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
         self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
 
@@ -96,7 +94,7 @@ class MyTests(unittest.TestCase):
             system = QuasiStatic.allocate_system(file)
             jump = QuasiStatic.allocate_system(file)
 
-        dx = system.y[..., -1] * 0.5
+        dx = system.chunk.data[..., -1] * 0.5
         n = 50
 
         for i in range(1, n):
@@ -106,9 +104,7 @@ class MyTests(unittest.TestCase):
         jump.chunk_goto(system.x)
         jump.x = system.x
 
-        self.assertTrue(
-            np.all(np.equal(system.generators.start + system.i, jump.generators.start + jump.i))
-        )
+        self.assertTrue(np.all(np.equal(system.i, jump.i)))
         self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
         self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
 
@@ -126,8 +122,6 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(filename) as file:
             system = QuasiStatic.allocate_system(file)
-            with h5py.File(QuasiStatic.filename2fastload(filename)) as load:
-                system.fastload(load[f"/QuasiStatic/{step:d}"])
             system.restore_quasistatic_step(file["QuasiStatic"], step)
             self.assertTrue(np.allclose(yleft, system.y_left()))
             self.assertTrue(np.allclose(yright, system.y_right()))

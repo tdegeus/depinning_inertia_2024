@@ -309,10 +309,9 @@ def cli_run(cli_args=None):
 
         for istep in pbar:
 
-            system.align_chunk(system.x)
-            ret = system.flowSteps(output, gammadot, nmargin=10)
-            if ret == 0:
-                raise RuntimeError("Ran out-of-bounds: reduce output interval")
+            system.chunk.align(system.x)
+            ret = system.flowSteps(output, gammadot)
+            assert ret != 0
             inc += output
 
             if snapshot > 0:

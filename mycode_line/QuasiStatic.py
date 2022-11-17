@@ -176,89 +176,32 @@ class DataMap:
         elif chunk_use_max:
             nchunk = max(file_yield["nchunk"][...], nchunk)
 
-        self.generators = prrng.pcg32_array_cumsum([nchunk], initstate, initseq)
-        self.nbuffer = file_yield["nbuffer"][...]
+        align = prrng.alignment(margin=20, min_margin=1, buffer=5, strict=False)
 
         if "weibull" in file_yield:
-            self.distribution = dict(
-                type="weibull",
-                offset=file_yield["weibull"]["offset"][...],
-                mean=file_yield["weibull"]["mean"][...],
-                k=file_yield["weibull"]["k"][...],
-            )
+            distribution = prrng.distribution.weibull
+            parameters = [
+                file_yield["weibull"]["k"][...],
+                2 * file_yield["weibull"]["mean"][...],
+                file_yield["weibull"]["offset"][...],
+            ]
         elif "delta" in file_yield:
-            self.distribution = dict(
-                type="delta",
-                mean=file_yield["delta"]["mean"][...],
-            )
+            distribution = prrng.distribution.delta
+            parameters = [2 * file_yield["delta"]["mean"][...], 0]
         else:
             raise OSError("Distribution not supported")
 
-        self.yinit = np.copy(self._draw_chunk(xoffset))
+        self.chunk = prrng.pcg32_tensor_cumsum_1_1(
+            shape=[nchunk],
+            initstate=initstate,
+            initseq=initseq,
+            distribution=distribution,
+            parameters=parameters,
+            align=align,
+        )
+
+        self.chunk += xoffset
         self.normalisation = Normalisation(file)
-
-    def _draw_chunk(self, offset: ArrayLike = None):
-        """
-        Draw a chunk of random numbers, and return it.
-        :param offset: Offset the sequence by this value.
-        """
-        if self.distribution["type"] == "weibull":
-            self.generators.draw_chunk_weibull(
-                k=self.distribution["k"],
-                scale=2 * self.distribution["mean"],
-                offset=self.distribution["offset"],
-            )
-        elif self.distribution["type"] == "delta":
-            self.generators.draw_chunk_delta(scale=2 * self.distribution["mean"])
-        else:
-            raise OSError("Distribution not supported")
-
-        if offset is not None:
-            self.generators.chunk += offset
-
-        return self.generators.chunk
-
-    def align_chunk(self, target, buffer: int = 0, margin: int = 100, strict: bool = True):
-        """
-        Align the chunk of yield positions with a target.
-
-        :param buffer:
-            If non-zero, the chunk is not modified unless the target is outside the chunk
-            or a buffer zone left/right.
-
-        :param margin:
-            Index at which the target should be placed. Default: `self.nbuffer`.
-
-        :param strict:
-            If True, `margin` is respected strictly, otherwise only approximatively.
-        """
-
-        if margin >= self.y.shape[1]:
-            margin = int(self.y.shape[1] / 2)
-
-        if self.distribution["type"] == "weibull":
-            self.generators.align_chunk_weibull(
-                target=target,
-                buffer=buffer,
-                margin=margin,
-                strict=strict,
-                k=self.distribution["k"],
-                scale=2 * self.distribution["mean"],
-                offset=self.distribution["offset"],
-            )
-        elif self.distribution["type"] == "delta":
-            self.generators.align_chunk_delta(
-                target=target,
-                buffer=buffer,
-                margin=margin,
-                strict=strict,
-                scale=2 * self.distribution["mean"],
-            )
-        else:
-            raise OSError("Distribution not supported")
-
-        self.y = self.generators.chunk
-        self.refresh()
 
     def _approx_mean_width(self) -> float:
         """
@@ -272,11 +215,6 @@ class DataMap:
             return 2 * self.distribution["mean"]
 
         raise OSError("Distribution not supported")
-
-    def fastload(self, root: h5py.Group):
-
-        self.generators.restore(root["state"][...], root["value"][...], root["index"][...])
-        self.y = self._draw_chunk()
 
     def chunk_goto(
         self,
@@ -295,36 +233,27 @@ class DataMap:
         :param fastload: If available ``(filename, groupname)`` of the closest fastload info.
         """
 
-        if not align_buffer:
-            if np.all(np.logical_and(self.y[:, margin] < x, self.y[:, -(1 + margin)] >= x)):
-                return
-
-        if np.all(np.logical_and(self.y[:, 0] < x, self.y[:, -1] >= x)):
-            return self.align_chunk(x, margin=margin)
+        if self.chunk.contains(x):
+            self.chunk.align(x)
 
         if fastload is None:
-            return self.align_chunk(x, margin=margin)
+            return self.chunk.align(x)
 
         if len(fastload) != 2:
-            return self.align_chunk(x, margin=margin)
+            return self.chunk.align(x)
 
         if fastload[0] is None:
-            return self.align_chunk(x, margin=margin)
+            return self.chunk.align(x)
 
         if not os.path.exists(fastload[0]):
-            return self.align_chunk(x, margin=margin)
-
-        dy = self.y[:, -1] - self.y[:, 0]
-        if np.all(np.logical_and(x > self.y[:, 0], x < self.y[:, -1] + dy)):
-            return self.align_chunk(x, margin=margin)
+            return self.chunk.align(x)
 
         with h5py.File(fastload[0]) as loadfile:
             if fastload[1] in loadfile:
-                self.fastload(loadfile[fastload[1]])
-                if not align_buffer:
-                    return
+                root = loadfile[fastload[1]]
+                self.chunk.restore(root["state"][...], root["value"][...], root["index"][...])
 
-        return self.align_chunk(x, margin=margin)
+        return self.chunk.align(x)
 
     def restore_quasistatic_step(
         self,
@@ -381,10 +310,8 @@ class System(model.System, DataMap):
             k_neighbours=file["param"]["k_neighbours"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            x_yield=self.yinit,
+            chunk=self.chunk,
         )
-
-        self.yinit = None
 
 
 class SystemSemiSmooth(model.SystemSemiSmooth, DataMap):
@@ -404,10 +331,8 @@ class SystemSemiSmooth(model.SystemSemiSmooth, DataMap):
             k_neighbours=file["param"]["k_neighbours"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            x_yield=self.yinit,
+            chunk=self.chunk,
         )
-
-        self.yinit = None
 
 
 class SystemSmooth(model.SystemSmooth, DataMap):
@@ -426,10 +351,8 @@ class SystemSmooth(model.SystemSmooth, DataMap):
             k_neighbours=file["param"]["k_neighbours"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            x_yield=self.yinit,
+            chunk=self.chunk,
         )
-
-        self.yinit = None
 
 
 def allocate_system(file: h5py.File, **kwargs):
@@ -694,7 +617,7 @@ def cli_run(cli_args=None):
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, **meta)
 
         if "QuasiStatic" not in file:
-            ret = minimise(nmargin=10)
+            ret = minimise()
             assert ret == 0
             system.t = 0.0
 
@@ -726,8 +649,6 @@ def cli_run(cli_args=None):
 
         for step in pbar:
 
-            system.align_chunk(system.x, margin=15, buffer=system.nbuffer)
-
             if args.fixed_step:
                 kick = True
                 system.x_frame += dxframe
@@ -738,11 +659,8 @@ def cli_run(cli_args=None):
             if kick:
                 inc_n = system.inc
 
-                while True:
-                    ret = minimise(nmargin=10)
-                    if ret == 0:
-                        break
-                    system.align_chunk(system.x)
+                ret = minimise()
+                assert ret == 0
 
                 niter = system.inc - inc_n
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
@@ -848,14 +766,14 @@ def basic_output(file: h5py.File) -> dict:
     ret["kick"] = root["kick"][...].astype(bool)
     ret["step"] = steps
 
-    for i, step in enumerate(tqdm.tqdm(steps)):
+    for j, step in enumerate(tqdm.tqdm(steps)):
 
         system.restore_quasistatic_step(root, step, align_buffer=False)
 
-        if i == 0:
-            i_n = system.generators.start + system.i
+        if j == 0:
+            i_n = system.i
 
-        i = system.generators.start + system.i
+        i = system.i
         ret["x_frame"][step] = system.x_frame
         ret["f_frame"][step] = np.mean(system.f_frame)
         ret["f_potential"][step] = -np.mean(system.f_potential)
@@ -1074,16 +992,16 @@ def cli_generatefastload(cli_args=None):
             system.restore_quasistatic_step(root, step, align_buffer=False)
 
             if last_start is not None:
-                if np.all(np.equal(last_start, system.generators.start)):
+                if np.all(np.equal(last_start, system.chunk.start)):
                     output[f"/QuasiStatic/{step:d}"] = output[f"/QuasiStatic/{last_step:d}"]
                     continue
 
-            i = system.generators.start
-            output[f"/QuasiStatic/{step:d}/state"] = system.generators.state(i)
+            i = system.chunk.start
+            output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
             output[f"/QuasiStatic/{step:d}/index"] = i
-            output[f"/QuasiStatic/{step:d}/value"] = system.y[:, 0]
+            output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
             output.flush()
-            last_start = np.copy(system.generators.start)
+            last_start = np.copy(system.chunk.start)
             last_step = step
 
 

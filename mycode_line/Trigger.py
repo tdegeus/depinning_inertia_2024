@@ -114,17 +114,17 @@ def cli_run(cli_args=None):
 
                 system.restore_quasistatic_step(root=root, step=0, margin=10, fastload=fastload)
                 inc = system.inc
-                i_n = system.generators.start + system.i
+                i_n = system.i
 
                 system.trigger(p=p, eps=dx, direction=1)
 
                 while True:
-                    ret = system.minimise(nmargin=10, time_activity=True)
+                    ret = system.minimise(time_activity=True)
                     if ret == 0:
                         break
-                    system.align_chunk(system.x)
+                    system.chunk.align(system.x)
 
-                A = np.sum(system.generators.start + system.i != i_n)
+                A = np.sum(system.i != i_n)
 
                 if args.check is not None:
                     assert A >= 0
@@ -135,7 +135,7 @@ def cli_run(cli_args=None):
             pbar.set_description(f"{basename}: branch = {ibranch:8d}, p = {p:8d}, A = {A:8d}")
             pbar.refresh()
 
-            S = np.sum(system.generators.start + system.i - i_n)
+            S = np.sum(system.i - i_n)
             T = system.quasistaticActivityLast() - inc
             f_frame = np.mean(system.f_frame)
 
