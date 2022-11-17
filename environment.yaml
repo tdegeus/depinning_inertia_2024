@@ -14,11 +14,10 @@ dependencies:
 - pybind11
 - python
 - python-cppcolormap
-- python-frictionqpotspringblock >=0.17.1
+- python-frictionqpotspringblock >=0.18.0
 - python-gooseeye
 - python-goosefem >=1.1.0
-- python-prrng >=1.6.0
-- python-qpot >=0.12.1
+- python-prrng >=1.7.1
 - scikit-build
 - setuptools_scm
 - shelephant
