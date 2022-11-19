@@ -219,8 +219,6 @@ class DataMap:
     def chunk_goto(
         self,
         x: ArrayLike,
-        align_buffer: bool = True,
-        margin: int = 20,
         fastload: tuple(str, str) = None,
     ):
         """
@@ -228,8 +226,6 @@ class DataMap:
         Note: the position is not updated!
 
         :param x: Target position.
-        :param align_buffer: Contain ``x`` in buffer (``True``) or just in chunk (``False``).
-        :param margin: Number of yield potentials to leave as margin (not the same as buffer!).
         :param fastload: If available ``(filename, groupname)`` of the closest fastload info.
         """
 
@@ -259,8 +255,6 @@ class DataMap:
         self,
         root: h5py.Group,
         step: int,
-        align_buffer: bool = True,
-        margin: int = 20,
         fastload: bool = True,
     ):
         """
@@ -273,9 +267,7 @@ class DataMap:
 
         :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
-        :param align_buffer: Contain ``x`` in buffer (``True``) or just in chunk (``False``)
-        :param margin: Number of yield potentials to leave as margin.
-        :param fastload: Use fastload file, see :py:func:`cli_generatefastload`.
+        :param fastload: Use fastload file (if detected), see :py:func:`cli_generatefastload`.
         """
 
         x = root["x"][str(step)][...]
@@ -287,7 +279,7 @@ class DataMap:
         else:
             fastload = None
 
-        self.chunk_goto(x, align_buffer, margin, fastload)
+        self.chunk_goto(x, fastload)
         self.quench()
         self.inc = root["inc"][step]
         self.x_frame = root["x_frame"][step]
@@ -768,7 +760,7 @@ def basic_output(file: h5py.File) -> dict:
 
     for j, step in enumerate(tqdm.tqdm(steps)):
 
-        system.restore_quasistatic_step(root, step, align_buffer=False)
+        system.restore_quasistatic_step(root, step)
 
         if j == 0:
             i_n = system.i
@@ -989,7 +981,7 @@ def cli_generatefastload(cli_args=None):
 
         for step in tqdm.tqdm(range(root["inc"].size)):
 
-            system.restore_quasistatic_step(root, step, align_buffer=False)
+            system.restore_quasistatic_step(root, step)
 
             if last_start is not None:
                 if np.all(np.equal(last_start, system.chunk.start)):
@@ -1001,7 +993,7 @@ def cli_generatefastload(cli_args=None):
             output[f"/QuasiStatic/{step:d}/index"] = i
             output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
             output.flush()
-            last_start = np.copy(system.chunk.start)
+            last_start = np.copy(i)
             last_step = step
 
 
@@ -1089,7 +1081,7 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                    system.restore_quasistatic_step(source["QuasiStatic"], s, align_buffer=False)
+                    system.restore_quasistatic_step(source["QuasiStatic"], s)
 
                     xr = system.y_right() - system.x
                     xl = system.x - system.y_left()
