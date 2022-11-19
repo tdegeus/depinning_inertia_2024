@@ -36,7 +36,6 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(filename, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 100
-            file["param"]["xyield"]["nbuffer"][...] = 20
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])

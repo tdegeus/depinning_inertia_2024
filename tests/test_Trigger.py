@@ -45,7 +45,6 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(filename, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 150
-            file["param"]["xyield"]["nbuffer"][...] = 20
 
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_generatefastload(["--dev", filename])
@@ -90,7 +89,6 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(tfile, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 10000
-            file["param"]["xyield"]["nbuffer"][...] = 300
             branch = np.arange(file["/Trigger/step"].size)
 
         Trigger.cli_run(["--dev", tfile, "--check", branch[0]])

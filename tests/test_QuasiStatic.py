@@ -2,10 +2,14 @@ import os
 import shutil
 import sys
 import unittest
+from functools import partialmethod
 
 import GooseHDF5 as g5
 import h5py
 import numpy as np
+from tqdm import tqdm
+
+tqdm.__init__ = partialmethod(tqdm.__init__, disable=True)
 
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
@@ -38,9 +42,8 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(filename, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 100
-            file["param"]["xyield"]["nbuffer"][...] = 20
 
-        QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
+        QuasiStatic.cli_run(["--dev", "-n", 1000, filename, "--fastload"])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
     @classmethod
@@ -109,6 +112,9 @@ class MyTests(unittest.TestCase):
         self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
 
     def test_fastload(self):
+        """
+        Read using fastload.
+        """
 
         with h5py.File(filename) as file:
             system = QuasiStatic.allocate_system(file)
@@ -118,7 +124,7 @@ class MyTests(unittest.TestCase):
             yright = system.y_right()
             fpot = system.f_potential
 
-        QuasiStatic.cli_generatefastload(["--dev", filename])
+        QuasiStatic.cli_generatefastload(["--dev", filename, "--force"])
 
         with h5py.File(filename) as file:
             system = QuasiStatic.allocate_system(file)
@@ -134,10 +140,12 @@ class MyTests(unittest.TestCase):
             system.restore_quasistatic_step(file["QuasiStatic"], step)
 
     def test_chunk(self):
+        """
+        Rerun using huge chunk.
+        """
 
         with h5py.File(filename, "a") as file:
-            file["param"]["xyield"]["nchunk"][...] = 10000
-            file["param"]["xyield"]["nbuffer"][...] = 300
+            file["param"]["xyield"]["nchunk"][...] = 2000
 
         QuasiStatic.cli_run(["--dev", "--check", 950, filename])
         QuasiStatic.cli_run(["--dev", "--check", 951, filename])
@@ -157,6 +165,9 @@ class MyTests(unittest.TestCase):
                     self.assertEqual(len(diff[key]), 0)
 
     def test_eventmap(self):
+        """
+        Create event map.
+        """
 
         with h5py.File(infoname) as file:
             for fname in file["full"]:
@@ -178,6 +189,9 @@ class MyTests(unittest.TestCase):
         EventMap.cli_basic_output(["--dev", "-f", "-o", out, out_s, out_t])
 
     def test_measuredynamics(self):
+        """
+        Rerun dynamics.
+        """
 
         with h5py.File(infoname) as file:
             for fname in file["full"]:
