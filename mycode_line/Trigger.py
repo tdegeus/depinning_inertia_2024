@@ -112,7 +112,7 @@ def cli_run(cli_args=None):
 
             for p in try_p:
 
-                system.restore_quasistatic_step(root=root, step=0, margin=10, fastload=fastload)
+                system.restore_quasistatic_step(root, 0, fastload)
                 inc = system.inc
                 i_n = system.i
 
@@ -492,7 +492,7 @@ def cli_generate(cli_args=None):
                     inc = qsroot["inc"][s]
 
                     if load:
-                        system.restore_quasistatic_step(qsroot, s, align_buffer=False)
+                        system.restore_quasistatic_step(qsroot, s)
                         system.advanceToFixedForce(f)
                         x = system.x
                         x_frame = system.x_frame
