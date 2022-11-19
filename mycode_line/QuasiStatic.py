@@ -176,7 +176,8 @@ class DataMap:
         elif chunk_use_max:
             nchunk = max(file_yield["nchunk"][...], nchunk)
 
-        align = prrng.alignment(margin=20, min_margin=1, buffer=5, strict=False)
+        assert nchunk > 30
+        align = prrng.alignment(margin=30, min_margin=6, buffer=5, strict=False)
 
         if "weibull" in file_yield:
             distribution = prrng.distribution.weibull
@@ -230,7 +231,13 @@ class DataMap:
         """
 
         if self.chunk.contains(x):
-            self.chunk.align(x)
+            return self.chunk.align(x)
+
+        front = self.chunk.data[:, 0]
+        back = self.chunk.data[:, -1]
+
+        if np.all(self.x < 3 * back - 2 * front):
+            return self.chunk.align(x)
 
         if fastload is None:
             return self.chunk.align(x)
@@ -464,7 +471,6 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     file["/param/xyield/initstate"] = np.arange(N).astype(np.int64)
     file["/param/xyield/initseq"] = np.zeros(N, dtype=np.int64)
     file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * N)))
-    file["/param/xyield/nbuffer"] = 300
     file["/param/xyield/xoffset"] = -100
     file["/param/xyield/weibull/offset"] = 1e-5
     file["/param/xyield/weibull/mean"] = 1
@@ -673,10 +679,11 @@ def cli_run(cli_args=None):
                 if args.fastload:
                     with h5py.File(filename2fastload(args.file), "a") as fload:
                         if f"/QuasiStatic/{step:d}" not in fload:
-                            i = system.generators.start
-                            fload[f"/QuasiStatic/{step:d}/state"] = system.generators.state(i)
+                            i = system.chunk.start
+                            fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
                             fload[f"/QuasiStatic/{step:d}/index"] = i
-                            fload[f"/QuasiStatic/{step:d}/value"] = system.y[:, 0]
+                            fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
+                            fload.flush()
 
 
 def steadystate(
