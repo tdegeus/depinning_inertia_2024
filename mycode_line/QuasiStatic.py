@@ -236,7 +236,7 @@ class DataMap:
         front = self.chunk.data[:, 0]
         back = self.chunk.data[:, -1]
 
-        if np.all(self.x < 3 * back - 2 * front):
+        if np.all(x < 2 * back - front):
             return self.chunk.align(x)
 
         if fastload is None:
