@@ -1,13 +1,14 @@
 import argparse
 import inspect
 import os
-import sys
+import pathlib
 import textwrap
 
 import GooseSLURM
 import numpy as np
 import shelephant
 
+from . import tools
 from ._version import version
 
 default_condabase = "code_line"
@@ -15,6 +16,7 @@ default_condabase = "code_line"
 entry_points = dict(
     cli_serial_group="JobSerialGroup",
     cli_serial="JobSerial",
+    cli_from_yaml="JobFromYAML",
 )
 
 slurm_defaults = dict(
@@ -22,7 +24,7 @@ slurm_defaults = dict(
 )
 
 
-def replace_entry_point(docstring):
+def replace_ep(docstring):
     """
     Replace ":py:func:`...`" with the relevant entry_point name
     """
@@ -129,9 +131,9 @@ def serial(
     flush=True,
 ):
     """
-    Group a number of commands per job-script.
+    Create job script to run a command.
 
-    :param commands: List of commands.
+    :param command: Command.
     :param basename: Base-name of the job-scripts (and their log-scripts),
     :param outdir: Directory where to write the job-scripts (nothing in changed for the commands).
     :param sbatch: Job options.
@@ -261,20 +263,16 @@ def cli_serial_group(cli_args=None):
         "myname_{index:s}_{conda:s}"
     """
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    docstring = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    if cli_args is None:
-        cli_args = sys.argv[1:]
-    else:
-        cli_args = [str(arg) for arg in cli_args]
-
-    class MyFormatter(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
         pass
 
-    parser = argparse.ArgumentParser(
-        formatter_class=MyFormatter, description=replace_entry_point(docstring)
-    )
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
     account = slurm_defaults["account"]
     parser.add_argument("--conda", type=str, default=default_condabase, help="Env-basename")
@@ -289,7 +287,7 @@ def cli_serial_group(cli_args=None):
     parser.add_argument("-y", "--yaml", type=str, help="Input files from YAML file")
     parser.add_argument("files", nargs="*", type=str, help="Files")
 
-    args = parser.parse_args(cli_args)
+    args = tools._parse(parser, cli_args)
 
     if args.yaml is not None:
         args.files += shelephant.yaml.read(args.yaml)[args.yaml_key]
@@ -313,20 +311,16 @@ def cli_serial(cli_args=None):
     Job-script to run a command.
     """
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    docstring = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    if cli_args is None:
-        cli_args = sys.argv[1:]
-    else:
-        cli_args = [str(arg) for arg in cli_args]
-
-    class MyFormatter(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
         pass
 
-    parser = argparse.ArgumentParser(
-        formatter_class=MyFormatter, description=replace_entry_point(docstring)
-    )
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
     account = slurm_defaults["account"]
     parser.add_argument("--conda", type=str, default=default_condabase, help="Env-basename")
@@ -337,7 +331,7 @@ def cli_serial(cli_args=None):
     parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
     parser.add_argument("command", type=str, help="The command")
 
-    args = parser.parse_args(cli_args)
+    args = tools._parse(parser, cli_args)
 
     basename = args.name
 
@@ -350,4 +344,50 @@ def cli_serial(cli_args=None):
         outdir=args.outdir,
         conda=dict(condabase=args.conda),
         sbatch={"time": args.time},
+    )
+
+
+def cli_from_yaml(cli_args=None):
+    """
+    Create job-scripts from commands stored in a YAML file.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    account = slurm_defaults["account"]
+    parser.add_argument("--conda", type=str, default=default_condabase, help="Env-basename")
+    parser.add_argument("-a", "--account", type=str, default=account, help="Account")
+    parser.add_argument("-b", "--basename", type=str, default="job", help="Basename for scripts.")
+    parser.add_argument("-k", "--key", type=str, help="Key to read from file")
+    parser.add_argument("-n", "--group", type=int, default=1, help="#commands to group")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
+    parser.add_argument("yaml", type=str, help="The YAML file")
+
+    args = tools._parse(parser, cli_args)
+
+    basedir = pathlib.Path(args.yaml).parent
+    commands = shelephant.yaml.read(args.yaml)
+
+    if args.key is not None:
+        commands = commands[args.key]
+
+    assert isinstance(commands, list)
+
+    serial_group(
+        commands,
+        basename=args.basename,
+        group=args.group,
+        outdir=basedir,
+        conda=dict(condabase=args.conda),
+        sbatch={"time": args.time, "account": args.account},
     )
