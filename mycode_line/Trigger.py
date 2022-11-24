@@ -14,8 +14,10 @@ import FrictionQPotSpringBlock  # noqa: F401
 import GooseHDF5
 import h5py
 import numpy as np
+import shelephant
 import tqdm
 
+from . import EventMap
 from . import QuasiStatic
 from . import slurm
 from . import storage
@@ -28,6 +30,7 @@ entry_points = dict(
     cli_run="Trigger_Run",
     cli_generate="Trigger_Generate",
     cli_ensembleinfo="Trigger_EnsembleInfo",
+    cli_job_rerun_eventmap="Trigger_Job_Rerun_EventMap",
 )
 
 file_defaults = dict(
@@ -519,3 +522,82 @@ def cli_generate(cli_args=None):
                     root.create_dataset("T", data=[0], maxshape=(None,), dtype=np.int64)
 
                     dest.flush()
+
+
+def cli_job_rerun_eventmap(cli_args=None):
+    """
+    Create jobs to get event maps, from:
+
+    -   ``--largest-avalanches=n``: the (maximum) ``n`` largest avalanches.
+    -   ``--system-spanning=n``: (maximum) ``n`` avalanches.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--largest-avalanches", type=int, help="n largest avalanches")
+    parser.add_argument("--system-spanning", type=int, help="n system spanning events")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Output file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
+    parser.add_argument("info", type=str, help="Trigger.EnsembleInfo (read-only)")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.info)
+    sourcedir = pathlib.Path(args.info).resolve().parent
+
+    with h5py.File(args.info) as file:
+
+        S = file["S"][...]
+        A = file["A"][...]
+        N = file["N"][...]
+        branch = file["branch"][...]
+        source = np.array(tools.h5py_read_unique(file, "/source", asstr=True))
+
+    if args.largest_avalanches is not None:
+
+        assert args.system_spanning is None
+        n = args.largest_avalanches
+        assert n > 0
+
+        keep = A < N
+        S = S[keep]
+        A = A[keep]
+        branch = branch[keep]
+        source = source[keep]
+
+        sorter = np.argsort(A)[::-1]
+        S = S[sorter][:n]
+        A = A[sorter][:n]
+        branch = branch[sorter][:n]
+        source = source[sorter][:n]
+
+    elif args.system_spanning is not None:
+
+        assert args.largest_avalanches is None
+        n = args.system_spanning
+        assert n > 0
+
+        keep = A == N
+        S = S[keep][:n]
+        A = A[keep][:n]
+        branch = branch[keep][:n]
+        source = source[keep][:n]
+
+    excecutable = EventMap.entry_points["cli_run"]
+    commands = []
+
+    for i in range(A.size):
+        out = f"{os.path.splitext(source[i])[0]}_branch={branch[i]}.h5"
+        src = os.path.relpath(sourcedir / source[i])
+        commands.append(f"{excecutable} --output={out} --smax={S[i]} --step={branch[i]} {src}")
+
+    shelephant.yaml.dump(args.output, commands)
