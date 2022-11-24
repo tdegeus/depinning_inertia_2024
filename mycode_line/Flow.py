@@ -6,16 +6,17 @@ from __future__ import annotations
 import argparse
 import inspect
 import os
+import pathlib
 import re
 import textwrap
 
 import FrictionQPotSpringBlock  # noqa: F401
 import h5py
 import numpy as np
+import shelephant
 import tqdm
 
 from . import QuasiStatic
-from . import slurm
 from . import storage
 from . import tools
 from ._version import version
@@ -193,13 +194,6 @@ def cli_generate(cli_args=None):
         version=version,
     )
     parser.add_argument(
-        "-w",
-        "--time",
-        type=str,
-        default="72h",
-        help="Walltime",
-    )
-    parser.add_argument(
         "outdir",
         type=str,
         help="Output directory",
@@ -217,8 +211,8 @@ def cli_generate(cli_args=None):
     if args.nstep is None:
         args.nstep = int(np.interp(args.gammadot, known_gammadot, known_nstep))
 
-    if not os.path.isdir(args.outdir):
-        os.makedirs(args.outdir)
+    outdir = pathlib.Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
     files = []
 
@@ -227,7 +221,7 @@ def cli_generate(cli_args=None):
         files += [f"id={i:04d}.h5"]
         seed = i * args.size
 
-        with h5py.File(os.path.join(args.outdir, files[-1]), "w") as file:
+        with h5py.File(outdir / files[-1], "w") as file:
             QuasiStatic.generate(
                 file=file,
                 N=args.size,
@@ -240,13 +234,8 @@ def cli_generate(cli_args=None):
             file["/Flow/snapshot/interval"] = args.output * args.snapshot
 
     executable = entry_points["cli_run"]
-    slurm.serial_group(
-        [f"{executable} --nstep {args.nstep:d} {file}" for file in files],
-        basename=executable,
-        group=1,
-        outdir=args.outdir,
-        sbatch={"time": args.time},
-    )
+    commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
+    shelephant.yaml.dump(outdir / "commands.yaml", commands)
 
 
 def run_create_extendible(file: h5py.File):

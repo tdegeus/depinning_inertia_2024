@@ -19,7 +19,6 @@ import tqdm
 
 from . import EventMap
 from . import QuasiStatic
-from . import slurm
 from . import storage
 from . import tools
 from ._version import version
@@ -393,45 +392,34 @@ def cli_generate(cli_args=None):
     parser.add_argument("--info-ss", action="store_true", help="Use steadystate from EnsembleInfo")
     parser.add_argument("-o", "--outdir", type=str, default=".", help="Output directory")
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-w", "--time", type=str, default="72h", help="Walltime")
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo (read-only)")
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.ensembleinfo)
 
-    if not os.path.isdir(args.outdir):
-        os.makedirs(args.outdir)
+    outdir = pathlib.Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
-    basedir = os.path.dirname(args.ensembleinfo)
+    basedir = pathlib.Path(args.ensembleinfo).parent
 
     with h5py.File(args.ensembleinfo) as info:
 
         files = sorted(info["full"])
-        assert np.all([os.path.exists(os.path.join(basedir, file)) for file in files])
-        assert not np.any([os.path.exists(os.path.join(args.outdir, file)) for file in files])
+        assert np.all([(basedir / file).exists() for file in files])
+        assert not np.any([(outdir / file).exists() for file in files])
         assert not np.any(
-            [
-                os.path.exists(QuasiStatic.filename2fastload(os.path.join(args.outdir, file)))
-                for file in files
-            ]
+            [os.path.exists(QuasiStatic.filename2fastload(outdir / file)) for file in files]
         )
 
         executable = entry_points["cli_run"]
-        slurm.serial_group(
-            [f"{executable} {file}" for file in files],
-            basename=executable,
-            group=1,
-            outdir=args.outdir,
-            sbatch={"time": args.time},
-        )
+        commands = [f"{executable} {file}" for file in files]
+        shelephant.yaml.dump(outdir / "commands.yaml", commands)
 
         N = info["/normalisation/N"][...]
 
         for filename in tqdm.tqdm(files):
 
-            with h5py.File(os.path.join(basedir, filename)) as source, h5py.File(
-                os.path.join(args.outdir, filename), "w"
-            ) as dest:
+            with h5py.File(basedir / filename) as source, h5py.File(outdir / filename, "w") as dest:
 
                 path = pathlib.Path(QuasiStatic.filename2fastload(source.filename))
                 if path.exists():

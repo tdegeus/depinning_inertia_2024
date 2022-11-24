@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import os
+import pathlib
 import re
 import textwrap
 import uuid
@@ -16,10 +17,10 @@ import GooseEYE as eye
 import h5py
 import numpy as np
 import prrng
+import shelephant
 import tqdm
 from numpy.typing import ArrayLike
 
-from . import slurm
 from . import storage
 from . import tag
 from . import tools
@@ -79,9 +80,9 @@ def filename2fastload(filepath):
     """
     Convert a filepath to the corresponding fastload filepath.
     """
-    if not re.match(r"(.*)(id=[0-9]*\.h5)", filepath):
+    if not re.match(r"(.*)(id=[0-9]*\.h5)", str(filepath)):
         return None
-    return re.sub(r"(.*)(id=[0-9]*\.h5)", r"\1fastload_\2", filepath)
+    return re.sub(r"(.*)(id=[0-9]*\.h5)", r"\1fastload_\2", str(filepath))
 
 
 class Normalisation:
@@ -506,14 +507,13 @@ def cli_generate(cli_args=None):
     parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-w", "--time", type=str, default="72h", help="Walltime")
     parser.add_argument("outdir", type=str, help="Output directory")
 
     args = tools._parse(parser, cli_args)
     assert args.nopassing or args.eta is not None
 
-    if not os.path.isdir(args.outdir):
-        os.makedirs(args.outdir)
+    outdir = pathlib.Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
     files = []
 
@@ -522,7 +522,7 @@ def cli_generate(cli_args=None):
         files += [f"id={i:04d}.h5"]
         seed = i * args.size
 
-        with h5py.File(os.path.join(args.outdir, files[-1]), "w") as file:
+        with h5py.File(outdir / files[-1], "w") as file:
             generate(
                 file=file,
                 N=args.size,
@@ -538,13 +538,7 @@ def cli_generate(cli_args=None):
     else:
         commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
 
-    slurm.serial_group(
-        commands,
-        basename=executable,
-        group=1,
-        outdir=args.outdir,
-        sbatch={"time": args.time},
-    )
+    shelephant.yaml.dump(outdir / "commands.yaml", commands)
 
 
 def cli_run(cli_args=None):
