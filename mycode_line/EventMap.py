@@ -82,7 +82,7 @@ def cli_run(cli_args=None):
             args.smax = sys.maxsize
 
         if "Trigger" in file:
-            root = file[f"/Trigger/items/{args.step:d}"]
+            root = file[f"/Trigger/branches/{args.step:d}"]
             system.restore_quasistatic_step(root, 0)
         else:
             root = file["QuasiStatic"]
