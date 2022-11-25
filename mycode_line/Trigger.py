@@ -440,7 +440,6 @@ def cli_generate(cli_args=None):
                     ss = step[step > steadystate]
                 else:
                     ss = step[np.logical_and(A == N, step > steadystate)]
-                n = ss.size - 1
 
                 QuasiStatic.create_check_meta(dest, f"/meta/{progname}", dev=args.develop)
 
@@ -454,15 +453,15 @@ def cli_generate(cli_args=None):
                 meta.attrs["f_frame"] = "Frame force (after minimisation) [ntrigger]"
 
                 key = "/Trigger/step"
-                dset = dest.create_dataset(key, shape=(n,), maxshape=(None,), dtype=np.int64)
+                dset = dest.create_dataset(key, shape=(1,), maxshape=(None,), dtype=np.int64)
                 dset.attrs["desc"] = "Quasi-static-load-step on which configuration is based"
 
                 key = "/Trigger/step_c"
-                dset = dest.create_dataset(key, shape=(n,), maxshape=(None,), dtype=np.int64)
+                dset = dest.create_dataset(key, shape=(1,), maxshape=(None,), dtype=np.int64)
                 dset.attrs["desc"] = "Quasi-static-load-step of last system-spanning event"
 
                 key = "/Trigger/loaded"
-                dset = dest.create_dataset(key, shape=(n,), maxshape=(None,), dtype=bool)
+                dset = dest.create_dataset(key, shape=(1,), maxshape=(None,), dtype=bool)
                 dset.attrs["desc"] = "True if 'elastic' loading was applied to 'step'"
 
                 ibranch = 0
@@ -491,10 +490,11 @@ def cli_generate(cli_args=None):
                         system.advanceToFixedForce(f)
                         x = system.x
                         x_frame = system.x_frame
+                        assert np.isclose(np.mean(system.f_frame), f)
 
-                    dest["/Trigger/step"][ibranch] = s
-                    dest["/Trigger/step_c"][ibranch] = start
-                    dest["/Trigger/loaded"][ibranch] = load
+                    storage.dset_extend1d(dest, "/Trigger/step", ibranch, s)
+                    storage.dset_extend1d(dest, "/Trigger/step_c", ibranch, start)
+                    storage.dset_extend1d(dest, "/Trigger/loaded", ibranch, load)
 
                     root = dest.create_group(f"/Trigger/branches/{ibranch:d}")
 
@@ -515,6 +515,8 @@ def cli_generate(cli_args=None):
 
                     dest.flush()
                     ibranch += 1
+
+                assert ibranch > 0
 
 
 def cli_job_rerun_eventmap(cli_args=None):
