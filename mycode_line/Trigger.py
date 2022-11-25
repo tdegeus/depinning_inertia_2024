@@ -465,10 +465,14 @@ def cli_generate(cli_args=None):
                 dset = dest.create_dataset(key, shape=(n,), maxshape=(None,), dtype=bool)
                 dset.attrs["desc"] = "True if 'elastic' loading was applied to 'step'"
 
-                for ibranch, (start, stop) in enumerate(zip(tqdm.tqdm(ss[:-1]), ss[1:])):
+                ibranch = 0
+
+                for start, stop in zip(tqdm.tqdm(ss[:-1]), ss[1:]):
 
                     if args.delta_f is None:
                         s, f, load = start, f_frame[start], False
+                    elif f_frame[start] + args.delta_f > f_frame[stop - 1]:
+                        continue
                     else:
                         s, f, load = _get_force_increment(
                             step=step[start:stop],
@@ -510,6 +514,7 @@ def cli_generate(cli_args=None):
                     root.create_dataset("T", data=[0], maxshape=(None,), dtype=np.int64)
 
                     dest.flush()
+                    ibranch += 1
 
 
 def cli_job_rerun_eventmap(cli_args=None):
