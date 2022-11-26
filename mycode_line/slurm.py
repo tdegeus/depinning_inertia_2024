@@ -14,7 +14,6 @@ from ._version import version
 default_condabase = "code_line"
 
 entry_points = dict(
-    cli_serial_group="JobSerialGroup",
     cli_serial="JobSerial",
     cli_from_yaml="JobFromYAML",
 )
@@ -121,7 +120,7 @@ def script_exec(cmd, initenv=True, omp_num_threads=True, conda=True, flush=True)
 
 def serial(
     command: str,
-    basename: str,
+    name: str,
     outdir: str = os.getcwd(),
     sbatch: dict = None,
     initenv=True,
@@ -133,7 +132,7 @@ def serial(
     Create job script to run a command.
 
     :param command: Command.
-    :param basename: Base-name of the job-scripts (and their log-scripts),
+    :param name: Basename of the filenames of the job-script (and log-scripts), and the job-name.
     :param outdir: Directory where to write the job-scripts (nothing in changed for the commands).
     :param sbatch: Job options.
     :param initenv: Init the environment (see snippet_initenv()).
@@ -163,16 +162,16 @@ def serial(
         flush=flush,
     )
 
-    sbatch["job-name"] = basename
-    sbatch["out"] = basename + "_%j.out"
+    sbatch["job-name"] = name
+    sbatch["out"] = name + "_%j.out"
 
-    with open(os.path.join(outdir, basename + ".slurm"), "w") as file:
+    with open(os.path.join(outdir, name + ".slurm"), "w") as file:
         file.write(GooseSLURM.scripts.plain(command=command, **sbatch))
 
 
 def serial_group(
     commands: list[str],
-    basename: str,
+    name: str,
     group: int,
     outdir: str = os.getcwd(),
     sbatch: dict = None,
@@ -183,9 +182,17 @@ def serial_group(
 ):
     """
     Group a number of commands per job-script.
+    Note that the ``name`` is the basename of all jobs.
+    To distinguish between the jobs, the name is formatted as follows::
+
+        name.format(index=..., conda=...)
+
+    Thereby ``conda`` is optional, but ``index`` is mandatory. If it is not specified, by default::
+
+        name = name + "_{index:s}"
 
     :param commands: List of commands.
-    :param basename: Base-name of the job-scripts (and their log-scripts),
+    :param name: Basename of the filenames of the job-script (and log-scripts), and the job-name.
     :param group: Number of commands to group per job-script.
     :param outdir: Directory where to write the job-scripts (nothing in changed for the commands).
     :param sbatch: Job options.
@@ -225,8 +232,8 @@ def serial_group(
     elif conda:
         info["conda"] = default_condabase
 
-    if basename.format(index="foo", conda="") == basename.format(index="", conda=""):
-        basename = basename + "_{index:s}"
+    if name.format(index="foo", conda="") == name.format(index="", conda=""):
+        name = name + "_{index:s}"
 
     for g, selection in enumerate(devided):
 
@@ -238,71 +245,12 @@ def serial_group(
             flush=False,
         )
 
-        jobname = basename.format(index=("{0:0" + fmt + "d}-of-{1:d}").format(g + 1, njob), **info)
+        jobname = name.format(index=("{0:0" + fmt + "d}-of-{1:d}").format(g + 1, njob), **info)
         sbatch["job-name"] = jobname
         sbatch["out"] = jobname + "_%j.out"
 
         with open(os.path.join(outdir, jobname + ".slurm"), "w") as file:
             file.write(GooseSLURM.scripts.plain(command=command, **sbatch))
-
-
-def cli_serial_group(cli_args=None):
-    """
-    Job-script to run commands.
-    Note that ``--basename`` can be a format. For example::
-
-        # default: postfix by "_{index:s}", see below
-        "myname"
-
-        # index is counter (e.g. "1-of-4"), or
-        # (an approximated) basename of the file run if ``--group=1``
-        "myname_{index:s}"
-
-        # conda == condabase
-        "myname_{index:s}_{conda:s}"
-    """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-
-    account = slurm_defaults["account"]
-    parser.add_argument("--conda", type=str, default=default_condabase, help="Env-basename")
-    parser.add_argument("-a", "--account", type=str, default=account, help="Account")
-    parser.add_argument("-b", "--basename", type=str, help="Basename for scripts. Default: command")
-    parser.add_argument("-c", "--command", type=str, help="Command to use")
-    parser.add_argument("-k", "--yaml-key", type=str, default="new", help="Key to read from file")
-    parser.add_argument("-n", "--group", type=int, default=1, help="#commands to group")
-    parser.add_argument("-o", "--outdir", type=str, default=".", help="Output dir")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
-    parser.add_argument("-y", "--yaml", type=str, help="Input files from YAML file")
-    parser.add_argument("files", nargs="*", type=str, help="Files")
-
-    args = tools._parse(parser, cli_args)
-
-    if args.yaml is not None:
-        args.files += shelephant.yaml.read(args.yaml)[args.yaml_key]
-
-    assert np.all([os.path.isfile(file) for file in args.files])
-
-    files = [os.path.relpath(file, args.outdir) for file in args.files]
-    commands = [f"{args.command} {file}" for file in files]
-    serial_group(
-        commands,
-        basename=args.basename if args.basename else args.command,
-        group=args.group,
-        outdir=args.outdir,
-        conda=dict(condabase=args.conda),
-        sbatch={"time": args.time, "account": args.account},
-    )
 
 
 def cli_serial(cli_args=None):
@@ -321,25 +269,23 @@ def cli_serial(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
-    account = slurm_defaults["account"]
-    parser.add_argument("--conda", type=str, default=default_condabase, help="Env-basename")
-    parser.add_argument("-a", "--account", type=str, default=account, help="Account")
-    parser.add_argument("-n", "--name", type=str, help="Job name (default: from command)")
-    parser.add_argument("-o", "--outdir", type=str, default=".", help="Output dir")
+    a = slurm_defaults["account"]
+    c = default_condabase
+
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
+    parser.add_argument("-n", "--name", type=str, default="job", help="Basename for all scripts.")
+    parser.add_argument("-o", "--outdir", type=str, default=".", help="Output dir")
+    parser.add_argument("--conda", type=str, default=c, help="(Base)name of the conda environment")
+    parser.add_argument("-a", "--account", type=str, default=a, help="Account (sbatch)")
+    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime (sbatch)")
+    parser.add_argument("-m", "--mem", type=str, default="2G", help="Memory (sbatch)")
     parser.add_argument("command", type=str, help="The command")
 
     args = tools._parse(parser, cli_args)
 
-    basename = args.name
-
-    if not basename:
-        basename = args.command.split(" ")[0]
-
     serial(
         args.command,
-        basename=basename,
+        basename=args.name,
         outdir=args.outdir,
         conda=dict(condabase=args.conda),
         sbatch={"time": args.time},
@@ -349,6 +295,16 @@ def cli_serial(cli_args=None):
 def cli_from_yaml(cli_args=None):
     """
     Create job-scripts from commands stored in a YAML file.
+    Note that the job-scripts are written to the same directory as the YAML file.
+
+    Note that the ``--name`` is the basename of all jobs.
+    To distinguish between the jobs, the name is formatted as follows::
+
+        name.format(index=..., conda=...)
+
+    Thereby ``conda`` is optional, but ``index`` is mandatory. If it is not specified, by default::
+
+        name = name + "_{index:s}"
     """
 
     class MyFmt(
@@ -362,19 +318,20 @@ def cli_from_yaml(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
-    account = slurm_defaults["account"]
-    parser.add_argument("--conda", type=str, default=default_condabase, help="Env-basename")
-    parser.add_argument("-a", "--account", type=str, default=account, help="Account")
-    parser.add_argument("-b", "--basename", type=str, default="job", help="Basename for scripts.")
-    parser.add_argument("-k", "--key", type=str, help="Key to read from file")
-    parser.add_argument("-n", "--group", type=int, default=1, help="#commands to group")
+    a = slurm_defaults["account"]
+    c = default_condabase
+
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
+    parser.add_argument("-n", "--name", type=str, default="job", help="Basename for all scripts.")
+    parser.add_argument("--group", type=int, default=1, help="#commands to group in one script")
+    parser.add_argument("--conda", type=str, default=c, help="(Base)name of the conda environment")
+    parser.add_argument("-a", "--account", type=str, default=a, help="Account (sbatch)")
+    parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime (sbatch)")
+    parser.add_argument("-m", "--mem", type=str, default="2G", help="Memory (sbatch)")
+    parser.add_argument("-k", "--key", type=str, help="Key to read from the YAML file")
     parser.add_argument("yaml", type=str, help="The YAML file")
 
     args = tools._parse(parser, cli_args)
-
-    basedir = pathlib.Path(args.yaml).parent
     commands = shelephant.yaml.read(args.yaml)
 
     if args.key is not None:
@@ -386,7 +343,7 @@ def cli_from_yaml(cli_args=None):
         commands,
         basename=args.basename,
         group=args.group,
-        outdir=basedir,
+        outdir=pathlib.Path(args.yaml).parent,
         conda=dict(condabase=args.conda),
         sbatch={"time": args.time, "account": args.account},
     )
