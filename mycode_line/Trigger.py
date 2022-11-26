@@ -432,7 +432,7 @@ def cli_generate(cli_args=None):
 
                 steadystate = info["full"][filename]["steadystate"][...]
                 A = info["full"][filename]["A"][...]
-                step = info["full"][filename]["step"][...]
+                step = info["full"][filename]["step"][...].astype(np.int64)
                 kick = info["full"][filename]["kick"][...]
                 f_frame = info["full"][filename]["f_frame"][...]
                 assert np.all(A[~kick] == 0)
