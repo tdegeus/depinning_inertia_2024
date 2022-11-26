@@ -21,21 +21,6 @@ class MyTests(unittest.TestCase):
         _ = slurm.script_exec(cmd, conda=None)
         _ = slurm.script_exec(cmd, conda=False)
 
-    def test_cli_serial_group(self):
-
-        dirname = "mytest"
-        filename = os.path.join(dirname, "foo.txt")
-
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-
-        with open(filename, "w") as file:
-            file.write("")
-
-        slurm.cli_serial_group(["-o", dirname, "-c", "dummy", filename])
-
-        shutil.rmtree(dirname)
-
 
 if __name__ == "__main__":
 
