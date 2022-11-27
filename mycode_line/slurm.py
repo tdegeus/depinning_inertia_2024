@@ -346,7 +346,7 @@ def cli_from_yaml(cli_args=None):
             commands,
             name=args.name,
             group=args.group,
-            outdir=pathlib.Path(args.yaml).parent,
+            outdir=pathlib.Path(filepath).parent,
             conda=dict(condabase=args.conda),
             sbatch={"time": args.time, "account": args.account},
         )
