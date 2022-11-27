@@ -329,21 +329,24 @@ def cli_from_yaml(cli_args=None):
     parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime (sbatch)")
     parser.add_argument("-m", "--mem", type=str, default="2G", help="Memory (sbatch)")
     parser.add_argument("-k", "--key", type=str, help="Key to read from the YAML file")
-    parser.add_argument("yaml", type=str, help="The YAML file")
+    parser.add_argument("yaml", nargs="*", type=str, help="The YAML file")
 
     args = tools._parse(parser, cli_args)
-    commands = shelephant.yaml.read(args.yaml)
 
-    if args.key is not None:
-        commands = commands[args.key]
+    for filepath in args.yaml:
 
-    assert isinstance(commands, list)
+        commands = shelephant.yaml.read(filepath)
 
-    serial_group(
-        commands,
-        name=args.name,
-        group=args.group,
-        outdir=pathlib.Path(args.yaml).parent,
-        conda=dict(condabase=args.conda),
-        sbatch={"time": args.time, "account": args.account},
-    )
+        if args.key is not None:
+            commands = commands[args.key]
+
+        assert isinstance(commands, list)
+
+        serial_group(
+            commands,
+            name=args.name,
+            group=args.group,
+            outdir=pathlib.Path(args.yaml).parent,
+            conda=dict(condabase=args.conda),
+            sbatch={"time": args.time, "account": args.account},
+        )
