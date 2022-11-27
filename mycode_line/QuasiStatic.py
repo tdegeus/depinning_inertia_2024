@@ -1063,6 +1063,12 @@ def cli_stateaftersystemspanning(cli_args=None):
         output["/yield_distance/count_right"] = count_xr
         output["/yield_distance/count_left"] = count_xl
         output["/yield_distance/count_any"] = count_x
+        lower = 0
+        lower_r = 0
+        lower_l = 0
+        upper = 0
+        upper_r = 0
+        upper_l = 0
 
         R = ensemble.result()
         V = np.zeros_like(R)
@@ -1088,9 +1094,21 @@ def cli_stateaftersystemspanning(cli_args=None):
                     xl = system.x - system.y_left()
                     x = np.minimum(xl, xl)
 
-                    count_x += np.bincount(np.digitize(x, bin_edges) - 1, minlength=count_x.size)
-                    count_xr += np.bincount(np.digitize(xr, bin_edges) - 1, minlength=count_x.size)
-                    count_xl += np.bincount(np.digitize(xl, bin_edges) - 1, minlength=count_x.size)
+                    i_x = np.digitize(x, bin_edges) - 1
+                    i_xr = np.digitize(xr, bin_edges) - 1
+                    i_xl = np.digitize(xl, bin_edges) - 1
+
+                    lower += np.sum(i_x < 0)
+                    lower_r += np.sum(i_xr < 0)
+                    lower_l += np.sum(i_xl < 0)
+
+                    upper += np.sum(i_x == bin_edges.size - 1)
+                    upper_r += np.sum(i_xr == bin_edges.size - 1)
+                    upper_l += np.sum(i_xl == bin_edges.size - 1)
+
+                    count_x += np.bincount(i_x[i_x >= 0], minlength=count_x.size)
+                    count_xr += np.bincount(i_xr[i_xr >= 0], minlength=count_x.size)
+                    count_xl += np.bincount(i_xl[i_xl >= 0], minlength=count_x.size)
 
                     ensemble.heightheight(system.x)
 
@@ -1108,6 +1126,16 @@ def cli_stateaftersystemspanning(cli_args=None):
                 output["/heightheight/error"][...] = np.sqrt(V[A >= 0])
 
                 output.flush()
+
+            break
+
+        count = output.create_group("/yield_distance/ignored")
+        count.attrs["lower"] = lower
+        count.attrs["lower_right"] = lower_r
+        count.attrs["lower_left"] = lower_l
+        count.attrs["upper"] = upper
+        count.attrs["upper_right"] = upper_r
+        count.attrs["upper_left"] = upper_l
 
 
 def cli_plot(cli_args=None):
