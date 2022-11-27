@@ -1097,18 +1097,18 @@ def cli_stateaftersystemspanning(cli_args=None):
                     i_x = np.digitize(x, bin_edges) - 1
                     i_xr = np.digitize(xr, bin_edges) - 1
                     i_xl = np.digitize(xl, bin_edges) - 1
+                    n = bin_edges.size - 1
 
                     lower += np.sum(i_x < 0)
                     lower_r += np.sum(i_xr < 0)
                     lower_l += np.sum(i_xl < 0)
+                    upper += np.sum(i_x >= n)
+                    upper_r += np.sum(i_xr >= n)
+                    upper_l += np.sum(i_xl >= n)
 
-                    upper += np.sum(i_x == bin_edges.size - 1)
-                    upper_r += np.sum(i_xr == bin_edges.size - 1)
-                    upper_l += np.sum(i_xl == bin_edges.size - 1)
-
-                    count_x += np.bincount(i_x[i_x >= 0], minlength=count_x.size)
-                    count_xr += np.bincount(i_xr[i_xr >= 0], minlength=count_x.size)
-                    count_xl += np.bincount(i_xl[i_xl >= 0], minlength=count_x.size)
+                    count_x += np.bincount(i_x[np.logical_and(i_x >= 0, i_x < n)], minlength=n)
+                    count_xr += np.bincount(i_xr[np.logical_and(i_xr >= 0, i_xr < n)], minlength=n)
+                    count_xl += np.bincount(i_xl[np.logical_and(i_xl >= 0, i_xl < n)], minlength=n)
 
                     ensemble.heightheight(system.x)
 
@@ -1126,8 +1126,6 @@ def cli_stateaftersystemspanning(cli_args=None):
                 output["/heightheight/error"][...] = np.sqrt(V[A >= 0])
 
                 output.flush()
-
-            break
 
         count = output.create_group("/yield_distance/ignored")
         count.attrs["lower"] = lower
