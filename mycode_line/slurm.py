@@ -285,7 +285,7 @@ def cli_serial(cli_args=None):
 
     serial(
         args.command,
-        basename=args.name,
+        name=args.name,
         outdir=args.outdir,
         conda=dict(condabase=args.conda),
         sbatch={"time": args.time},
@@ -341,7 +341,7 @@ def cli_from_yaml(cli_args=None):
 
     serial_group(
         commands,
-        basename=args.basename,
+        name=args.name,
         group=args.group,
         outdir=pathlib.Path(args.yaml).parent,
         conda=dict(condabase=args.conda),
