@@ -16,6 +16,7 @@ default_condabase = "code_line"
 entry_points = dict(
     cli_serial="JobSerial",
     cli_from_yaml="JobFromYAML",
+    cli_to_text="JobToText",
 )
 
 slurm_defaults = dict(
@@ -356,3 +357,43 @@ def cli_from_yaml(cli_args=None):
             conda=dict(condabase=args.conda),
             sbatch={"time": args.time, "account": args.account},
         )
+
+
+def cli_to_text(cli_args=None):
+    """
+    Convert to plain text, to run e.g. as::
+
+        parallel --max-procs=1 :::: mytext.txt
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-n", "--max-procs", type=int, default=1, help="Number of cores to use")
+    parser.add_argument("-k", "--key", type=str, help="Key to read from the YAML file")
+    parser.add_argument("yaml", nargs="*", type=str, help="The YAML file")
+
+    args = tools._parse(parser, cli_args)
+
+    for filepath in args.yaml:
+
+        commands = shelephant.yaml.read(filepath)
+
+        if args.key is not None:
+            commands = commands[args.key]
+
+        assert isinstance(commands, list)
+
+        print(filepath.replace(".yaml", "") + ".txt")
+
+        with open(filepath.replace(".yaml", "") + ".txt", "w") as fh:
+            fh.write("\n".join(commands))
