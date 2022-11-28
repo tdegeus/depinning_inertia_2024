@@ -648,10 +648,13 @@ def cli_job_rerun(cli_args=None):
 
         if trigger:
             out = f"{os.path.splitext(source[i])[0]}_branch={step[i]}.h5"
-            opts = f"--output={out} --smax={S[i]} --branch={step[i]} --step=0"
+            opts = f"--output={out} --branch={step[i]} --step=0"
         else:
             out = f"{os.path.splitext(source[i])[0]}_step={step[i]}.h5"
             opts = f"--output={out} --step={step[i]}"
+
+        if args.eventmap:
+            opts += f" --smax={S[i]}"
 
         commands.append(f"{excecutable} {opts} {src}")
 
