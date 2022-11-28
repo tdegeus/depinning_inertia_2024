@@ -17,6 +17,7 @@ import numpy as np
 import shelephant
 import tqdm
 
+from . import Dynamics
 from . import EventMap
 from . import QuasiStatic
 from . import storage
@@ -29,7 +30,7 @@ entry_points = dict(
     cli_run="Trigger_Run",
     cli_generate="Trigger_Generate",
     cli_ensembleinfo="Trigger_EnsembleInfo",
-    cli_job_rerun_eventmap="Trigger_Job_Rerun_EventMap",
+    cli_job_rerun="Trigger_Job_Rerun",
 )
 
 file_defaults = dict(
@@ -519,12 +520,15 @@ def cli_generate(cli_args=None):
                 assert ibranch > 0
 
 
-def cli_job_rerun_eventmap(cli_args=None):
+def cli_job_rerun(cli_args=None):
     """
     Create jobs to get event maps, from:
 
     -   ``--largest-avalanches=n``: the (maximum) ``n`` largest avalanches.
     -   ``--system-spanning=n``: (maximum) ``n`` avalanches.
+
+    In the case of triggering the events are selected based on the distance between the force
+    and the mean of the selected bin.
     """
 
     class MyFmt(
@@ -538,9 +542,13 @@ def cli_job_rerun_eventmap(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
+    parser.add_argument("--eventmap", action="store_true", help="Create EventMap jobs")
+    parser.add_argument("--dynamics", action="store_true", help="Create Dynamics jobs")
     parser.add_argument("--largest-avalanches", type=int, help="n largest avalanches")
     parser.add_argument("--system-spanning", type=int, help="n system spanning events")
-    parser.add_argument("-o", "--output", type=str, required=True, help="Output file")
+    parser.add_argument("--bin", type=int, help="Force bin to choose (Trigger only)")
+    parser.add_argument("--bins", type=int, help="Number of force bins (Trigger only)")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Output YAML file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-w", "--time", type=str, default="24h", help="Walltime")
     parser.add_argument("info", type=str, help="Trigger.EnsembleInfo (read-only)")
@@ -548,14 +556,51 @@ def cli_job_rerun_eventmap(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.info)
     sourcedir = pathlib.Path(args.info).resolve().parent
+    outdir = pathlib.Path(args.output).resolve().parent
+    outdir.mkdir(parents=True, exist_ok=True)
 
     with h5py.File(args.info) as file:
 
-        S = file["S"][...]
-        A = file["A"][...]
-        N = file["N"][...]
-        branch = file["branch"][...]
-        source = np.array(tools.h5py_read_unique(file, "/source", asstr=True))
+        if f"/meta/{entry_points['cli_ensembleinfo']}" in file:
+
+            N = file["N"][...]
+            S = file["S"][...]
+            A = file["A"][...]
+            step = file["branch"][...]
+            source = np.array(tools.h5py_read_unique(file, "/source", asstr=True))
+            f = file["f_frame_0"][...]
+            trigger = True
+
+            bin_edges = np.linspace(f.min(), f.max(), args.bins + 1)
+            bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+            bin_idx = np.digitize(f, bin_edges) - 1
+            target = bin_centers[args.bin]
+
+            S = S[bin_idx == args.bin]
+            A = A[bin_idx == args.bin]
+            step = step[bin_idx == args.bin]
+            source = source[bin_idx == args.bin]
+            f = f[bin_idx == args.bin]
+
+            sorter = np.argsort(np.abs(f - target))
+
+            S = S[sorter]
+            A = A[sorter]
+            step = step[sorter]
+            source = source[sorter]
+
+        elif f"/meta/{QuasiStatic.entry_points['cli_ensembleinfo']}" in file or "avalanche" in file:
+
+            N = file["/normalisation/N"][...]
+            S = file["/avalanche/S"][...]
+            A = file["/avalanche/A"][...]
+            step = file["/avalanche/step"][...]
+            source = np.array(file["/files"].asstr()[...])[file["/avalanche/file"]]
+            trigger = False
+
+        else:
+
+            raise ValueError("Not a Trigger.EnsembleInfo or QuasiStatic.EnsembleInfo file")
 
     if args.largest_avalanches is not None:
 
@@ -566,13 +611,13 @@ def cli_job_rerun_eventmap(cli_args=None):
         keep = A < N
         S = S[keep]
         A = A[keep]
-        branch = branch[keep]
+        step = step[keep]
         source = source[keep]
 
         sorter = np.argsort(A)[::-1]
         S = S[sorter][:n]
         A = A[sorter][:n]
-        branch = branch[sorter][:n]
+        step = step[sorter][:n]
         source = source[sorter][:n]
 
     elif args.system_spanning is not None:
@@ -584,15 +629,30 @@ def cli_job_rerun_eventmap(cli_args=None):
         keep = A == N
         S = S[keep][:n]
         A = A[keep][:n]
-        branch = branch[keep][:n]
+        step = step[keep][:n]
         source = source[keep][:n]
 
-    excecutable = EventMap.entry_points["cli_run"]
+    if args.eventmap:
+        assert not args.dynamics
+        excecutable = EventMap.entry_points["cli_run"]
+    elif args.dynamics:
+        excecutable = Dynamics.entry_points["cli_run"]
+    else:
+        raise ValueError("No job type specified")
+
     commands = []
 
     for i in range(A.size):
-        out = f"{os.path.splitext(source[i])[0]}_branch={branch[i]}.h5"
-        src = os.path.relpath(sourcedir / source[i])
-        commands.append(f"{excecutable} --output={out} --smax={S[i]} --step={branch[i]} {src}")
+
+        src = os.path.relpath(sourcedir / source[i], outdir)
+
+        if trigger:
+            out = f"{os.path.splitext(source[i])[0]}_branch={step[i]}.h5"
+            opts = f"--output={out} --smax={S[i]} --branch={step[i]} --step=0"
+        else:
+            out = f"{os.path.splitext(source[i])[0]}_step={step[i]}.h5"
+            opts = f"--output={out} --step={step[i]}"
+
+        commands.append(f"{excecutable} {opts} {src}")
 
     shelephant.yaml.dump(args.output, commands)

@@ -81,8 +81,8 @@ def cli_run(cli_args=None):
     parser.add_argument("--t-step", type=int, default=500, help="Control sync-t storage")
 
     # input selection
-    parser.add_argument("--step", type=int, help="Quasistatic step to run")
-    parser.add_argument("--branch", type=int, help="Select branch to run (first trigger)")
+    parser.add_argument("--step", type=int, help="Step to run (state: step - 1, then trigger)")
+    parser.add_argument("--branch", type=int, help="Branch (if 'Trigger')")
 
     # output file
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -125,26 +125,42 @@ def cli_run(cli_args=None):
                 p = sroot["p"][args.step]
                 meta.attrs["branch"] = args.branch
                 meta.attrs["p"] = p
+                fastload = False
+
+                if os.path.exists(QuasiStatic.filename2fastload(args.file)):
+                    fastload = (
+                        QuasiStatic.filename2fastload(args.file),
+                        f"/QuastiStatic/{file['/Trigger/step'][args.branch]:d}",
+                    )
+
             else:
                 sroot = src["/QuasiStatic"]
                 kick = sroot["kick"][args.step]
+                fastload = True
 
             root.create_dataset("x_frame", data=[sroot["x_frame"][args.step - 1]], maxshape=(None,))
             root.create_dataset("inc", data=[sroot["inc"][args.step - 1]], maxshape=(None,))
 
             # ensure a chunk that will be big enough
             system = QuasiStatic.allocate_system(file)
-            system.restore_quasistatic_step(sroot, args.step)
+            system.restore_quasistatic_step(sroot, args.step, fastload)
             i_n = system.i
-            system.restore_quasistatic_step(sroot, args.step - 1)
+            system.restore_quasistatic_step(sroot, args.step - 1, fastload)
             nchunk = np.max(i_n - system.i)
             file["/param/xyield/nchunk"][...] = int(
                 max(1.5 * nchunk, file["/param/xyield/nchunk"][...])
             )
-            system.restore_quasistatic_step(sroot, args.step - 1)
+            system.restore_quasistatic_step(sroot, args.step - 1, fastload)
 
             # estimate number of steps
             maxinc = sroot["inc"][args.step] - sroot["inc"][args.step - 1]
+
+        # store state for fast access
+
+        i = system.chunk.start
+        file["/fastload/state"] = system.chunk.state_at(i)
+        file["/fastload/index"] = i
+        file["/fastload/value"] = system.chunk.data[:, 0]
 
         # storage preparation
 
@@ -386,6 +402,11 @@ def cli_average_systemspanning(cli_args=None):
 
             root = file["Dynamics"]
             system = QuasiStatic.allocate_system(file)
+
+            if "fastload" in file:
+                r = file["fastload"]
+                system.chunk.restore(r["state"][...], r["value"][...], r["index"][...])
+
             system.restore_quasistatic_step(root, 0)
 
             # determine duration bin, ensure that only one measurement per bin is added
