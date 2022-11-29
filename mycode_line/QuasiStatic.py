@@ -963,24 +963,39 @@ def cli_generatefastload(cli_args=None):
 
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--append", action="store_true", help="Append existing file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("file", type=str, help="Simulation file")
     args = tools._parse(parser, cli_args)
 
     output = filename2fastload(args.file)
-    tools._check_overwrite_file(output, args.force)
+    if args.append:
+        assert os.path.isfile(output)
+    else:
+        tools._check_overwrite_file(output, args.force)
 
-    with h5py.File(args.file) as file, h5py.File(output, "w") as output:
+    with h5py.File(args.file) as file, h5py.File(output, "r+" if args.append else "w") as output:
 
-        create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+        if not args.append:
+            create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
         system = allocate_system(file)
         root = file["QuasiStatic"]
         last_start = None
         last_step = None
 
+        if args.append:
+            if "QuasiStatic" in output:
+                stored = np.sort(np.array([int(i) for i in output["QuasiStatic"]]))
+
         for step in tqdm.tqdm(range(root["inc"].size)):
+
+            if args.append:
+                if step in stored:
+                    continue
+                load = stored[np.argmax(stored > step)]
+                system.restore_quasistatic_step(root, load)
 
             system.restore_quasistatic_step(root, step)
 
