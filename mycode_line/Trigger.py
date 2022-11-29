@@ -647,10 +647,10 @@ def cli_job_rerun(cli_args=None):
         src = os.path.relpath(sourcedir / source[i], outdir)
 
         if trigger:
-            out = f"{os.path.splitext(source[i])[0]}_branch={step[i]}.h5"
-            opts = f"--output={out} --branch={step[i]} --step=0"
+            out = f"{os.path.splitext(source[i])[0].replace('/', '_')}_branch={step[i]}.h5"
+            opts = f"--output={out} --branch={step[i]} --step=1"
         else:
-            out = f"{os.path.splitext(source[i])[0]}_step={step[i]}.h5"
+            out = f"{os.path.splitext(source[i])[0].replace('/', '_')}_step={step[i]}.h5"
             opts = f"--output={out} --step={step[i]}"
 
         if args.eventmap:

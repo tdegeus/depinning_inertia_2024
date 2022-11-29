@@ -130,7 +130,7 @@ def cli_run(cli_args=None):
                 if os.path.exists(QuasiStatic.filename2fastload(args.file)):
                     fastload = (
                         QuasiStatic.filename2fastload(args.file),
-                        f"/QuastiStatic/{file['/Trigger/step'][args.branch]:d}",
+                        f"/QuasiStatic/{src['/Trigger/step'][args.branch]:d}",
                     )
 
             else:

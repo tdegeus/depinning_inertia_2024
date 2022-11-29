@@ -378,7 +378,7 @@ def cli_to_text(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-n", "--max-procs", type=int, default=1, help="Number of cores to use")
+    parser.add_argument("--develop", action="store_true", help="Run all commands in develop mode")
     parser.add_argument("-k", "--key", type=str, help="Key to read from the YAML file")
     parser.add_argument("yaml", nargs="*", type=str, help="The YAML file")
 
@@ -394,6 +394,9 @@ def cli_to_text(cli_args=None):
         assert isinstance(commands, list)
 
         print(filepath.replace(".yaml", "") + ".txt")
+
+        if args.develop:
+            commands = [c + " --develop" for c in commands]
 
         with open(filepath.replace(".yaml", "") + ".txt", "w") as fh:
             fh.write("\n".join(commands))
