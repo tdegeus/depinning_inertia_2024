@@ -95,6 +95,10 @@ def cli_run(cli_args=None):
             if args.check is None:
                 if len(root["completed"]) >= 2:
                     if root["completed"][1]:
+                        pbar.set_description(
+                            f"{basename}: branch = {ibranch:8d}, p = {root['p'][1]:8d}, A = {root['A'][1]:8d}"
+                        )
+                        pbar.refresh()
                         continue
             else:
                 assert len(root["completed"]) >= 2
