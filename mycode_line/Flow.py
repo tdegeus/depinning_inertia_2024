@@ -269,7 +269,14 @@ def cli_run(cli_args=None):
     progname = entry_points[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("-n", "--nstep", type=int, default=1000, help="#output steps to run")
+    parser.add_argument(
+        "-n", "--nstep", type=lambda x: int(float(x)), default=1000, help="#output steps to run"
+    )
+    parser.add_argument(
+        "--snapshot",
+        type=lambda x: int(float(x)),
+        help="Write snapshot every n output steps.",
+    )
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
 
@@ -279,15 +286,38 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "a") as file:
 
+        restart = False
+
+        if "/Flow/snapshot/x" in file:
+            restart = True
+
         inc = 0
         snapshot = file["/Flow/snapshot/interval"][...]
         output = file["/Flow/output/interval"][...]
         gammadot = file["/Flow/gammadot"][...]
         assert snapshot % output == 0
-        run_create_extendible(file)
+
+        if args.snapshot:
+            snapshot = output * args.snapshot
 
         system = QuasiStatic.allocate_system(file)
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+
+        if restart:
+            dt = file["/param/dt"][...]
+            inc = file["/Flow/snapshot/inc"][-1]
+            system.x = file[f"/Flow/snapshot/x/{inc:d}"][...]
+            system.v = file[f"/Flow/snapshot/v/{inc:d}"][...]
+            system.a = file[f"/Flow/snapshot/a/{inc:d}"][...]
+            system.x_frame = gammadot * dt * inc
+            i = int(inc / output)
+            assert np.isclose(file["/Flow/output/f_frame"][i], np.mean(system.f_frame))
+            assert np.isclose(file["/Flow/output/f_potential"][i], np.mean(system.f_potential))
+            assert np.isclose(file["/Flow/output/f_damping"][i], np.mean(system.f_damping))
+            assert np.isclose(file["/Flow/output/x"][i], np.mean(system.x))
+        else:
+            run_create_extendible(file)
+
         output_fields = [
             "/Flow/output/inc",
             "/Flow/output/f_frame",
@@ -298,27 +328,28 @@ def cli_run(cli_args=None):
 
         for istep in pbar:
 
-            system.chunk.align(system.x)
             ret = system.flowSteps(output, gammadot)
             assert ret != 0
             inc += output
 
             if snapshot > 0:
                 if inc % snapshot == 0:
-                    i = int(inc / snapshot)
-                    for key in ["/Flow/snapshot/inc"]:
-                        file[key].resize((i + 1,))
-                    file["/Flow/snapshot/inc"][i] = inc
-                    file[f"/Flow/snapshot/x/{inc:d}"] = system.x
-                    file[f"/Flow/snapshot/v/{inc:d}"] = system.v
-                    file[f"/Flow/snapshot/a/{inc:d}"] = system.a
-                    file.flush()
+                    if str(inc) not in file["/Flow/snapshot/x"]:
+                        i = file["/Flow/snapshot/inc"].size
+                        for key in ["/Flow/snapshot/inc"]:
+                            file[key].resize((i + 1,))
+                        file["/Flow/snapshot/inc"][i] = inc
+                        file[f"/Flow/snapshot/x/{inc:d}"] = system.x
+                        file[f"/Flow/snapshot/v/{inc:d}"] = system.v
+                        file[f"/Flow/snapshot/a/{inc:d}"] = system.a
+                        file.flush()
 
             if output > 0:
                 if inc % output == 0:
                     i = int(inc / output)
                     for key in output_fields:
-                        file[key].resize((i + 1,))
+                        if file[key].size <= i:
+                            file[key].resize((i + 1,))
                     file["/Flow/output/inc"][i] = inc
                     file["/Flow/output/f_frame"][i] = np.mean(system.f_frame)
                     file["/Flow/output/f_potential"][i] = np.mean(system.f_potential)
