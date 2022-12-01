@@ -823,7 +823,6 @@ def cli_ensembleinfo(cli_args=None):
         dynamics=[],
         uuid=[],
         version=[],
-        dependencies=[],
     )
 
     fmt = "{:" + str(max(len(i) for i in info["filepath"])) + "s}"
@@ -863,7 +862,7 @@ def cli_ensembleinfo(cli_args=None):
                 info["seed"].append(seed)
 
                 meta = file[f"/meta/{entry_points['cli_run']}"]
-                for key in ["uuid", "version", "dependencies", "dynamics"]:
+                for key in ["uuid", "version", "dynamics"]:
                     info[key].append(meta.attrs[key])
 
                 if "step" not in out:
@@ -937,9 +936,6 @@ def cli_ensembleinfo(cli_args=None):
         output["/lookup/uuid"] = info["uuid"]
         tools.h5py_save_unique(info["dynamics"], output, "/lookup/dynamics", asstr=True)
         tools.h5py_save_unique(info["version"], output, "/lookup/version", asstr=True)
-        tools.h5py_save_unique(
-            [";".join(i) for i in info["dependencies"]], output, "/lookup/dependencies", split=";"
-        )
         output["files"] = output["/lookup/filepath"]
 
 
