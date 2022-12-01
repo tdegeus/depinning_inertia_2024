@@ -65,7 +65,7 @@ def snippet_load_conda(condabase: str = default_condabase):
     ret = ["# Activate hardware optimised environment (or fallback environment)"]
     ret += ['# Allow for optional: `export conda_basename="code_line2"; sbatch ...`']
     ret += ['if [[ -z "${conda_basename}" ]]; then']
-    ret += [f'    conda_basename="{default_condabase}"']
+    ret += [f'    conda_basename="{condabase}"']
     ret += ["fi"]
     ret += [
         'conda_activate_first_existing "${conda_basename}$(get_simd_envname)" "${conda_basename}"'
