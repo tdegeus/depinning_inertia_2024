@@ -56,10 +56,13 @@ class MyTests(unittest.TestCase):
             "/lookup/uuid",
             "/meta/QuasiStatic_EnsembleInfo",
             "/lookup/version/value",
+            "/lookup/dependencies/index",
             "/lookup/dependencies/value",
         ]:
             if key in ret["!="]:
                 ret["!="].remove(key)
+            if key in ret["<-"]:
+                ret["<-"].remove(key)
 
         self.assertEqual(ret["!="], [])
         self.assertEqual(ret["->"], [])
