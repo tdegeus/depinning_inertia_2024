@@ -334,7 +334,11 @@ def cli_run(cli_args=None):
 
             if snapshot > 0:
                 if inc % snapshot == 0:
-                    if str(inc) not in file["/Flow/snapshot/x"]:
+                    st = True
+                    if "/Flow/snapshot/x" in file:
+                        if str(inc) in file["/Flow/snapshot/x"]:
+                            st = False
+                    if st:
                         i = file["/Flow/snapshot/inc"].size
                         for key in ["/Flow/snapshot/inc"]:
                             file[key].resize((i + 1,))
