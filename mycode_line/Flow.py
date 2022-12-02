@@ -12,11 +12,11 @@ import textwrap
 from collections import defaultdict
 
 import FrictionQPotSpringBlock  # noqa: F401
+import GooseHDF5 as g5
 import h5py
 import numpy as np
 import shelephant
 import tqdm
-import GooseHDF5 as g5
 
 from . import QuasiStatic
 from . import storage
@@ -83,25 +83,27 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
     f_potential_std = defaultdict(list)
 
     eta = file["/param/eta"][...]
+    root = file["/full"]
 
-    for config in file:
+    for config in root:
 
-        if config.startswith("meta"):
-            continue
+        gammadot = root[config]["gammadot"][...]
+        frame = root[config]["f_frame"][...]
+        potential = root[config]["f_potential"][...]
 
-        gammadot = file[config]["gammadot"][...]
-        frame = file[config]["f_frame"][...]
-        potential = file[config]["f_potential"][...]
+        b3 = -3 * interval
+        b2 = -2 * interval
+        b1 = -1 * interval
 
-        f0 = np.mean(frame[-3 * interval:-2 * interval])
-        f1 = np.mean(frame[-2 * interval:-100])
-        f = np.mean(frame[-interval:])
-        df = np.std(frame[-interval:])
+        f0 = np.mean(frame[b3:b2])
+        f1 = np.mean(frame[b2:b1])
+        f = np.mean(frame[b1:])
+        df = np.std(frame[b1:])
 
-        p0 = np.mean(potential[-3 * interval:-2 * interval])
-        p1 = np.mean(potential[-2 * interval:-interval])
-        p = np.mean(potential[-interval:])
-        dp = np.std(potential[-interval:])
+        p0 = np.mean(potential[b3:b2])
+        p1 = np.mean(potential[b2:b1])
+        p = np.mean(potential[b1:])
+        dp = np.std(potential[b1:])
 
         if f0 <= f - df or f0 >= f + df:
             continue
@@ -157,7 +159,7 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
         if -f_potential[key] - f_potential_std[key] < 0:
             continue
 
-        if np.abs((-f_potential[key] + eta * float(key) - f_frame[key]) / f_frame[key]) > 1e-3:
+        if np.abs((-f_potential[key] + eta * float(key) - f_frame[key]) / f_frame[key]) > 1e-2:
             continue
 
         x.append(float(key))
@@ -221,14 +223,13 @@ def cli_ensembleinfo(cli_args=None):
 
             with h5py.File(filepath) as file:
 
-                output[f"{fname}/f_frame"] = file["/Flow/output/f_frame"][...]
-                output[f"{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
-                output[f"{fname}/f_damping"] = file["/Flow/output/f_damping"][...]
-                output[f"{fname}/gammadot"] = file["/Flow/gammadot"][...]
+                output[f"/full/{fname}/f_frame"] = file["/Flow/output/f_frame"][...]
+                output[f"/full/{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
+                output[f"/full/{fname}/f_damping"] = file["/Flow/output/f_damping"][...]
+                output[f"/full/{fname}/gammadot"] = file["/Flow/gammadot"][...]
 
                 if i == 0:
                     g5.copy(file, output, "/param")
-
 
         gammmadot, f_frame, f_potential, f_frame_std, f_potential_std = ensemble_average(output)
         output["/average/gammadot"] = gammmadot
@@ -236,6 +237,7 @@ def cli_ensembleinfo(cli_args=None):
         output["/average/mean/f_potential"] = f_potential
         output["/average/std/f_frame"] = f_frame_std
         output["/average/std/f_potential"] = f_potential_std
+
 
 def cli_generate(cli_args=None):
     """
