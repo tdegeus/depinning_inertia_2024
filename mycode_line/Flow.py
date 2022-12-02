@@ -95,8 +95,6 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
         b2 = -2 * interval
         b1 = -1 * interval
 
-        f0 = np.mean(frame[b3:b2])
-        f1 = np.mean(frame[b2:b1])
         f = np.mean(frame[b1:])
         df = np.std(frame[b1:])
 
@@ -105,13 +103,7 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
         p = np.mean(potential[b1:])
         dp = np.std(potential[b1:])
 
-        if f0 <= f - df or f0 >= f + df:
-            continue
-
         if p0 <= p - dp or p0 >= p + dp:
-            continue
-
-        if f1 <= f - df or f1 >= f + df:
             continue
 
         if p1 <= p - dp or p1 >= p + dp:
