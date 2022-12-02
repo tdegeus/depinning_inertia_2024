@@ -9,12 +9,14 @@ import os
 import pathlib
 import re
 import textwrap
+from collections import defaultdict
 
 import FrictionQPotSpringBlock  # noqa: F401
 import h5py
 import numpy as np
 import shelephant
 import tqdm
+import GooseHDF5 as g5
 
 from . import QuasiStatic
 from . import storage
@@ -66,6 +68,120 @@ def interpret_filename(filename: str) -> dict:
     return info
 
 
+def ensemble_average(file: h5py.File | dict, interval: int = 100):
+    """
+    Ensemble average from a file written by :py:func:`cli_enembleinfo`.
+
+    :param file: Ensemble info (opened HDF5 archive).
+    :param interval: Average of the last ``interval`` output steps.
+    """
+
+    f_frame = defaultdict(list)
+    f_potential = defaultdict(list)
+
+    f_frame_std = defaultdict(list)
+    f_potential_std = defaultdict(list)
+
+    eta = file["/param/eta"][...]
+
+    for config in file:
+
+        if config.startswith("meta"):
+            continue
+
+        gammadot = file[config]["gammadot"][...]
+        frame = file[config]["f_frame"][...]
+        potential = file[config]["f_potential"][...]
+
+        f0 = np.mean(frame[-3 * interval:-2 * interval])
+        f1 = np.mean(frame[-2 * interval:-100])
+        f = np.mean(frame[-interval:])
+        df = np.std(frame[-interval:])
+
+        p0 = np.mean(potential[-3 * interval:-2 * interval])
+        p1 = np.mean(potential[-2 * interval:-interval])
+        p = np.mean(potential[-interval:])
+        dp = np.std(potential[-interval:])
+
+        if f0 <= f - df or f0 >= f + df:
+            continue
+
+        if p0 <= p - dp or p0 >= p + dp:
+            continue
+
+        if f1 <= f - df or f1 >= f + df:
+            continue
+
+        if p1 <= p - dp or p1 >= p + dp:
+            continue
+
+        f_frame[f"{gammadot:.1f}"].append(f)
+        f_potential[f"{gammadot:.1f}"].append(p)
+
+        f_frame_std[f"{gammadot:.1f}"].append(df)
+        f_potential_std[f"{gammadot:.1f}"].append(dp)
+
+    n = max([len(v) for v in f_frame.values()])
+    rm = []
+
+    for key, value in f_frame.items():
+        if len(value) < n:
+            rm.append(key)
+
+    for key in rm:
+        del f_frame[key]
+        del f_potential[key]
+        del f_frame_std[key]
+        del f_potential_std[key]
+
+    for key in f_frame:
+        f_frame[key] = np.array(f_frame[key])
+        f_potential[key] = np.array(f_potential[key])
+        f_frame_std[key] = np.array(f_frame_std[key])
+        f_potential_std[key] = np.array(f_potential_std[key])
+
+    for key in f_frame:
+        f_frame[key] = np.mean(f_frame[key])
+        f_potential[key] = np.mean(f_potential[key])
+        f_frame_std[key] = np.max(f_potential_std[key])
+        f_potential_std[key] = np.max(f_potential_std[key])
+
+    x = []
+    yf = []
+    yp = []
+    ef = []
+    ep = []
+
+    for key in f_frame:
+
+        if -f_potential[key] - f_potential_std[key] < 0:
+            continue
+
+        if np.abs((-f_potential[key] + eta * float(key) - f_frame[key]) / f_frame[key]) > 1e-3:
+            continue
+
+        x.append(float(key))
+        yf.append(f_frame[key])
+        yp.append(-f_potential[key])
+        ef.append(f_frame_std[key])
+        ep.append(f_potential_std[key])
+
+    gammmadot = np.array(x)
+    f_frame = np.array(yf)
+    f_potential = np.array(yp)
+    f_frame_std = np.array(ef)
+    f_potential_std = np.array(ep)
+
+    sorter = np.argsort(gammmadot)
+    gammmadot = gammmadot[sorter]
+    f_frame = f_frame[sorter]
+    f_potential = f_potential[sorter]
+    f_frame_std = f_frame_std[sorter]
+    f_potential_std = f_potential_std[sorter]
+
+    return gammmadot, f_frame, f_potential, f_frame_std, f_potential_std
+
+
 def cli_ensembleinfo(cli_args=None):
     """
     Extract basic output and combine into a single file.
@@ -98,7 +214,7 @@ def cli_ensembleinfo(cli_args=None):
 
         QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
-        for filepath in args.files:
+        for i, filepath in enumerate(tqdm.tqdm(args.files)):
 
             fname = os.path.relpath(filepath, os.path.dirname(args.output))
             fname = fname.replace("/", "_")
@@ -109,8 +225,17 @@ def cli_ensembleinfo(cli_args=None):
                 output[f"{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
                 output[f"{fname}/f_damping"] = file["/Flow/output/f_damping"][...]
                 output[f"{fname}/gammadot"] = file["/Flow/gammadot"][...]
-                output[f"{fname}/eta"] = file["/param/eta"][...]
 
+                if i == 0:
+                    g5.copy(file, output, "/param")
+
+
+        gammmadot, f_frame, f_potential, f_frame_std, f_potential_std = ensemble_average(output)
+        output["/average/gammadot"] = gammmadot
+        output["/average/mean/f_frame"] = f_frame
+        output["/average/mean/f_potential"] = f_potential
+        output["/average/std/f_frame"] = f_frame_std
+        output["/average/std/f_potential"] = f_potential_std
 
 def cli_generate(cli_args=None):
     """

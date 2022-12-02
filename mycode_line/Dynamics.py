@@ -369,6 +369,7 @@ def cli_average_systemspanning(cli_args=None):
             f_frame=enstat.static(shape=n),
             f_neighbours=enstat.static(shape=n),
             dx=enstat.static(shape=n),
+            A=enstat.static(shape=n),
             S=enstat.static(shape=n),
             f_potential_moving=enstat.static(shape=n),
             f_frame_moving=enstat.static(shape=n),
@@ -466,6 +467,7 @@ def cli_average_systemspanning(cli_args=None):
                     data["f_neighbours"].add_point(np.mean(system.f_neighbours), j)
                     data["dx"].add_point(np.mean(system.x - x_n), j)
                     data["S"].add_point(np.mean(i - i_n), j)
+                    data["A"].add_point(np.sum(broken), j)
 
                     if np.sum(broken) == 0:
                         continue
