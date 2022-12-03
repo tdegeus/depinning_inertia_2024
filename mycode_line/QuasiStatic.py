@@ -108,10 +108,13 @@ class Normalisation:
         self.k_neighbours = file["param"]["k_neighbours"][...]
         self.eta = file["param"]["eta"][...]
         self.m = file["param"]["m"][...]
-        self.seed = file["realisation"]["seed"][...]
         self.N = file["param"]["normalisation"]["N"][...]
         self.dt = file["param"]["dt"][...]
         self.x = 1
+        self.seed = None
+
+        if "realisation" in file:
+            self.seed = file["realisation"]["seed"][...]
 
         if "x" in file["param"]["normalisation"]:
             self.x = file["param"]["normalisation"]["x"][...]
