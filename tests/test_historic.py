@@ -58,11 +58,16 @@ class MyTests(unittest.TestCase):
             "/lookup/version/value",
             "/lookup/dependencies/index",
             "/lookup/dependencies/value",
+            "/normalisation/potential",
+            "/normalisation/system",
+            "/normalisation/name",
         ]:
             if key in ret["!="]:
                 ret["!="].remove(key)
             if key in ret["<-"]:
                 ret["<-"].remove(key)
+            if key in ret["->"]:
+                ret["->"].remove(key)
 
         self.assertEqual(ret["!="], [])
         self.assertEqual(ret["->"], [])

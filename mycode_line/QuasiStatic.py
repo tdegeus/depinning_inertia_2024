@@ -167,7 +167,8 @@ class Normalisation:
             N=self.N,
             dt=self.dt,
             x=self.x,
-            name=self.name,
+            potential=self.potential,
+            system=self.system,
         )
 
         if self.kappa is not None:
@@ -943,7 +944,7 @@ def cli_ensembleinfo(cli_args=None):
                     test = Normalisation(file).asdict()
                     seed = test.pop("seed")
                     for key in norm:
-                        if key in ["name"]:
+                        if key in ["potential", "system"]:
                             assert str(norm[key]) == str(test[key])
                         else:
                             assert np.isclose(norm[key], test[key])
