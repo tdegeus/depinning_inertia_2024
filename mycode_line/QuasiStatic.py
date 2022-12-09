@@ -102,6 +102,8 @@ class Normalisation:
             dt: Time step of time discretisation.
         """
 
+        self.alpha = None
+        self.width = None
         self.kappa = None
         self.mu = file["param"]["mu"][...]
         self.k_frame = file["param"]["k_frame"][...]
@@ -120,19 +122,36 @@ class Normalisation:
             self.x = file["param"]["normalisation"]["x"][...]
 
         if "potential" not in file["param"]:
-            self.name = "Cusp"
+            self.potential = "Cusp"
         else:
-            self.name = file["/param/potential/name"].asstr()[...]
+            self.potential = file["/param/potential/name"].asstr()[...]
 
-        if self.name == "Cusp":
+        if self.potential == "Cusp":
             self.f = self.mu * self.x
-        elif self.name == "SemiSmooth":
+            self.system = "System"
+        elif self.potential == "SemiSmooth":
             self.kappa = file["param"]["kappa"][...]
             self.f = self.mu * self.x * (1 - self.mu / (self.mu + self.kappa))
-        elif self.name == "Smooth":
+            self.system = "SystemSemiSmooth"
+        elif self.potential == "Smooth":
             self.f = self.mu * self.x / np.pi
+            self.system = "SystemSmooth"
         else:
-            raise ValueError(f"Unknown potential: {self.name:s}")
+            raise ValueError(f"Unknown potential: {self.potential:s}")
+
+        if "alpha" in file["param"]:
+            self.alpha = file["param"]["alpha"][...]
+            assert self.system == "System"
+            self.system = "SystemLongRange"
+
+        if "width" in file["param"]:
+            self.width = file["param"]["width"][...]
+            assert self.system == "System"
+            self.system = "System2d"
+
+        if "thermal" in file["param"]:
+            assert self.system == "System"
+            self.system = "SystemThermalRandomForceNormal"
 
     def asdict(self):
         """
@@ -358,6 +377,73 @@ class SystemSmooth(model.SystemSmooth, DataMap):
         )
 
 
+class SystemLongRange(model.SystemLongRange, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.SystemLongRange.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            alpha=file["param"]["alpha"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            chunk=self.chunk,
+        )
+
+
+class System2d(model.System2d, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.System2d.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            chunk=self.chunk,
+            width=file["param"]["width"][...],
+        )
+
+
+class SystemThermalRandomForceNormal(model.SystemThermalRandomForceNormal, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.SystemThermalRandomForceNormal.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=file["param"]["k_neighbours"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            chunk=self.chunk,
+            mean=file["param"]["thermal"]["mean"][...],
+            stddev=file["param"]["thermal"]["stddev"][...],
+            seed=file["param"]["thermal"]["seed"][...],
+            dinc_init=file["param"]["thermal"]["dinc_init"][...],
+            dinc=file["param"]["thermal"]["dinc"][...],
+        )
+
+
 def allocate_system(file: h5py.File, **kwargs):
     """
     Allocate system.
@@ -365,14 +451,23 @@ def allocate_system(file: h5py.File, **kwargs):
 
     norm = Normalisation(file)
 
-    if norm.name == "Cusp":
+    if norm.system == "System":
         return System(file, **kwargs)
 
-    if norm.name == "SemiSmooth":
+    if norm.system == "SystemSemiSmooth":
         return SystemSemiSmooth(file, **kwargs)
 
-    if norm.name == "Smooth":
+    if norm.system == "SystemSmooth":
         return SystemSmooth(file, **kwargs)
+
+    if norm.system == "SystemThermalRandomForceNormal":
+        return SystemThermalRandomForceNormal(file, **kwargs)
+
+    if norm.system == "SystemLongRange":
+        return SystemLongRange(file, **kwargs)
+
+    if norm.system == "System2d":
+        return System2d(file, **kwargs)
 
 
 def _compare_versions(ver, cmpver):
@@ -602,9 +697,9 @@ def cli_run(cli_args=None):
 
         if args.fixed_step:
             meta["loading"] = "fixed-step"
-            dxframe = (
-                1e-3
-                * system.normalisation.x
+            dx_particle = 1e-3 * system.normalisation.x
+            dx_frame = (
+                dx_particle
                 * (system.normalisation.k_frame + system.normalisation.mu)
                 / system.normalisation.k_frame
             )
@@ -646,7 +741,7 @@ def cli_run(cli_args=None):
 
             if args.fixed_step:
                 kick = True
-                system.x_frame += dxframe
+                system.x_frame += dx_frame
             else:
                 kick = not kick
                 system.eventDrivenStep(dx, kick)
