@@ -100,6 +100,10 @@ class Normalisation:
             seed: Base seed (uint64) or uuid (str).
             N: Number of blocks (int).
             dt: Time step of time discretisation.
+            system: Name of the system class (str).
+            potential: Name of the potential (str).
+            kappa: Weakening 'stiffness', if SemiSmooth potential is used (float).
+            alpha: Interaction range, if long-range interactions are used (float).
         """
 
         self.alpha = None
@@ -127,15 +131,15 @@ class Normalisation:
             self.potential = file["/param/potential/name"].asstr()[...]
 
         if self.potential == "Cusp":
-            self.f = self.mu * self.x
             self.system = "System"
+            self.f = self.mu * self.x
         elif self.potential == "SemiSmooth":
+            self.system = "SystemSemiSmooth"
             self.kappa = file["param"]["kappa"][...]
             self.f = self.mu * self.x * (1 - self.mu / (self.mu + self.kappa))
-            self.system = "SystemSemiSmooth"
         elif self.potential == "Smooth":
-            self.f = self.mu * self.x / np.pi
             self.system = "SystemSmooth"
+            self.f = self.mu * self.x / np.pi
         else:
             raise ValueError(f"Unknown potential: {self.potential:s}")
 
@@ -600,6 +604,7 @@ def cli_generate(cli_args=None):
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--dt", type=float, help="Time-step")
     parser.add_argument("--eta", type=float, help="Damping coefficient")
+    parser.add_argument("--fastload", action="store_true", help="Store fastload file")
     parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
     parser.add_argument("--nstep", type=int, default=20000, help="#load-steps to run")
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
@@ -632,11 +637,16 @@ def cli_generate(cli_args=None):
 
     executable = entry_points["cli_run"]
 
+    opts = []
     if args.nopassing:
-        commands = [f"{executable} --nopassing --nstep {args.nstep:d} {file}" for file in files]
-    else:
-        commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
+        opts += ["--nopassing"]
+    if args.fastload:
+        opts += ["--fastload"]
+    opts = " ".join(opts)
+    if len(opts) > 0:
+        opts = " " + opts
 
+    commands = [f"{executable}{opts} --nstep {args.nstep:d} {file}" for file in files]
     shelephant.yaml.dump(outdir / "commands.yaml", commands)
 
 
