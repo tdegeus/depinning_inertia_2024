@@ -695,6 +695,9 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
     basename = os.path.basename(args.file)
 
+    if args.fastload and os.path.isfile(filename2fastload(args.file)):
+        update_fastload(args.file)
+
     with h5py.File(args.file, "a") as file:
 
         system = allocate_system(file)
@@ -1048,6 +1051,46 @@ def cli_ensembleinfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
+def update_fastload(filepath: str):
+    """
+    Update a fastload file.
+    :param filepath: Simulation.
+    """
+
+    output = filename2fastload(filepath)
+    assert os.path.exists(output)
+
+    with h5py.File(filepath) as file, h5py.File(output, "r+") as output:
+
+        system = allocate_system(file)
+        root = file["QuasiStatic"]
+        last_start = None
+        last_step = None
+        stored = []
+
+        if "QuasiStatic" in output:
+            stored = np.sort(np.array([int(i) for i in output["QuasiStatic"]]))
+
+        for step in tqdm.tqdm(range(root["inc"].size)):
+
+            if step in stored:
+                continue
+
+            system.restore_quasistatic_step(root, step)
+
+            if last_start is not None:
+                if np.all(np.equal(last_start, system.chunk.start)):
+                    output[f"/QuasiStatic/{step:d}"] = output[f"/QuasiStatic/{last_step:d}"]
+                    continue
+
+            i = system.chunk.start
+            output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
+            output[f"/QuasiStatic/{step:d}/index"] = i
+            output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
+            output.flush()
+            last_start = np.copy(i)
+            last_step = step
+
 def cli_generatefastload(cli_args=None):
     """
     Save the state of the random generators for fast loading of the simulation.
@@ -1080,42 +1123,11 @@ def cli_generatefastload(cli_args=None):
     else:
         tools._check_overwrite_file(output, args.force)
 
-    with h5py.File(args.file) as file, h5py.File(output, "r+" if args.append else "w") as output:
+    if not args.append:
+        with h5py.File(output, "w") as f:
+            create_check_meta(f, f"/meta/{progname}", dev=args.develop)
 
-        if not args.append:
-            create_check_meta(output, f"/meta/{progname}", dev=args.develop)
-
-        system = allocate_system(file)
-        root = file["QuasiStatic"]
-        last_start = None
-        last_step = None
-
-        if args.append:
-            if "QuasiStatic" in output:
-                stored = np.sort(np.array([int(i) for i in output["QuasiStatic"]]))
-
-        for step in tqdm.tqdm(range(root["inc"].size)):
-
-            if args.append:
-                if step in stored:
-                    continue
-                load = stored[np.argmax(stored > step)]
-                system.restore_quasistatic_step(root, load)
-
-            system.restore_quasistatic_step(root, step)
-
-            if last_start is not None:
-                if np.all(np.equal(last_start, system.chunk.start)):
-                    output[f"/QuasiStatic/{step:d}"] = output[f"/QuasiStatic/{last_step:d}"]
-                    continue
-
-            i = system.chunk.start
-            output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
-            output[f"/QuasiStatic/{step:d}/index"] = i
-            output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
-            output.flush()
-            last_start = np.copy(i)
-            last_step = step
+    update_fastload(args.file)
 
 
 def cli_stateaftersystemspanning(cli_args=None):

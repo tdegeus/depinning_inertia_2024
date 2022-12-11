@@ -22,6 +22,7 @@ from mycode_line import QuasiStatic  # noqa: E402
 dirname = os.path.join(os.path.dirname(__file__), "output")
 idname = "id=0000.h5"
 filename = os.path.join(dirname, idname)
+filename_restart = os.path.join(dirname, "id=0001.h5")
 infoname = os.path.join(dirname, "EnsembleInfo.h5")
 
 
@@ -43,6 +44,8 @@ class MyTests(unittest.TestCase):
         with h5py.File(filename, "a") as file:
             file["param"]["xyield"]["nchunk"][...] = 100
 
+        shutil.copy2(filename, filename_restart)
+
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename, "--fastload"])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
@@ -53,6 +56,25 @@ class MyTests(unittest.TestCase):
         """
 
         shutil.rmtree(dirname)
+
+    def test_restart(self):
+
+        with h5py.File(filename, "a") as file:
+            file["param"]["xyield"]["nchunk"][...] = 100
+
+        with h5py.File(filename_restart, "a") as file:
+            file["param"]["xyield"]["nchunk"][...] = 100
+
+        QuasiStatic.cli_run(["--dev", "-n", 500, filename_restart, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 300, filename_restart, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 200, filename_restart, "--fastload"])
+        diff = g5.compare(filename, filename_restart)
+        diff["!="].remove("/meta/QuasiStatic_Run")
+
+        self.assertEqual(len(diff["->"]), 0)
+        self.assertEqual(len(diff["<-"]), 0)
+        self.assertEqual(len(diff["!="]), 0)
+        self.assertGreater(len(diff["=="]), 0)
 
     def test_y(self):
         """
