@@ -1279,13 +1279,29 @@ def cli_plot(cli_args=None):
 
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
+    parser.add_argument("-i", "--input", type=str, help="Realisation, if input in EnsembleInfo.")
     parser.add_argument("file", type=str, help="Simulation file")
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file) as file:
-        out = basic_output(file)
+        if "full" in file:
+            if args.input is None:
+                fname = sorted([i for i in file["full"]])[0]
+            else:
+                fname = args.input
+            out = file["full"][fname]
+        else:
+            out = basic_output(file)
+
+        S = out["S"][...]
+        x_frame = out["x_frame"][...]
+        f_frame = out["f_frame"][...]
+        f_potential = out["f_potential"][...]
+        steadystate = None
+        if "steadystate" in out:
+            steadystate = out["steadystate"][...]
 
     opts = {}
     if args.marker is not None:
@@ -1293,16 +1309,23 @@ def cli_plot(cli_args=None):
 
     fig, axes = gplt.subplots(ncols=2)
 
-    axes[0].plot(out["x_frame"], out["f_frame"], label=r"$f_\text{frame}$", **opts)
-    axes[0].plot(out["x_frame"], out["f_potential"], label=r"$f_\text{potential}$", **opts)
+    axes[0].plot(x_frame, f_frame, label=r"$f_\text{frame}$", **opts)
+    axes[0].plot(x_frame, f_potential, label=r"$f_\text{potential}$", **opts)
+
+    if steadystate is not None:
+        axes[0].axvline(x_frame[steadystate], c="k", ls="--", lw=1)
+
     axes[0].set_xlabel(r"$x_\text{frame}$")
     axes[0].set_ylabel(r"$f$")
     axes[0].legend()
 
+    axes[0].set_xlim([0, axes[0].get_xlim()[1]])
+    axes[0].set_ylim([0, axes[0].get_ylim()[1]])
+
     axes[1].set_xscale("log")
     axes[1].set_yscale("log")
 
-    data = out["S"][out["S"] > 0]
+    data = S[S > 0]
     bin_edges = gplt.histogram_bin_edges(data, bins=30, mode="log")
     P, x = gplt.histogram(data, bins=bin_edges, density=True, return_edges=False)
     axes[1].plot(x, P)
