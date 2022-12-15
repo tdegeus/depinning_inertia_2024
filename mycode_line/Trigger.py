@@ -521,8 +521,6 @@ def cli_generate(cli_args=None):
                     dest.flush()
                     ibranch += 1
 
-                assert ibranch > 0
-
 
 def cli_job_rerun(cli_args=None):
     """
