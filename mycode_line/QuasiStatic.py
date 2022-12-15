@@ -217,6 +217,12 @@ class DataMap:
         elif "delta" in file_yield:
             distribution = prrng.distribution.delta
             parameters = [2 * file_yield["delta"]["mean"][...], 0]
+        elif "random" in file_yield:
+            distribution = prrng.distribution.random
+            parameters = [
+                2 * file_yield["random"]["mean"][...],
+                file_yield["random"]["offset"][...],
+            ]
         else:
             raise OSError("Distribution not supported")
 
@@ -231,19 +237,6 @@ class DataMap:
 
         self.chunk += xoffset
         self.normalisation = Normalisation(file)
-
-    def _approx_mean_width(self) -> float:
-        """
-        Return approximative mean width of the potential distribution.
-        """
-
-        if self.distribution["type"] == "weibull":
-            return 2 * self.distribution["mean"] + self.distribution["offset"]
-
-        if self.distribution["type"] == "delta":
-            return 2 * self.distribution["mean"]
-
-        raise OSError("Distribution not supported")
 
     def chunk_goto(
         self,
@@ -542,7 +535,14 @@ def create_check_meta(
     return meta
 
 
-def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = None):
+def generate(
+    file: h5py.File,
+    N: int,
+    seed: int,
+    eta: float = None,
+    dt: float = None,
+    distribution: str = "weibull",
+):
     """
     Generate a simulation file.
 
@@ -576,10 +576,20 @@ def generate(file: h5py.File, N: int, seed: int, eta: float = None, dt: float = 
     file["/param/xyield/initseq"] = np.zeros(N, dtype=np.int64)
     file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * N)))
     file["/param/xyield/xoffset"] = -100
-    file["/param/xyield/weibull/offset"] = 1e-5
-    file["/param/xyield/weibull/mean"] = 1
-    file["/param/xyield/weibull/k"] = 2
     file["/param/xyield/dx"] = 1e-3
+
+    if distribution.lower() == "weibull":
+        file["/param/xyield/weibull/offset"] = 1e-5
+        file["/param/xyield/weibull/mean"] = 1
+        file["/param/xyield/weibull/k"] = 2
+    elif distribution.lower() == "delta":
+        file["/param/xyield/delta/mean"] = 1
+    elif distribution.lower() == "random":
+        file["/param/xyield/random/offset"] = 1e-5
+        file["/param/xyield/random/mean"] = 1
+    else:
+        raise ValueError(f"Unknown distribution: {distribution}")
+
     file["/param/potential/name"] = "Cusp"
     file["/param/normalisation/N"] = N
     file["/param/normalisation/x"] = 1
@@ -607,6 +617,13 @@ def cli_generate(cli_args=None):
     parser.add_argument("--fastload", action="store_true", help="Store fastload file")
     parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
     parser.add_argument("--nstep", type=int, default=20000, help="#load-steps to run")
+    parser.add_argument("--kframe", type=float, default=1, help="k_frame = X / N, with X this arg.")
+    parser.add_argument("--distribution", type=str, default="Weibull", help="Distribution type")
+    parser.add_argument("--smooth", action="store_true", help="Smooth potential")
+    parser.add_argument("--kappa", type=float, help="SemiSmooth potential with slope kappa")
+    parser.add_argument("--alpha", type=float, help="Long range interaction with this exponent")
+    parser.add_argument("--width", type=int, help="Run in 2d with this width")
+
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
@@ -633,7 +650,23 @@ def cli_generate(cli_args=None):
                 seed=seed,
                 eta=args.eta,
                 dt=args.dt,
+                distribution=args.distribution,
             )
+
+            file["/param/k_frame"][...] = float(args.kframe / args.size)
+
+            if args.smooth:
+                file["/param/potential/name"][...] = "Smooth"
+
+            if args.kappa:
+                file["/param/potential/name"][...] = "SemiSmooth"
+                file["/param/kappa"] = args.kappa
+
+            if args.alpha:
+                file["/param/alpha"] = args.alpha
+
+            if args.width:
+                file["/param/width"] = args.width
 
     executable = entry_points["cli_run"]
 
