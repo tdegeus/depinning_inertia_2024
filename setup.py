@@ -27,7 +27,6 @@ entry_points += read_entry_points("EventMap")
 entry_points += read_entry_points("Flow")
 entry_points += read_entry_points("Dynamics")
 entry_points += read_entry_points("QuasiStatic")
-entry_points += read_entry_points("slurm")
 entry_points += read_entry_points("Trigger")
 
 
