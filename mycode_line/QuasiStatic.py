@@ -1310,6 +1310,7 @@ def cli_plot(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
+    parser.add_argument("--bins", type=int, default=30, help="Number of bins.")
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("-i", "--input", type=str, help="Realisation, if input in EnsembleInfo.")
@@ -1322,13 +1323,21 @@ def cli_plot(cli_args=None):
         if "full" in file:
             if args.input is None:
                 fname = sorted([i for i in file["full"]])[0]
+                out = file["full"][fname]
+                S = out["/avalanche/S"][...]
+                if len(S) == 0:
+                    S = []
+                    for i in file["full"]:
+                        S += file["full"][i]["S"][...].tolist()
+                    S = np.array(S)
             else:
                 fname = args.input
-            out = file["full"][fname]
+                out = file["full"][fname]
+                S = out["S"][...]
         else:
             out = basic_output(file)
+            S = out["S"]
 
-        S = out["S"][...]
         x_frame = out["x_frame"][...]
         f_frame = out["f_frame"][...]
         f_potential = out["f_potential"][...]
@@ -1359,7 +1368,7 @@ def cli_plot(cli_args=None):
     axes[1].set_yscale("log")
 
     data = S[S > 0]
-    bin_edges = gplt.histogram_bin_edges(data, bins=30, mode="log")
+    bin_edges = gplt.histogram_bin_edges(data, bins=args.bins, mode="log")
     P, x = gplt.histogram(data, bins=bin_edges, density=True, return_edges=False)
     axes[1].plot(x, P)
 
