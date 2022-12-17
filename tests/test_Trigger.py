@@ -16,6 +16,7 @@ from mycode_line import QuasiStatic  # noqa: E402
 from mycode_line import Trigger  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
+clonedir = os.path.join(dirname, "clone")
 workdir = os.path.join(dirname, "trigger")
 bakdir = os.path.join(dirname, "trigger_bak")
 idname = "id=0000.h5"
@@ -72,7 +73,10 @@ class MyTests(unittest.TestCase):
         # generate, store as reference
         Trigger.cli_generate(["--dev", "--delta-f", 0.1, "-o", workdir, infoname])
         os.makedirs(bakdir)
+        os.makedirs(clonedir)
         shutil.copyfile(os.path.join(workdir, idname), os.path.join(bakdir, idname))
+        shutil.copyfile(os.path.join(workdir, idname), os.path.join(clonedir, idname))
+        print(os.path.join(clonedir, idname))
         shutil.rmtree(workdir)
 
         # generate using "--fastload" and check
@@ -95,6 +99,19 @@ class MyTests(unittest.TestCase):
 
         # run dynamics
         Dynamics.cli_run(["--dev", "-f", "--step", 1, "--branch", 0, "-o", dynsim, tfile])
+
+        # clone
+        cfile = os.path.join(clonedir, idname)
+        Trigger.cli_merge([tfile, cfile])
+        res = g5.compare(tfile, cfile)
+
+        for key in ["/meta/Trigger_Generate", "/param/xyield/nchunk"]:
+            if key in res["!="]:
+                res["!="].remove(key)
+
+        self.assertEqual(res["<-"], [])
+        self.assertEqual(res["->"], [])
+        self.assertEqual(res["!="], [])
 
         shutil.rmtree(workdir)
 

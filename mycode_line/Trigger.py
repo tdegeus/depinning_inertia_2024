@@ -522,6 +522,69 @@ def cli_generate(cli_args=None):
                     ibranch += 1
 
 
+def cli_merge(cli_args=None):
+    """
+    Merge an existing "push" file into a new "push" file.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("source", type=str, help="File to merge")
+    parser.add_argument("destination", type=str, help="File where 'source' is merged into")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.source)
+    assert os.path.isfile(args.destination)
+
+    with h5py.File(args.source) as src, h5py.File(args.destination, "a") as dest:
+
+        assert "Trigger" in src
+        assert "Trigger" in dest
+        assert src["/Trigger/step"].size <= dest["/Trigger/step"].size
+
+        if f"/meta/{entry_points['cli_run']}" not in dest:
+            GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
+
+        branches = np.arange(src["/Trigger/step"].size)
+
+        for ibranch in branches:
+
+            sroot = src[f"/Trigger/branches/{ibranch:d}"]
+            droot = dest[f"/Trigger/branches/{ibranch:d}"]
+
+            assert sroot["inc"][0] == droot["inc"][0]
+            assert sroot["try_p"][1] == droot["try_p"][1]
+            assert np.isclose(sroot["x_frame"][0], droot["x_frame"][0])
+            assert np.allclose(sroot["x"]["0"][...], droot["x"]["0"][...])
+
+            if not sroot["completed"][1]:
+                continue
+
+            src.copy(sroot["x"]["1"], droot["x"], "1")
+            storage.dset_extend1d(droot, "inc", 1, sroot["inc"][1])
+            storage.dset_extend1d(droot, "x_frame", 1, sroot["x_frame"][1])
+            storage.dset_extend1d(droot, "completed", 1, sroot["completed"][1])
+            storage.dset_extend1d(droot, "p", 1, sroot["p"][1])
+            storage.dset_extend1d(droot, "S", 1, sroot["S"][1])
+            storage.dset_extend1d(droot, "A", 1, sroot["A"][1])
+            storage.dset_extend1d(droot, "T", 1, sroot["T"][1])
+            storage.dset_extend1d(droot, "f_frame", 1, sroot["f_frame"][1])
+            storage.dset_extend1d(droot, "p", 1, sroot["p"][1])
+            storage.dset_extend1d(droot, "p", 2, sroot["p"][2])
+            storage.dset_extend1d(droot, "try_p", 2, sroot["try_p"][2])
+            dest.flush()
+
+
 def cli_job_rerun(cli_args=None):
     """
     Create jobs to get event maps, from:
