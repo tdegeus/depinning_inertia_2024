@@ -1343,7 +1343,8 @@ def cli_plot(cli_args=None):
         f_potential = out["f_potential"][...]
         steadystate = None
         if "steadystate" in out:
-            steadystate = out["steadystate"][...]
+            if out["steadystate"] is not None:
+                steadystate = out["steadystate"][...]
 
     opts = {}
     if args.marker is not None:
