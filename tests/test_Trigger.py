@@ -76,7 +76,6 @@ class MyTests(unittest.TestCase):
         os.makedirs(clonedir)
         shutil.copyfile(os.path.join(workdir, idname), os.path.join(bakdir, idname))
         shutil.copyfile(os.path.join(workdir, idname), os.path.join(clonedir, idname))
-        print(os.path.join(clonedir, idname))
         shutil.rmtree(workdir)
 
         # generate using "--fastload" and check
