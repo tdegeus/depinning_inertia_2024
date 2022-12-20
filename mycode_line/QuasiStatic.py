@@ -1197,6 +1197,10 @@ def cli_stateaftersystemspanning(cli_args=None):
         step = info["/avalanche/step"][...]
         A = info["/avalanche/A"][...]
         N = info["/normalisation/N"][...]
+        is2d = "width" in info["/normalisation"]
+
+        if is2d:
+            width = info["/normalisation/width"][...]
 
         keep = A == N
         file = file[keep]
@@ -1207,9 +1211,20 @@ def cli_stateaftersystemspanning(cli_args=None):
     count_xr = np.zeros(bin_edges.size - 1, dtype=np.int64)
     count_xl = np.zeros(bin_edges.size - 1, dtype=np.int64)
 
-    roi = int((N - N % 2) / 2)
-    roi = int(roi - roi % 2 + 1)
-    ensemble = eye.Ensemble([roi], variance=True, periodic=True)
+    if is2d:
+        roi = int((width - width % 2) / 2)
+        roi = int(roi - roi % 2 + 1)
+        w = int((roi - roi % 2) / 2 + 1)
+        reshape = [w, w]
+        roi = [roi, roi]
+    else:
+        roi = int((N - N % 2) / 2)
+        roi = int(roi - roi % 2 + 1)
+        w = int((roi - roi % 2) / 2 + 1)
+        reshape = [w]
+        roi = [roi]
+
+    ensemble = eye.Ensemble(roi, variance=True, periodic=True)
 
     if args.select is not None:
         if args.select < step.size:
@@ -1219,10 +1234,11 @@ def cli_stateaftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
 
-        output["/yield_distance/bin_edges"] = bin_edges
-        output["/yield_distance/count_right"] = count_xr
-        output["/yield_distance/count_left"] = count_xl
-        output["/yield_distance/count_any"] = count_x
+        root = output.create_group("yield_distance")
+        root["bin_edges"] = bin_edges
+        root["count_right"] = count_xr
+        root["count_left"] = count_xl
+        root["count_any"] = count_x
         lower = 0
         lower_r = 0
         lower_l = 0
@@ -1230,13 +1246,20 @@ def cli_stateaftersystemspanning(cli_args=None):
         upper_r = 0
         upper_l = 0
 
-        R = ensemble.result()
-        V = np.zeros_like(R)
-        A = ensemble.distance(0).astype(int)
+        root = output.create_group("heightheight")
+        if is2d:
+            Ax = ensemble.distance(0).astype(int)
+            Ay = ensemble.distance(1).astype(int)
+            keep = np.logical_and(Ax >= 0, Ay >= 0)
+            root["Ax"] = Ax[keep].reshape(reshape)
+            root["Ay"] = Ay[keep].reshape(reshape)
+        else:
+            A = ensemble.distance(0).astype(int)
+            keep = A >= 0
+            root["A"] = A[keep]
 
-        output["/heightheight/A"] = A[A >= 0]
-        output["/heightheight/R"] = R[A >= 0]
-        output["/heightheight/error"] = np.sqrt(V[A >= 0])
+        root["R"] = ensemble.result()[keep].reshape(reshape)
+        root["error"] = np.sqrt(np.zeros_like(ensemble.result())[keep]).reshape(reshape)
 
         output.flush()
 
@@ -1270,20 +1293,17 @@ def cli_stateaftersystemspanning(cli_args=None):
                     count_xr += np.bincount(i_xr[np.logical_and(i_xr >= 0, i_xr < n)], minlength=n)
                     count_xl += np.bincount(i_xl[np.logical_and(i_xl >= 0, i_xl < n)], minlength=n)
 
-                    ensemble.heightheight(system.x)
+                    ensemble.heightheight(system.x[system.organisation])
 
-                output["/yield_distance/bin_edges"][...] = bin_edges
-                output["/yield_distance/count_right"][...] = count_xr
-                output["/yield_distance/count_left"][...] = count_xl
-                output["/yield_distance/count_any"][...] = count_x
+                root = output["yield_distance"]
+                root["bin_edges"][...] = bin_edges
+                root["count_right"][...] = count_xr
+                root["count_left"][...] = count_xl
+                root["count_any"][...] = count_x
 
-                R = ensemble.result()
-                V = ensemble.variance()
-                A = ensemble.distance(0).astype(int)
-
-                output["/heightheight/A"][...] = A[A >= 0]
-                output["/heightheight/R"][...] = R[A >= 0]
-                output["/heightheight/error"][...] = np.sqrt(V[A >= 0])
+                root = output["heightheight"]
+                root["R"][...] = ensemble.result()[keep].reshape(reshape)
+                root["error"][...] = np.sqrt(ensemble.variance()[keep]).reshape(reshape)
 
                 output.flush()
 
