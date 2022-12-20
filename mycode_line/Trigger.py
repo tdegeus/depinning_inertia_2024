@@ -409,7 +409,13 @@ def cli_generate(cli_args=None):
 
     with h5py.File(args.ensembleinfo) as info:
 
-        files = sorted(info["full"])
+        N = info["/normalisation/N"][...]
+        consider = sorted(info["full"])
+        files = []
+        for filename in consider:
+            if np.sum(info["full"][filename]["A"][...] == N) > 0:
+                files += [filename]
+
         assert np.all([(basedir / file).exists() for file in files])
         assert not np.any([(outdir / file).exists() for file in files])
         assert not np.any(
@@ -419,8 +425,6 @@ def cli_generate(cli_args=None):
         executable = entry_points["cli_run"]
         commands = [f"{executable} {file}" for file in files]
         shelephant.yaml.dump(outdir / "commands.yaml", commands)
-
-        N = info["/normalisation/N"][...]
 
         for filename in tqdm.tqdm(files):
 
