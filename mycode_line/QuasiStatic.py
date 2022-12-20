@@ -162,21 +162,28 @@ class Normalisation:
         Return relevant parameters as dictionary.
         """
         ret = dict(
-            mu=self.mu,
+            dt=self.dt,
+            eta=self.eta,
+            f=self.f,
             k_frame=self.k_frame,
             k_neighbours=self.k_neighbours,
-            eta=self.eta,
             m=self.m,
-            seed=self.seed,
+            mu=self.mu,
             N=self.N,
-            dt=self.dt,
-            x=self.x,
             potential=self.potential,
+            seed=self.seed,
             system=self.system,
+            x=self.x,
         )
+
+        if self.alpha is not None:
+            ret["alpha"] = self.alpha
 
         if self.kappa is not None:
             ret["kappa"] = self.kappa
+
+        if self.width is not None:
+            ret["width"] = self.width
 
         return ret
 
