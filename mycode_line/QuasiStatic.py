@@ -859,7 +859,7 @@ def steadystate(
     tangent[1:] = (f_frame[1:] - f_frame[0]) / (x_frame[1:] - x_frame[0])
 
     i_yield = np.argmax(A == N)
-    i_tangent = np.argmax(tangent <= 0.95 * tangent[1])
+    i_tangent = np.argmax(tangent <= 0.95 * tangent[~np.isnan(tangent)][1])
     steadystate = max(i_yield + 1, i_tangent)
 
     if i_yield == 0 or i_tangent == 0:
