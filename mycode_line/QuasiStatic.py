@@ -1351,6 +1351,7 @@ def cli_plot(cli_args=None):
             if args.input is None:
                 fname = sorted([i for i in file["full"]])[0]
                 out = file["full"][fname]
+                N = out["/normalisation/N"][...]
                 S = out["/avalanche/S"][...]
                 if len(S) == 0:
                     S = []
@@ -1363,15 +1364,15 @@ def cli_plot(cli_args=None):
                 S = out["S"][...]
         else:
             out = basic_output(file)
+            N = Normalisation(file).N
             S = out["S"]
 
+        A = out["A"][...]
+        kick = out["kick"][...]
         x_frame = out["x_frame"][...]
         f_frame = out["f_frame"][...]
         f_potential = out["f_potential"][...]
-        steadystate = None
-        if "steadystate" in out:
-            if out["steadystate"] is not None:
-                steadystate = out["steadystate"][...]
+        ss = steadystate(x_frame, f_frame, kick, A, N)
 
     opts = {}
     if args.marker is not None:
@@ -1381,9 +1382,10 @@ def cli_plot(cli_args=None):
 
     axes[0].plot(x_frame, f_frame, label=r"$f_\text{frame}$", **opts)
     axes[0].plot(x_frame, f_potential, label=r"$f_\text{potential}$", **opts)
+    axes[0].plot(x_frame[A == N], f_frame[A == N], ls="none", color="r", marker="o")
 
-    if steadystate is not None:
-        axes[0].axvline(x_frame[steadystate], c="k", ls="--", lw=1)
+    if ss is not None:
+        axes[0].axvline(x_frame[ss], c="k", ls="--", lw=1)
 
     axes[0].set_xlabel(r"$x_\text{frame}$")
     axes[0].set_ylabel(r"$f$")
