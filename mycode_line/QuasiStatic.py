@@ -11,6 +11,7 @@ import re
 import textwrap
 import uuid
 
+import enstat
 import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock.Line1d as model
 import GooseEYE as eye
@@ -511,7 +512,18 @@ def create_check_meta(
     :return: Group to metadata.
     """
 
-    deps = sorted(list(set(list(model.version_dependencies()) + ["prrng=" + prrng.version()])))
+    deps = sorted(
+        list(
+            set(
+                list(model.version_dependencies())
+                + [
+                    "prrng=" + prrng.version(),
+                    "gooseye=" + eye.version(),
+                    "enstat=" + enstat.version,
+                ]
+            )
+        )
+    )
 
     assert dev or not tag.has_uncommitted(version)
     assert dev or not tag.any_has_uncommitted(deps)
@@ -1206,10 +1218,12 @@ def cli_stateaftersystemspanning(cli_args=None):
         file = file[keep]
         step = step[keep]
 
-    bin_edges = np.logspace(-4, 1, 20001)
-    count_x = np.zeros(bin_edges.size - 1, dtype=np.int64)
-    count_xr = np.zeros(bin_edges.size - 1, dtype=np.int64)
-    count_xl = np.zeros(bin_edges.size - 1, dtype=np.int64)
+    hist_x_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001))
+    hist_xr_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001))
+    hist_xl_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001))
+    hist_x_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001))
+    hist_xr_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001))
+    hist_xl_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001))
 
     if is2d:
         roi = int((width - width % 2) / 2)
@@ -1234,17 +1248,17 @@ def cli_stateaftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
 
-        root = output.create_group("yield_distance")
-        root["bin_edges"] = bin_edges
-        root["count_right"] = count_xr
-        root["count_left"] = count_xl
-        root["count_any"] = count_x
-        lower = 0
-        lower_r = 0
-        lower_l = 0
-        upper = 0
-        upper_r = 0
-        upper_l = 0
+        root = output.create_group("/yield_distance/log")
+        root["bin_edges"] = hist_x_log.bin_edges
+        root["count_right"] = hist_xr_log.count
+        root["count_left"] = hist_xl_log.count
+        root["count_any"] = hist_x_log.count
+
+        root = output.create_group("/yield_distance/lin")
+        root["bin_edges"] = hist_x_lin.bin_edges
+        root["count_right"] = hist_xr_lin.count
+        root["count_left"] = hist_xl_lin.count
+        root["count_any"] = hist_x_lin.count
 
         root = output.create_group("heightheight")
         if is2d:
@@ -1277,29 +1291,25 @@ def cli_stateaftersystemspanning(cli_args=None):
                     xl = system.x - system.y_left()
                     x = np.minimum(xl, xl)
 
-                    i_x = np.digitize(x, bin_edges) - 1
-                    i_xr = np.digitize(xr, bin_edges) - 1
-                    i_xl = np.digitize(xl, bin_edges) - 1
-                    n = bin_edges.size - 1
+                    hist_xr_log += xr
+                    hist_xl_log += xl
+                    hist_x_log += x
 
-                    lower += np.sum(i_x < 0)
-                    lower_r += np.sum(i_xr < 0)
-                    lower_l += np.sum(i_xl < 0)
-                    upper += np.sum(i_x >= n)
-                    upper_r += np.sum(i_xr >= n)
-                    upper_l += np.sum(i_xl >= n)
-
-                    count_x += np.bincount(i_x[np.logical_and(i_x >= 0, i_x < n)], minlength=n)
-                    count_xr += np.bincount(i_xr[np.logical_and(i_xr >= 0, i_xr < n)], minlength=n)
-                    count_xl += np.bincount(i_xl[np.logical_and(i_xl >= 0, i_xl < n)], minlength=n)
+                    hist_xr_lin += xr
+                    hist_xl_lin += xl
+                    hist_x_lin += x
 
                     ensemble.heightheight(system.x[system.organisation])
 
-                root = output["yield_distance"]
-                root["bin_edges"][...] = bin_edges
-                root["count_right"][...] = count_xr
-                root["count_left"][...] = count_xl
-                root["count_any"][...] = count_x
+                root = output["/yield_distance/log"]
+                root["count_right"][...] = hist_xr_log.count
+                root["count_left"][...] = hist_xl_log.count
+                root["count_any"][...] = hist_x_log.count
+
+                root = output["/yield_distance/lin"]
+                root["count_right"][...] = hist_xr_lin.count
+                root["count_left"][...] = hist_xl_lin.count
+                root["count_any"][...] = hist_x_lin.count
 
                 root = output["heightheight"]
                 root["R"][...] = ensemble.result()[keep].reshape(reshape)
@@ -1307,13 +1317,21 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                 output.flush()
 
-        count = output.create_group("/yield_distance/ignored")
-        count.attrs["lower"] = lower
-        count.attrs["lower_right"] = lower_r
-        count.attrs["lower_left"] = lower_l
-        count.attrs["upper"] = upper
-        count.attrs["upper_right"] = upper_r
-        count.attrs["upper_left"] = upper_l
+        count = output.create_group("/yield_distance/log/ignored")
+        count.attrs["lower_any"] = hist_x_log.count_left
+        count.attrs["lower_right"] = hist_xr_log.count_left
+        count.attrs["lower_left"] = hist_xl_log.count_left
+        count.attrs["upper_any"] = hist_x_log.count_right
+        count.attrs["upper_right"] = hist_xr_log.count_right
+        count.attrs["upper_left"] = hist_xl_log.count_right
+
+        count = output.create_group("/yield_distance/lin/ignored")
+        count.attrs["lower_any"] = hist_x_lin.count_left
+        count.attrs["lower_right"] = hist_xr_lin.count_left
+        count.attrs["lower_left"] = hist_xl_lin.count_left
+        count.attrs["upper_any"] = hist_x_lin.count_right
+        count.attrs["upper_right"] = hist_xr_lin.count_right
+        count.attrs["upper_left"] = hist_xl_lin.count_right
 
 
 def cli_plot(cli_args=None):
