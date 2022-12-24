@@ -677,14 +677,14 @@ def cli_generate(cli_args=None):
             if args.smooth:
                 file["/param/potential/name"][...] = "Smooth"
 
-            if args.kappa:
+            if args.kappa is not None:
                 file["/param/potential/name"][...] = "SemiSmooth"
                 file["/param/kappa"] = args.kappa
 
-            if args.alpha:
+            if args.alpha is not None:
                 file["/param/alpha"] = args.alpha
 
-            if args.width:
+            if args.width is not None:
                 file["/param/width"] = args.width
 
     executable = entry_points["cli_run"]
