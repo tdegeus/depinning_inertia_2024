@@ -213,8 +213,19 @@ class MyTests(unittest.TestCase):
         Read output.
         """
 
-        ss = os.path.join(dirname, "AfterSystemSpanning.h5")
-        QuasiStatic.cli_stateaftersystemspanning(["--dev", "-f", "-o", ss, infoname])
+        QuasiStatic.cli_stateaftersystemspanning(
+            ["--dev", "-f", "-o", os.path.join(dirname, "AfterSystemSpanning.h5"), infoname]
+        )
+
+        QuasiStatic.cli_roughnessaftersystemspanning(
+            [
+                "--dev",
+                "-f",
+                "-o",
+                os.path.join(dirname, "RoughnessAfterSystemSpanning.h5"),
+                infoname,
+            ]
+        )
 
 
 if __name__ == "__main__":

@@ -34,11 +34,13 @@ entry_points = dict(
     cli_plot="QuasiStatic_Plot",
     cli_run="QuasiStatic_Run",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
+    cli_roughnessaftersystemspanning="QuasiStatic_RoughnessAfterSystemSpanning",
 )
 
 file_defaults = dict(
     cli_ensembleinfo="QuasiStatic_EnsembleInfo.h5",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning.h5",
+    cli_roughnessaftersystemspanning="QuasiStatic_RoughnessAfterSystemSpanning.h5",
 )
 
 
@@ -1332,6 +1334,92 @@ def cli_stateaftersystemspanning(cli_args=None):
         count.attrs["upper_any"] = hist_x_lin.count_right
         count.attrs["upper_right"] = hist_xr_lin.count_right
         count.attrs["upper_left"] = hist_xl_lin.count_right
+
+
+def cli_roughnessaftersystemspanning(cli_args=None):
+    """
+    Extract the scaling of the roughness in Fourier space.
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    output = file_defaults[funcname]
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.ensembleinfo)
+    tools._check_overwrite_file(args.output, args.force)
+    basedir = os.path.dirname(args.ensembleinfo)
+
+    with h5py.File(args.ensembleinfo) as info:
+
+        assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
+
+        paths = info["/lookup/filepath"].asstr()[...]
+        file = info["/avalanche/file"][...]
+        step = info["/avalanche/step"][...]
+        A = info["/avalanche/A"][...]
+        N = info["/normalisation/N"][...]
+        is2d = "width" in info["/normalisation"]
+
+        if is2d:
+            width = int(info["/normalisation/width"][...])
+        else:
+            width = int(N)
+
+        keep = A == N
+        file = file[keep]
+        step = step[keep]
+
+    with h5py.File(args.output, "w") as output:
+
+        output["q"] = np.fft.fftfreq(width)
+
+        if is2d:
+            output["qx"] = np.fft.fftfreq(width)
+            output["qy"] = np.fft.fftfreq(width)
+            shape = [width, width]
+        else:
+            shape = [width]
+
+        ret = enstat.static(shape=shape)
+        output["first"] = ret.first
+        output["second"] = ret.second
+        output["norm"] = ret.norm
+
+        output.flush()
+
+        for f in tqdm.tqdm(np.unique(file)):
+
+            with h5py.File(os.path.join(basedir, paths[f])) as source:
+
+                system = allocate_system(source)
+
+                for s in tqdm.tqdm(np.sort(step[file == f])):
+
+                    x = source["QuasiStatic"]["x"][str(s)][...][system.organisation]
+                    x -= x.mean()
+                    ret += np.real(np.abs(np.fft.fft(x)))
+
+            output["first"][...] = ret.first
+            output["second"][...] = ret.second
+            output["norm"][...] = ret.norm
+
+            output.flush()
 
 
 def cli_plot(cli_args=None):
