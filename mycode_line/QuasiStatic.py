@@ -1454,10 +1454,10 @@ def cli_plot(cli_args=None):
 
     with h5py.File(args.file) as file:
         if "full" in file:
+            N = file["/normalisation/N"][...]
             if args.input is None:
                 fname = sorted([i for i in file["full"]])[0]
                 out = file["full"][fname]
-                N = out["/normalisation/N"][...]
                 S = out["/avalanche/S"][...]
                 if len(S) == 0:
                     S = []
