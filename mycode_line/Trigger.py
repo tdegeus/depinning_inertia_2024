@@ -459,15 +459,15 @@ def cli_generate(cli_args=None):
                 meta.attrs["f_frame"] = "Frame force (after minimisation) [ntrigger]"
 
                 key = "/Trigger/step"
-                dset = dest.create_dataset(key, shape=(1,), maxshape=(None,), dtype=np.int64)
+                dset = dest.create_dataset(key, shape=(0,), maxshape=(None,), dtype=np.int64)
                 dset.attrs["desc"] = "Quasi-static-load-step on which configuration is based"
 
                 key = "/Trigger/step_c"
-                dset = dest.create_dataset(key, shape=(1,), maxshape=(None,), dtype=np.int64)
+                dset = dest.create_dataset(key, shape=(0,), maxshape=(None,), dtype=np.int64)
                 dset.attrs["desc"] = "Quasi-static-load-step of last system-spanning event"
 
                 key = "/Trigger/loaded"
-                dset = dest.create_dataset(key, shape=(1,), maxshape=(None,), dtype=bool)
+                dset = dest.create_dataset(key, shape=(0,), maxshape=(None,), dtype=bool)
                 dset.attrs["desc"] = "True if 'elastic' loading was applied to 'step'"
 
                 ibranch = 0
