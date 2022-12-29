@@ -394,7 +394,6 @@ def cli_generate(cli_args=None):
 
     parser.add_argument("--delta-f", type=float, help="Advance to fixed force")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--info-ss", action="store_true", help="Use steadystate from EnsembleInfo")
     parser.add_argument("-o", "--outdir", type=str, default=".", help="Output directory")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo (read-only)")
@@ -439,16 +438,14 @@ def cli_generate(cli_args=None):
 
                 system = QuasiStatic.allocate_system(source)
 
-                steadystate = info["full"][filename]["steadystate"][...]
                 A = info["full"][filename]["A"][...]
                 step = info["full"][filename]["step"][...].astype(np.int64)
                 kick = info["full"][filename]["kick"][...]
+                x_frame = info["full"][filename]["x_frame"][...]
                 f_frame = info["full"][filename]["f_frame"][...]
+                steadystate = QuasiStatic.steadystate(x_frame, f_frame, kick, A, N)
                 assert np.all(A[~kick] == 0)
-                if args.info_ss:
-                    ss = step[step > steadystate]
-                else:
-                    ss = step[np.logical_and(A == N, step > steadystate)]
+                systemspanning = step[np.logical_and(A == N, step > steadystate)]
 
                 QuasiStatic.create_check_meta(dest, f"/meta/{progname}", dev=args.develop)
 
@@ -475,7 +472,7 @@ def cli_generate(cli_args=None):
 
                 ibranch = 0
 
-                for start, stop in zip(tqdm.tqdm(ss[:-1]), ss[1:]):
+                for start, stop in zip(tqdm.tqdm(systemspanning[:-1]), systemspanning[1:]):
 
                     if args.delta_f is None:
                         s, f, load = start, f_frame[start], False
