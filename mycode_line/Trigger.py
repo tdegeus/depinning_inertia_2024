@@ -553,6 +553,12 @@ def cli_merge(cli_args=None):
         assert "Trigger" in dest
         assert src["/Trigger/step"].size <= dest["/Trigger/step"].size
 
+        test = GooseHDF5.compare(src, dest, "/param")
+        assert len(test["!="]) == 0
+        assert len(test["->"]) == 0
+        assert len(test["<-"]) == 0
+        assert len(test["=="]) > 0
+
         if f"/meta/{entry_points['cli_run']}" not in dest:
             GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
 
