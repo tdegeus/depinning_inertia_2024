@@ -525,7 +525,15 @@ def cli_generate(cli_args=None):
 
 def cli_merge(cli_args=None):
     """
-    Merge an existing "push" file into a new "push" file.
+    Merge an previous run "push" file (``source``) into a "push" file (``destination``).
+    Only pushes that are not present in the ``destination`` file are added.
+
+    There are assertions on:
+
+    -   The parameters.
+    -   The position of the frame and of the particles before triggering.
+    -   The particle tried for triggering.
+    -   the increment (a.k.a. time).
     """
 
     class MyFmt(
@@ -565,9 +573,6 @@ def cli_merge(cli_args=None):
         assert len(test["<-"]) == 0
         assert len(test["=="]) > 0
 
-        if f"/meta/{entry_points['cli_run']}" not in dest:
-            GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
-
         branches = np.arange(src["/Trigger/step"].size)
 
         for ibranch in tqdm.tqdm(branches):
@@ -579,6 +584,14 @@ def cli_merge(cli_args=None):
             assert sroot["try_p"][1] == droot["try_p"][1]
             assert np.isclose(sroot["x_frame"][0], droot["x_frame"][0])
             assert np.allclose(sroot["x"]["0"][...], droot["x"]["0"][...])
+
+        if f"/meta/{entry_points['cli_run']}" not in dest:
+            GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
+
+        for ibranch in tqdm.tqdm(branches):
+
+            sroot = src[f"/Trigger/branches/{ibranch:d}"]
+            droot = dest[f"/Trigger/branches/{ibranch:d}"]
 
             if not sroot["completed"][1]:
                 continue
