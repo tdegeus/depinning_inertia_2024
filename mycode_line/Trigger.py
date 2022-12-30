@@ -597,6 +597,16 @@ def cli_merge(cli_args=None):
             if not sroot["completed"][1]:
                 continue
 
+            if droot["completed"].size >= 2:
+                test = GooseHDF5.compare(
+                    src, dest, GooseHDF5.getdatapaths(src, root=f"/Trigger/branches/{ibranch:d}")
+                )
+                assert len(test["!="]) == 0
+                assert len(test["->"]) == 0
+                assert len(test["<-"]) == 0
+                assert len(test["=="]) > 0
+                continue
+
             src.copy(sroot["x"]["1"], droot["x"], "1")
             storage.dset_extend1d(droot, "inc", 1, sroot["inc"][1])
             storage.dset_extend1d(droot, "x_frame", 1, sroot["x_frame"][1])

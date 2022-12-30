@@ -102,6 +102,7 @@ class MyTests(unittest.TestCase):
         # clone
         cfile = os.path.join(clonedir, idname)
         Trigger.cli_merge([tfile, cfile])
+        Trigger.cli_merge([tfile, cfile])
         res = g5.compare(tfile, cfile)
 
         for key in ["/meta/Trigger_Generate", "/param/xyield/nchunk"]:
