@@ -28,6 +28,7 @@ basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
     cli_run="Trigger_Run",
+    cli_merge="Trigger_Merge",
     cli_generate="Trigger_Generate",
     cli_ensembleinfo="Trigger_EnsembleInfo",
     cli_job_rerun="Trigger_Job_Rerun",
