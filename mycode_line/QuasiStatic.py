@@ -1301,12 +1301,16 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                     ensemble.heightheight(system.x[system.organisation])
 
-                for name, hist in zip(["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]):
+                for name, hist in zip(
+                    ["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]
+                ):
                     root = output[f"/yield_distance/{name}/log"]
                     for key, value in hist:
                         root[key][...] = value
 
-                for name, hist in zip(["any", "left", "right"], [hist_x_lin, hist_xl_lin, hist_xr_lin]):
+                for name, hist in zip(
+                    ["any", "left", "right"], [hist_x_lin, hist_xl_lin, hist_xr_lin]
+                ):
                     root = output[f"/yield_distance/{name}/lin"]
                     for key, value in hist:
                         root[key][...] = value
@@ -1316,6 +1320,7 @@ def cli_stateaftersystemspanning(cli_args=None):
                 root["error"][...] = np.sqrt(ensemble.variance()[keep]).reshape(reshape)
 
                 output.flush()
+
 
 def cli_roughnessaftersystemspanning(cli_args=None):
     """
