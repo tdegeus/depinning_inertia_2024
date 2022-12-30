@@ -1220,12 +1220,12 @@ def cli_stateaftersystemspanning(cli_args=None):
         file = file[keep]
         step = step[keep]
 
-    hist_x_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001))
-    hist_xr_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001))
-    hist_xl_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001))
-    hist_x_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001))
-    hist_xr_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001))
-    hist_xl_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001))
+    hist_x_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001), bound_error="norm")
+    hist_xr_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001), bound_error="norm")
+    hist_xl_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001), bound_error="norm")
+    hist_x_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
+    hist_xr_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
+    hist_xl_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
 
     if is2d:
         roi = int((width - width % 2) / 2)
@@ -1250,17 +1250,15 @@ def cli_stateaftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
 
-        root = output.create_group("/yield_distance/log")
-        root["bin_edges"] = hist_x_log.bin_edges
-        root["count_right"] = hist_xr_log.count
-        root["count_left"] = hist_xl_log.count
-        root["count_any"] = hist_x_log.count
+        for name, hist in zip(["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]):
+            root = output.create_group(f"/yield_distance/{name}/log")
+            for key, value in hist:
+                root[key] = value
 
-        root = output.create_group("/yield_distance/lin")
-        root["bin_edges"] = hist_x_lin.bin_edges
-        root["count_right"] = hist_xr_lin.count
-        root["count_left"] = hist_xl_lin.count
-        root["count_any"] = hist_x_lin.count
+        for name, hist in zip(["any", "left", "right"], [hist_x_lin, hist_xl_lin, hist_xr_lin]):
+            root = output.create_group(f"/yield_distance/{name}/lin")
+            for key, value in hist:
+                root[key] = value
 
         root = output.create_group("heightheight")
         if is2d:
@@ -1303,38 +1301,21 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                     ensemble.heightheight(system.x[system.organisation])
 
-                root = output["/yield_distance/log"]
-                root["count_right"][...] = hist_xr_log.count
-                root["count_left"][...] = hist_xl_log.count
-                root["count_any"][...] = hist_x_log.count
+                for name, hist in zip(["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]):
+                    root = output[f"/yield_distance/{name}/log"]
+                    for key, value in hist:
+                        root[key][...] = value
 
-                root = output["/yield_distance/lin"]
-                root["count_right"][...] = hist_xr_lin.count
-                root["count_left"][...] = hist_xl_lin.count
-                root["count_any"][...] = hist_x_lin.count
+                for name, hist in zip(["any", "left", "right"], [hist_x_lin, hist_xl_lin, hist_xr_lin]):
+                    root = output[f"/yield_distance/{name}/lin"]
+                    for key, value in hist:
+                        root[key][...] = value
 
                 root = output["heightheight"]
                 root["R"][...] = ensemble.result()[keep].reshape(reshape)
                 root["error"][...] = np.sqrt(ensemble.variance()[keep]).reshape(reshape)
 
                 output.flush()
-
-        count = output.create_group("/yield_distance/log/ignored")
-        count.attrs["lower_any"] = hist_x_log.count_left
-        count.attrs["lower_right"] = hist_xr_log.count_left
-        count.attrs["lower_left"] = hist_xl_log.count_left
-        count.attrs["upper_any"] = hist_x_log.count_right
-        count.attrs["upper_right"] = hist_xr_log.count_right
-        count.attrs["upper_left"] = hist_xl_log.count_right
-
-        count = output.create_group("/yield_distance/lin/ignored")
-        count.attrs["lower_any"] = hist_x_lin.count_left
-        count.attrs["lower_right"] = hist_xr_lin.count_left
-        count.attrs["lower_left"] = hist_xl_lin.count_left
-        count.attrs["upper_any"] = hist_x_lin.count_right
-        count.attrs["upper_right"] = hist_xr_lin.count_right
-        count.attrs["upper_left"] = hist_xl_lin.count_right
-
 
 def cli_roughnessaftersystemspanning(cli_args=None):
     """
