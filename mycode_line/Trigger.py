@@ -553,7 +553,13 @@ def cli_merge(cli_args=None):
         assert "Trigger" in dest
         assert src["/Trigger/step"].size <= dest["/Trigger/step"].size
 
-        test = GooseHDF5.compare(src, dest, "/param")
+        test = GooseHDF5.compare(src, dest, GooseHDF5.getdatapaths(src, root="/param"))
+
+        for path in ["/param/xyield/nchunk"]:
+            for key in ["!=", "->", "<-"]:
+                if path in test[key]:
+                    test[key].remove(path)
+
         assert len(test["!="]) == 0
         assert len(test["->"]) == 0
         assert len(test["<-"]) == 0
@@ -564,7 +570,7 @@ def cli_merge(cli_args=None):
 
         branches = np.arange(src["/Trigger/step"].size)
 
-        for ibranch in branches:
+        for ibranch in tqdm.tqdm(branches):
 
             sroot = src[f"/Trigger/branches/{ibranch:d}"]
             droot = dest[f"/Trigger/branches/{ibranch:d}"]
