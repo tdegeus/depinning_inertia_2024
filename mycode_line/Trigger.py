@@ -559,6 +559,10 @@ def cli_merge(cli_args=None):
 
     with h5py.File(args.source) as src, h5py.File(args.destination, "a") as dest:
 
+        # catching old bug
+        if src["/Trigger/step"].size == 1 and "0" not in src["/Trigger/branches"]:
+            return
+
         assert "Trigger" in src
         assert "Trigger" in dest
         assert src["/Trigger/step"].size <= dest["/Trigger/step"].size
