@@ -29,6 +29,7 @@ basename = os.path.splitext(os.path.basename(__file__))[0]
 entry_points = dict(
     cli_run="Trigger_Run",
     cli_merge="Trigger_Merge",
+    cli_merge_batch="Trigger_MergeBatch",
     cli_generate="Trigger_Generate",
     cli_ensembleinfo="Trigger_EnsembleInfo",
     cli_job_rerun="Trigger_Job_Rerun",
@@ -576,7 +577,7 @@ def cli_merge(cli_args=None):
 
         branches = np.arange(src["/Trigger/step"].size)
 
-        for ibranch in tqdm.tqdm(branches):
+        for ibranch in branches:
 
             sroot = src[f"/Trigger/branches/{ibranch:d}"]
             droot = dest[f"/Trigger/branches/{ibranch:d}"]
@@ -589,7 +590,7 @@ def cli_merge(cli_args=None):
         if f"/meta/{entry_points['cli_run']}" not in dest:
             GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
 
-        for ibranch in tqdm.tqdm(branches):
+        for ibranch in branches:
 
             sroot = src[f"/Trigger/branches/{ibranch:d}"]
             droot = dest[f"/Trigger/branches/{ibranch:d}"]
@@ -620,6 +621,37 @@ def cli_merge(cli_args=None):
             storage.dset_extend1d(droot, "p", 2, sroot["p"][2])
             storage.dset_extend1d(droot, "try_p", 2, sroot["try_p"][2])
             dest.flush()
+
+
+def cli_merge_batch(cli_args=None):
+    """
+    Run :py:func:`cli_merge` on a batch of files.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-o", "--output", required=True, type=str, help="Destination directory")
+    parser.add_argument("files", nargs="*", type=str, help="Files to extract data from")
+
+    args = tools._parse(parser, cli_args)
+    dest = pathlib.Path(args.output)
+    assert dest.is_dir()
+    assert all([os.path.isfile(i) for i in args.files])
+    destinations = [str(dest / pathlib.Path(i).name) for i in args.files]
+    assert all([os.path.isfile(i) for i in destinations])
+
+    for src, dest in zip(tqdm.tqdm(args.files), destinations):
+        cli_merge([src, dest])
 
 
 def cli_job_rerun(cli_args=None):
