@@ -595,6 +595,9 @@ def cli_merge(cli_args=None):
             sroot = src[f"/Trigger/branches/{ibranch:d}"]
             droot = dest[f"/Trigger/branches/{ibranch:d}"]
 
+            if sroot["completed"].size < 2:
+                continue
+
             if not sroot["completed"][1]:
                 continue
 
