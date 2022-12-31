@@ -650,7 +650,11 @@ def cli_merge_batch(cli_args=None):
     destinations = [str(dest / pathlib.Path(i).name) for i in args.files]
     assert all([os.path.isfile(i) for i in destinations])
 
-    for src, dest in zip(tqdm.tqdm(args.files), destinations):
+    pbar = tqdm.tqdm(args.files)
+
+    for src, dest in zip(pbar, destinations):
+        pbar.set_description(src)
+        pbar.refresh()
         cli_merge([src, dest])
 
 
