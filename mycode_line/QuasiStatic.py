@@ -1373,19 +1373,35 @@ def cli_roughnessaftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
 
-        output["q"] = np.fft.fftfreq(width)
+        q = np.fft.fftfreq(width)
+        output["/fft/q"] = q
+
+        if width % 2 == 0:
+            idx = int(width / 2)
+            output["/structure/q"] = q[1:idx]
+            assert np.all(q[1:idx] + np.flip(q[idx + 1:]) == 0)
+        else:
+            raise NotImplementedError("Odd width not implemented")
 
         if is2d:
-            output["qx"] = np.fft.fftfreq(width)
-            output["qy"] = np.fft.fftfreq(width)
+            output["/fft/qx"] = np.fft.fftfreq(width)
+            output["/fft/qy"] = np.fft.fftfreq(width)
             shape = [width, width]
+            shape_structure = [idx - 1, idx - 1]
         else:
             shape = [width]
+            shape_structure = [idx - 1]
 
-        ret = enstat.static(shape=shape)
-        output["first"] = ret.first
-        output["second"] = ret.second
-        output["norm"] = ret.norm
+        ret_fft = enstat.static(shape=shape)
+        ret_structure = enstat.static(shape=shape_structure)
+
+        output["/fft/first"] = ret_fft.first
+        output["/fft/second"] = ret_fft.second
+        output["/fft/norm"] = ret_fft.norm
+
+        output["/structure/first"] = ret_structure.first
+        output["/structure/second"] = ret_structure.second
+        output["/structure/norm"] = ret_structure.norm
 
         output.flush()
 
@@ -1399,11 +1415,23 @@ def cli_roughnessaftersystemspanning(cli_args=None):
 
                     x = source["QuasiStatic"]["x"][str(s)][...][system.organisation]
                     x -= x.mean()
-                    ret += np.real(np.abs(np.fft.fft(x)))
 
-            output["first"][...] = ret.first
-            output["second"][...] = ret.second
-            output["norm"][...] = ret.norm
+                    if is2d:
+                        xhat = np.fft.fft2(x)
+                        ret_fft += np.real(np.abs(xhat))
+                        ret_structure += np.real(xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1:, idx + 1:]))
+                    else:
+                        xhat = np.fft.fft(x)
+                        ret_fft += np.real(np.abs(xhat))
+                        ret_structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1:]))
+
+            output["/fft/first"][...] = ret_fft.first
+            output["/fft/second"][...] = ret_fft.second
+            output["/fft/norm"][...] = ret_fft.norm
+
+            output["/structure/first"][...] = ret_structure.first
+            output["/structure/second"][...] = ret_structure.second
+            output["/structure/norm"][...] = ret_structure.norm
 
             output.flush()
 
