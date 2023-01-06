@@ -1379,7 +1379,7 @@ def cli_roughnessaftersystemspanning(cli_args=None):
         if width % 2 == 0:
             idx = int(width / 2)
             output["/structure/q"] = q[1:idx]
-            assert np.all(q[1:idx] + np.flip(q[idx + 1:]) == 0)
+            assert np.all(q[1:idx] + np.flip(q[idx + 1 :]) == 0)
         else:
             raise NotImplementedError("Odd width not implemented")
 
@@ -1419,11 +1419,13 @@ def cli_roughnessaftersystemspanning(cli_args=None):
                     if is2d:
                         xhat = np.fft.fft2(x)
                         ret_fft += np.real(np.abs(xhat))
-                        ret_structure += np.real(xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1:, idx + 1:]))
+                        ret_structure += np.real(
+                            xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1 :, idx + 1 :])
+                        )
                     else:
                         xhat = np.fft.fft(x)
                         ret_fft += np.real(np.abs(xhat))
-                        ret_structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1:]))
+                        ret_structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1 :]))
 
             output["/fft/first"][...] = ret_fft.first
             output["/fft/second"][...] = ret_fft.second
