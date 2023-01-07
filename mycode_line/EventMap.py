@@ -88,6 +88,7 @@ def cli_run(cli_args=None):
             root = file["QuasiStatic"]
             system.restore_quasistatic_step(root, args.step - 1)
 
+        x0 = np.copy(system.x)
         i_n = system.i
         dx = file["/param/xyield/dx"][...]
 
@@ -99,6 +100,7 @@ def cli_run(cli_args=None):
         R = []
         T = []
         S = []
+        X = []
 
         while True:
 
@@ -111,6 +113,7 @@ def cli_run(cli_args=None):
                 R.append(r)
                 T.append(t)
                 S.append((i - i_t)[r])
+                X.append(system.x[r])
 
             i_t = np.copy(i)
 
@@ -124,6 +127,8 @@ def cli_run(cli_args=None):
         file["r"] = np.array(R)
         file["t"] = np.array(T)
         file["S"] = np.array(S)
+        file["x"] = np.array(X)
+        file["x0"] = x0
 
         meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
         meta.attrs["file"] = args.file
