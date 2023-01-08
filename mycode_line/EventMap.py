@@ -8,22 +8,27 @@ import inspect
 import os
 import sys
 import textwrap
+import pathlib
 
 import FrictionQPotSpringBlock  # noqa: F401
+import GooseHDF5 as g5
 import h5py
 import numpy as np
 import tqdm
+import XDMFWrite_h5py as xh
+import GooseFEM
 
 from . import QuasiStatic
+from . import storage
 from . import tools
 from ._version import version
 
 
 entry_points = dict(
     cli_run="EventMap_run",
+    cli_paraview="EventMap_Paraview",
     cli_basic_output="EventMap_info",
 )
-
 
 file_defaults = dict(
     cli_run="EventMap.h5",
@@ -63,10 +68,13 @@ def cli_run(cli_args=None):
     output = file_defaults[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--avalanche", action="store_true", help="Truncated once A == N")
+    parser.add_argument("-x", action="store_true", help="Store x")
+    parser.add_argument("-s", action="store_true", help="Store S")
     parser.add_argument("--smax", type=int, help="Truncate at a maximum total S")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output file")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("-s", "--step", required=True, type=int, help="Step number")
+    parser.add_argument("--step", required=True, type=int, help="Step number")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
 
@@ -74,7 +82,7 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
     tools._check_overwrite_file(args.output, args.force)
 
-    with h5py.File(args.file, "r") as file:
+    with h5py.File(args.file) as file, h5py.File(args.output, "w") as output:
 
         system = QuasiStatic.allocate_system(file)
 
@@ -88,56 +96,148 @@ def cli_run(cli_args=None):
             root = file["QuasiStatic"]
             system.restore_quasistatic_step(root, args.step - 1)
 
-        x0 = np.copy(system.x)
+        meta = QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+        meta.attrs["file"] = args.file
+        meta.attrs["step"] = args.step
+        meta.attrs["Smax"] = args.smax if args.smax else sys.maxsize
+
+        output["x0"] = system.x[system.organisation]
+        output["t0"] = system.t
+        output["organisation"] = system.organisation
+
+        tref = system.t
         i_n = system.i
+        iter = 0
         dx = file["/param/xyield/dx"][...]
+        avalanche = True
 
         if "Trigger" in file:
             system.trigger(p=root["p"][1], eps=dx, direction=1)
         else:
             system.eventDrivenStep(dx, root["kick"][args.step])
 
-        R = []
-        T = []
-        S = []
-        X = []
+        with g5.ExtendableList(output, "r", np.uint64) as dset_r,\
+             g5.ExtendableList(output, "t", np.float64) as dset_t,\
+             g5.ExtendableList(output, "dx", np.float64) as dset_dx,\
+             g5.ExtendableList(output, "ds", np.int64) as dset_ds:
 
-        while True:
+            while True:
 
-            i_t = system.i
-            ret = system.timeStepsUntilEvent()
-            i = system.i
-            t = system.t
+                iter += 1
+                i_t = np.copy(system.i)
+                x_t = np.copy(system.x)
+                ret = system.timeStepsUntilEvent()
+                i = system.i
+                x = system.x
+                t = system.t
 
-            for r in np.argwhere(i != i_t).ravel():
-                R.append(r)
-                T.append(t)
-                S.append((i - i_t)[r])
-                X.append(system.x[r])
+                for r in np.argwhere(i != i_t).ravel():
+                    dset_r.append(r)
+                    dset_t.append(t - tref)
+                    if args.s:
+                        dset_ds.append(i[r] - i_t[r])
+                    if args.x:
+                        dset_dx.append(x[r] - x_t[r])
 
-            i_t = np.copy(i)
+                i_t = np.copy(i)
+                x_t = np.copy(x)
 
-            if np.sum(i - i_n) >= args.smax:
-                break
+                if np.sum(i - i_n) >= args.smax:
+                    break
 
-            if ret == 0:
-                break
+                if ret == 0:
+                    break
 
-    with h5py.File(args.output, "w") as file:
-        file["r"] = np.array(R)
-        file["t"] = np.array(T)
-        file["S"] = np.array(S)
-        file["x"] = np.array(X)
-        file["x0"] = x0
+                if iter % 2000 == 0:
+                    file.flush()
 
-        meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
-        meta.attrs["file"] = args.file
-        meta.attrs["step"] = args.step
-        meta.attrs["Smax"] = args.smax if args.smax else sys.maxsize
+                if avalanche:
+                    if np.sum(i != i_n) == system.N:
+                        output["t_A=N"] = t - tref
+                        avalanche = False
+                        if args.avalanche:
+                            break
 
-    if cli_args is not None:
-        return dict(r=np.array(R), t=np.array(T), S=np.array(S))
 
+def cli_paraview(cli_args=None):
+    """
+    Convert :py:func:`cli_run` output to be viewed in Paraview.
+    """
+
+    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("--bins", type=int, default=1000, help="Number of time steps to write")
+    parser.add_argument("file", type=str, help="Simulation file")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    tools._check_overwrite_file(args.output, args.force)
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    tools._check_overwrite_file(f"{args.output}.h5", args.force)
+    tools._check_overwrite_file(f"{args.output}.xdmf", args.force)
+
+    with h5py.File(args.file) as file,\
+         h5py.File(f"{args.output}.h5", "w") as out,\
+         xh.TimeSeries(f"{args.output}.xdmf") as xdmf:
+
+        x0 = file["x0"][...]
+        t = file["t"][...]
+        r = file["r"][...]
+        ds = file["ds"][...]
+        dx = file["dx"][...]
+        organisation = file["organisation"][...]
+
+        assert np.all(organisation.ravel() == np.arange(x0.size))
+        assert x0.ndim == 2
+
+        mesh = GooseFEM.Mesh.Quad4.Regular(x0.shape[0] - 1, x0.shape[1] - 1)
+        coor = xh.as3d(mesh.coor())
+        coor[:, 2] = (x0 - np.mean(x0)).ravel()
+
+        x0 = x0.ravel()
+
+        out["coor"] = coor
+        out["conn"] = mesh.conn()
+
+        X = np.zeros(coor.shape[0], dtype=np.float64)
+        S = np.zeros(coor.shape[0], dtype=np.int64)
+
+        args.bins = min(args.bins, np.unique(t).size)
+
+        if "t_A=N" in file:
+            n = int(args.bins / 2)
+            ta = np.linspace(0, file["t_A=N"][...], n + 1)
+            tb = np.linspace(file["t_A=N"][...], np.max(t), n + 1)[1:]
+            tsave = np.hstack((ta, tb))
+        else:
+            tsave = np.linspace(0, np.max(t), args.bins + 1)
+
+        for ibin in tqdm.tqdm(range(1, args.bins + 1)):
+
+            keep = np.logical_and(t >= tsave[ibin - 1], t < tsave[ibin])
+            np.add.at(X, r[keep], dx[keep])
+            np.add.at(S, r[keep], ds[keep])
+
+            disp = np.zeros_like(coor)
+            disp[:, -1] = X
+
+            out[f"/S/{ibin:d}"] = S
+            out[f"/disp/{ibin:d}"] = disp
+
+            xdmf += xh.TimeStep(time=tsave[ibin])
+            xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
+            xdmf += xh.Attribute(out[f"/disp/{ibin:d}"], xh.AttributeCenter.Node, name="dx")
+            xdmf += xh.Attribute(out[f"/S/{ibin:d}"], xh.AttributeCenter.Node, name="S")
 
 def cli_basic_output(cli_args=None):
     """

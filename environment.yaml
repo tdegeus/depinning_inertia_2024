@@ -4,7 +4,7 @@ dependencies:
 - autodocsumm
 - click
 - enstat >=0.8.0
-- goosehdf5 >=0.17.1
+- goosehdf5 >=0.21.0
 - goosempl
 - gooseslurm
 - h5py
@@ -23,4 +23,4 @@ dependencies:
 - shelephant
 - sphinx_rtd_theme
 - tqdm
-- xdmfwrite_h5py
+- xdmfwrite_h5py >=0.2.0
