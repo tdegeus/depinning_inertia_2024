@@ -8,15 +8,14 @@ import inspect
 import os
 import sys
 import textwrap
-import pathlib
 
 import FrictionQPotSpringBlock  # noqa: F401
+import GooseFEM
 import GooseHDF5 as g5
 import h5py
 import numpy as np
 import tqdm
 import XDMFWrite_h5py as xh
-import GooseFEM
 
 from . import QuasiStatic
 from . import storage
@@ -116,10 +115,11 @@ def cli_run(cli_args=None):
         else:
             system.eventDrivenStep(dx, root["kick"][args.step])
 
-        with g5.ExtendableList(output, "r", np.uint64) as dset_r,\
-             g5.ExtendableList(output, "t", np.float64) as dset_t,\
-             g5.ExtendableList(output, "dx", np.float64) as dset_dx,\
-             g5.ExtendableList(output, "ds", np.int64) as dset_ds:
+        with g5.ExtendableList(output, "r", np.uint64) as dset_r, g5.ExtendableList(
+            output, "t", np.float64
+        ) as dset_t, g5.ExtendableList(output, "dx", np.float64) as dset_dx, g5.ExtendableList(
+            output, "ds", np.int64
+        ) as dset_ds:
 
             while True:
 
@@ -186,9 +186,9 @@ def cli_paraview(cli_args=None):
     tools._check_overwrite_file(f"{args.output}.h5", args.force)
     tools._check_overwrite_file(f"{args.output}.xdmf", args.force)
 
-    with h5py.File(args.file) as file,\
-         h5py.File(f"{args.output}.h5", "w") as out,\
-         xh.TimeSeries(f"{args.output}.xdmf") as xdmf:
+    with h5py.File(args.file) as file, h5py.File(f"{args.output}.h5", "w") as out, xh.TimeSeries(
+        f"{args.output}.xdmf"
+    ) as xdmf:
 
         x0 = file["x0"][...]
         t = file["t"][...]
@@ -238,6 +238,7 @@ def cli_paraview(cli_args=None):
             xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
             xdmf += xh.Attribute(out[f"/disp/{ibin:d}"], xh.AttributeCenter.Node, name="dx")
             xdmf += xh.Attribute(out[f"/S/{ibin:d}"], xh.AttributeCenter.Node, name="S")
+
 
 def cli_basic_output(cli_args=None):
     """
