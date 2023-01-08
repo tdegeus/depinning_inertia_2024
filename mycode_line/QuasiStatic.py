@@ -33,6 +33,7 @@ entry_points = dict(
     cli_generate="QuasiStatic_Generate",
     cli_plot="QuasiStatic_Plot",
     cli_run="QuasiStatic_Run",
+    cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
     cli_roughnessaftersystemspanning="QuasiStatic_RoughnessAfterSystemSpanning",
 )
@@ -1100,6 +1101,64 @@ def cli_ensembleinfo(cli_args=None):
         tools.h5py_save_unique(info["dynamics"], output, "/lookup/dynamics", asstr=True)
         tools.h5py_save_unique(info["version"], output, "/lookup/version", asstr=True)
         output["files"] = output["/lookup/filepath"]
+
+
+def cli_rerun_eventmap(cli_args=None):
+    """
+    Write list of jobs to run to get an event map.
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--systemspanning", action="store_true", help="System spanning events")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("info", type=str, help="EnsembleInfo")
+    parser.add_argument("output", type=str, help="Output file")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.info)
+
+    with h5py.File(args.info) as file:
+
+        step = file["/avalanche/step"][...]
+        A = file["/avalanche/A"][...]
+        S = file["/avalanche/S"][...]
+        N = file["/normalisation/N"][...]
+        fname = file["/lookup/filepath"].asstr()[...][file["/avalanche/file"][...]]
+        is2d = "width" in file["/normalisation"]
+
+    if args.systemspanning:
+        keep = A == N
+        step = step[keep]
+        S = S[keep]
+        fname = list(fname[keep])
+
+    root = pathlib.Path(os.path.relpath(args.info, pathlib.Path(args.output).parent)).parent
+    rname = [str(root / f) for f in fname]
+    fname = [os.path.normpath(f).split(".h5")[0] for f in fname]
+    opts = ["-s"]
+    if is2d:
+        opts += ["-x"]
+    opts = " ".join(opts)
+
+    c = [
+        f"EventMap_run {opts} --step {s:d} --smax {smax:d} {r} -o {f}_step={s:d}.h5"
+        for s, smax, r, f in zip(step, S, rname, fname)
+    ]
+
+    shelephant.yaml.dump(args.output, c)
 
 
 def cli_generatefastload(cli_args=None):
