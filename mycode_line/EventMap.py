@@ -18,7 +18,6 @@ import tqdm
 import XDMFWrite_h5py as xh
 
 from . import QuasiStatic
-from . import storage
 from . import tools
 from ._version import version
 
@@ -26,6 +25,7 @@ from ._version import version
 entry_points = dict(
     cli_run="EventMap_run",
     cli_paraview="EventMap_Paraview",
+    cli_plot="EventMap_Plot",
     cli_basic_output="EventMap_info",
 )
 
@@ -80,6 +80,7 @@ def cli_run(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     tools._check_overwrite_file(args.output, args.force)
+    assert args.x or args.s
 
     with h5py.File(args.file) as file, h5py.File(args.output, "w") as output:
 
@@ -238,6 +239,55 @@ def cli_paraview(cli_args=None):
             xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
             xdmf += xh.Attribute(out[f"/disp/{ibin:d}"], xh.AttributeCenter.Node, name="dx")
             xdmf += xh.Attribute(out[f"/S/{ibin:d}"], xh.AttributeCenter.Node, name="S")
+
+
+def cli_plot(cli_args=None):
+    """
+    Basic plot
+    """
+
+    import GooseMPL as gplt  # noqa: F401
+    import matplotlib.pyplot as plt  # noqa: F401
+
+    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-o", "--output", type=str, help="Store figure.")
+    parser.add_argument("file", type=str, help="Event map")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+
+    with h5py.File(args.file) as file:
+
+        r = file["r"][...]
+        t = file["t"][...]
+        ds = file["ds"][...]
+
+    fig, ax = plt.subplots()
+
+    ax.plot(r[ds < 0], t[ds < 0], ".", color="b", rasterized=True, markersize=1)
+    ax.plot(r[ds > 0], t[ds > 0], ".", color="k", rasterized=True, markersize=1)
+
+    ax.set_xlabel("$r$")
+    ax.set_ylabel("$t$")
+
+    if args.output is not None:
+        fig.savefig(args.output)
+    else:
+        plt.show()
+
+    plt.close(fig)
 
 
 def cli_basic_output(cli_args=None):
