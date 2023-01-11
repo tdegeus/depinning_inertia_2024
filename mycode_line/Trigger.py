@@ -28,6 +28,7 @@ basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
     cli_run="Trigger_Run",
+    cli_filter_completed="Trigger_FilterCompleted",
     cli_merge="Trigger_Merge",
     cli_merge_batch="Trigger_MergeBatch",
     cli_generate="Trigger_Generate",
@@ -47,6 +48,54 @@ def replace_ep(doc: str) -> str:
     for ep in entry_points:
         doc = doc.replace(rf":py:func:`{ep:s}`", entry_points[ep])
     return doc
+
+
+def cli_filter_completed(cli_args=None):
+    """
+    Filter completed files from list of files.
+    Printed are just the files that are not completed.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("--sep", type=str, help="Separator in output", default=" ")
+    parser.add_argument("files", nargs="*", type=str, help="Simulation files")
+
+    args = tools._parse(parser, cli_args)
+    assert np.all([os.path.isfile(f) for f in args.files])
+    ret = []
+
+    for filepath in args.files:
+
+        with h5py.File(filepath) as file:
+
+            branches = np.arange(file["/Trigger/step"].size)
+            completed = False
+
+            for ibranch in branches:
+
+                root = file[f"/Trigger/branches/{ibranch:d}"]
+
+                if len(root["completed"]) >= 2:
+                    if root["completed"][1]:
+                        completed = True
+                        break
+
+            if not completed:
+                ret.append(filepath)
+
+    print(args.sep.join(ret))
 
 
 def cli_run(cli_args=None):
