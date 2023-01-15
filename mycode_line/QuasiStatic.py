@@ -113,15 +113,23 @@ class Normalisation:
         self.alpha = None
         self.width = None
         self.kappa = None
+        self.a1 = None
+        self.a2 = None
+        self.k_neighbours = None
         self.mu = file["param"]["mu"][...]
         self.k_frame = file["param"]["k_frame"][...]
-        self.k_neighbours = file["param"]["k_neighbours"][...]
         self.eta = file["param"]["eta"][...]
         self.m = file["param"]["m"][...]
         self.N = file["param"]["normalisation"]["N"][...]
         self.dt = file["param"]["dt"][...]
         self.x = 1
         self.seed = None
+
+        if "a1" in file["param"]:
+            self.a1 = file["param"]["a1"][...]
+            self.a2 = file["param"]["a2"][...]
+        else:
+            self.k_neighbours = file["param"]["k_neighbours"][...]
 
         if "realisation" in file:
             self.seed = file["realisation"]["seed"][...]
@@ -161,6 +169,10 @@ class Normalisation:
             assert self.system == "System"
             self.system = "SystemThermalRandomForceNormal"
 
+        if "a1" in file["param"]:
+            assert self.system == "System"
+            self.system = "SystemQuartic"
+
     def asdict(self):
         """
         Return relevant parameters as dictionary.
@@ -170,7 +182,6 @@ class Normalisation:
             eta=self.eta,
             f=self.f,
             k_frame=self.k_frame,
-            k_neighbours=self.k_neighbours,
             m=self.m,
             mu=self.mu,
             N=self.N,
@@ -179,6 +190,13 @@ class Normalisation:
             system=self.system,
             x=self.x,
         )
+
+        if self.k_neighbours is not None:
+            ret["k_neighbours"] = self.k_neighbours
+
+        if self.a1 is not None:
+            ret["a1"] = self.a1
+            ret["a2"] = self.a2
 
         if self.alpha is not None:
             ret["alpha"] = self.alpha
@@ -407,6 +425,27 @@ class SystemLongRange(model.SystemLongRange, DataMap):
         )
 
 
+class SystemQuartic(model.SystemQuartic, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.SystemQuartic.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_neighbours=2.0 * file["param"]["a1"][...],
+            k_neighbours2=2.0 * file["param"]["a2"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            chunk=self.chunk,
+        )
+
+
 class System2d(model.System2d, DataMap):
     def __init__(self, file: h5py.File, **kwargs):
         """
@@ -477,6 +516,9 @@ def allocate_system(file: h5py.File, **kwargs):
 
     if norm.system == "System2d":
         return System2d(file, **kwargs)
+
+    if norm.system == "SystemQuartic":
+        return SystemQuartic(file, **kwargs)
 
 
 def _compare_versions(ver, cmpver):
@@ -564,6 +606,7 @@ def generate(
     eta: float = None,
     dt: float = None,
     distribution: str = "weibull",
+    interactions: bool = True,
 ):
     """
     Generate a simulation file.
@@ -573,6 +616,8 @@ def generate(
     :param seed: Base seed.
     :param eta: Damping coefficient.
     :param dt: Time step.
+    :param distribution: Distribution of potentials.
+    :param interactions: Whether to include ``k_neighbours``.
     """
 
     N = int(N)
@@ -587,11 +632,13 @@ def generate(
     else:
         assert eta is not None
 
+    if interactions:
+        file["/param/k_neighbours"] = 1.0
+
     file["/realisation/seed"] = seed
     file["/param/m"] = 1.0
     file["/param/eta"] = eta
     file["/param/mu"] = 1.0
-    file["/param/k_neighbours"] = 1.0
     file["/param/k_frame"] = 1.0 / N
     file["/param/dt"] = dt
     file["/param/xyield/initstate"] = np.arange(N).astype(np.int64)
@@ -645,6 +692,8 @@ def cli_generate(cli_args=None):
     parser.add_argument("--kappa", type=float, help="SemiSmooth potential with slope kappa")
     parser.add_argument("--alpha", type=float, help="Long range interaction with this exponent")
     parser.add_argument("--width", type=int, help="Run in 2d with this width")
+    parser.add_argument("--a1", type=float, help="Use quartic interactions")
+    parser.add_argument("--a2", type=float, help="Use quartic interactions")
 
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
@@ -673,6 +722,7 @@ def cli_generate(cli_args=None):
                 eta=args.eta,
                 dt=args.dt,
                 distribution=args.distribution,
+                interactions=args.a1 is None,
             )
 
             file["/param/k_frame"][...] = float(args.kframe / args.size)
@@ -689,6 +739,11 @@ def cli_generate(cli_args=None):
 
             if args.width is not None:
                 file["/param/width"] = args.width
+
+            if args.a1 is not None:
+                assert args.a2 is not None
+                file["/param/a1"] = args.a1
+                file["/param/a2"] = args.a2
 
     executable = entry_points["cli_run"]
 
