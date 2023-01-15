@@ -341,7 +341,7 @@ def cli_basic_output(cli_args=None):
         with h5py.File(filepath, "r") as file:
             meta = file[f"/meta/{executable}"]
             data["t"].append(file["t"][...][-1] - file["t"][...][0])
-            data["S"].append(np.sum(file["S"][...]))
+            data["S"].append(np.sum(file["ds"][...]))
             data["A"].append(np.unique(file["r"][...]).size)
             data["file"].append(meta.attrs["file"])
             data["step"].append(meta.attrs["step"])

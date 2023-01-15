@@ -182,8 +182,8 @@ class MyTests(unittest.TestCase):
 
         out_s = os.path.join(dirname, "EventMap_s.h5")
         out_t = os.path.join(dirname, "EventMap_t.h5")
-        EventMap.cli_run(["--dev", "-f", "-o", out_s, "-s", str(s), path])
-        EventMap.cli_run(["--dev", "-f", "-o", out_t, "-s", str(t), path])
+        EventMap.cli_run(["--dev", "-f", "-s", "-o", out_s, "--step", str(s), path])
+        EventMap.cli_run(["--dev", "-f", "-s", "-o", out_t, "--step", str(t), path])
 
         out = os.path.join(dirname, "EventMapInfo.h5")
         EventMap.cli_basic_output(["--dev", "-f", "-o", out, out_s, out_t])
