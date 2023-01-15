@@ -81,7 +81,7 @@ def cli_filter_completed(cli_args=None):
         with h5py.File(filepath) as file:
 
             branches = np.arange(file["/Trigger/step"].size)
-            completed = False
+            completed = file["/Trigger/step"].size == 0
 
             for ibranch in branches:
 
