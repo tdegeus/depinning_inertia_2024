@@ -35,13 +35,13 @@ entry_points = dict(
     cli_run="QuasiStatic_Run",
     cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
-    cli_roughnessaftersystemspanning="QuasiStatic_RoughnessAfterSystemSpanning",
+    cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning",
 )
 
 file_defaults = dict(
     cli_ensembleinfo="QuasiStatic_EnsembleInfo.h5",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning.h5",
-    cli_roughnessaftersystemspanning="QuasiStatic_RoughnessAfterSystemSpanning.h5",
+    cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning.h5",
 )
 
 
@@ -1436,9 +1436,10 @@ def cli_stateaftersystemspanning(cli_args=None):
                 output.flush()
 
 
-def cli_roughnessaftersystemspanning(cli_args=None):
+def cli_structurefactor_aftersystemspanning(cli_args=None):
     """
-    Extract the scaling of the roughness in Fourier space.
+    Extract the structure factor after a system spanning events.
+    See: https://doi.org/10.1103/PhysRevLett.118.147208
     """
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
@@ -1487,35 +1488,20 @@ def cli_roughnessaftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
 
+        assert width % 2 == 0
         q = np.fft.fftfreq(width)
-        output["/fft/q"] = q
-
-        if width % 2 == 0:
-            idx = int(width / 2)
-            output["/structure/q"] = q[1:idx]
-            assert np.all(q[1:idx] + np.flip(q[idx + 1 :]) == 0)
-        else:
-            raise NotImplementedError("Odd width not implemented")
+        idx = int(width / 2)
+        output["q"] = q[1:idx]
+        assert np.all(q[1:idx] + np.flip(q[idx + 1 :]) == 0)
 
         if is2d:
-            output["/fft/qx"] = np.fft.fftfreq(width)
-            output["/fft/qy"] = np.fft.fftfreq(width)
-            shape = [width, width]
-            shape_structure = [idx - 1, idx - 1]
+            structure = enstat.static(shape=(idx - 1, idx - 1))
         else:
-            shape = [width]
-            shape_structure = [idx - 1]
+            structure = enstat.static(shape=(idx - 1,))
 
-        ret_fft = enstat.static(shape=shape)
-        ret_structure = enstat.static(shape=shape_structure)
-
-        output["/fft/first"] = ret_fft.first
-        output["/fft/second"] = ret_fft.second
-        output["/fft/norm"] = ret_fft.norm
-
-        output["/structure/first"] = ret_structure.first
-        output["/structure/second"] = ret_structure.second
-        output["/structure/norm"] = ret_structure.norm
+        output["first"] = structure.first
+        output["second"] = structure.second
+        output["norm"] = structure.norm
 
         output.flush()
 
@@ -1532,22 +1518,14 @@ def cli_roughnessaftersystemspanning(cli_args=None):
 
                     if is2d:
                         xhat = np.fft.fft2(x)
-                        ret_fft += np.real(np.abs(xhat))
-                        ret_structure += np.real(
-                            xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1 :, idx + 1 :])
-                        )
+                        structure += np.real(xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1 :, idx + 1 :]))
                     else:
                         xhat = np.fft.fft(x)
-                        ret_fft += np.real(np.abs(xhat))
-                        ret_structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1 :]))
+                        structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1 :]))
 
-            output["/fft/first"][...] = ret_fft.first
-            output["/fft/second"][...] = ret_fft.second
-            output["/fft/norm"][...] = ret_fft.norm
-
-            output["/structure/first"][...] = ret_structure.first
-            output["/structure/second"][...] = ret_structure.second
-            output["/structure/norm"][...] = ret_structure.norm
+            output["first"][...] = structure.first
+            output["second"][...] = structure.second
+            output["norm"][...] = structure.norm
 
             output.flush()
 
