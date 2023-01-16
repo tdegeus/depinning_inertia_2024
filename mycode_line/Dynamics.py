@@ -39,7 +39,7 @@ def replace_ep(doc: str) -> str:
     return doc
 
 
-def restore_system(filepath:str, step:int = None, branch:int = None, apply_trigger:bool = True):
+def restore_system(filepath: str, step: int = None, branch: int = None, apply_trigger: bool = True):
     """
     Restore system from file.
 

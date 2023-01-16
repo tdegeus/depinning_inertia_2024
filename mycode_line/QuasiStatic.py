@@ -33,6 +33,7 @@ entry_points = dict(
     cli_generate="QuasiStatic_Generate",
     cli_plot="QuasiStatic_Plot",
     cli_run="QuasiStatic_Run",
+    cli_list_systemspanning="QuasiStatic_ReRun_ListSystemSpanning",
     cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
     cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning",
@@ -1156,6 +1157,59 @@ def cli_ensembleinfo(cli_args=None):
         tools.h5py_save_unique(info["dynamics"], output, "/lookup/dynamics", asstr=True)
         tools.h5py_save_unique(info["version"], output, "/lookup/version", asstr=True)
         output["files"] = output["/lookup/filepath"]
+
+
+def cli_list_systemspanning(cli_args=None):
+    """
+    Write list of jobs to run to get an event map.
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("--exec", type=str, required=True, help="Executable")
+    parser.add_argument("--options", type=str, default="", help="Options to pass")
+    parser.add_argument("info", type=str, help="EnsembleInfo")
+    parser.add_argument("output", type=str, help="Output file")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.info)
+
+    with h5py.File(args.info) as file:
+
+        step = file["/avalanche/step"][...]
+        A = file["/avalanche/A"][...]
+        N = file["/normalisation/N"][...]
+        fname = file["/lookup/filepath"].asstr()[...][file["/avalanche/file"][...]]
+
+    keep = A == N
+    step = step[keep]
+    fname = list(fname[keep])
+
+    root = pathlib.Path(os.path.relpath(args.info, pathlib.Path(args.output).parent)).parent
+    rname = [str(root / f) for f in fname]
+    fname = [os.path.normpath(f).split(".h5")[0] for f in fname]
+
+    ret = []
+
+    for i in range(len(step)):
+        ret.append(
+            f"{args.exec} {args.options} --step {step[i]:d} {rname[i]} -o {fname[i]}_step={step[i]:d}.h5"
+        )
+
+    shelephant.yaml.dump(args.output, ret)
 
 
 def cli_rerun_eventmap(cli_args=None):
