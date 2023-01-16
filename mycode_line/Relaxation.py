@@ -121,8 +121,8 @@ def cli_run(cli_args=None):
                 ret_v.append(np.mean(system.v))
                 ret_fext.append(np.mean(system.f_frame))
                 ret_fpot.append(np.mean(system.f_potential))
-                system.timeSteps(args.t_step)
                 pbar.n = system.inc - inc_n
                 pbar.update()
+                system.timeSteps(args.t_step)
 
         meta.attrs["completed"] = 1
