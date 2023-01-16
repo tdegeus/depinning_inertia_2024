@@ -306,6 +306,10 @@ def cli_ensembleinfo(cli_args=None):
 
                     root = file[f"/Trigger/branches/{ibranch:d}"]
 
+                    if "completed" not in root:
+                        ignore.append(ibranch)
+                        continue
+
                     if len(root["completed"]) < 2:
                         ignore.append(ibranch)
                         continue
