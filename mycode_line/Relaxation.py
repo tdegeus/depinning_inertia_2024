@@ -16,19 +16,14 @@ import numpy as np
 import tqdm
 
 from . import QuasiStatic
+from . import Dynamics
 from . import storage
 from . import tools
 from ._version import version
 
 entry_points = dict(
-    cli_average_systemspanning="Dynamics_AverageSystemSpanning",
-    cli_run="Dynamics_Run",
+    cli_run="Relaxation_Run",
 )
-
-file_defaults = dict(
-    cli_average_systemspanning="Dynamics_AverageSystemSpanning.h5",
-)
-
 
 def replace_ep(doc: str) -> str:
     """
@@ -39,77 +34,10 @@ def replace_ep(doc: str) -> str:
     return doc
 
 
-def restore_system(filepath:str, step:int = None, branch:int = None, apply_trigger:bool = True):
-    """
-    Restore system from file.
-
-    :param filepath: Path to file.
-    :param step: Step to restore.
-    :param branch: Branch to restore (if ``Trigger``).
-    :param apply_trigger:: Apply kick (or trigger).
-
-    :return: ``system, info``, with ``info`` as follows::
-        p: Particle kicked (if ``Trigger``).
-        duration: Total event duration (in number of time steps).
-        i_n: Well-index, before trigger.
-    """
-
-    info = {}
-
-    with h5py.File(filepath) as file:
-
-        if branch is not None:
-            sroot = file[f"/Trigger/branches/{branch:d}"]
-            info["p"] = sroot["p"][step]
-            fastload = False
-
-            if os.path.exists(QuasiStatic.filename2fastload(filepath)):
-                fastload = (
-                    QuasiStatic.filename2fastload(filepath),
-                    f"/QuasiStatic/{file['/Trigger/step'][branch]:d}",
-                )
-
-        else:
-            sroot = file["/QuasiStatic"]
-            kick = sroot["kick"][step]
-            fastload = True
-
-        system = QuasiStatic.allocate_system(file)
-        system.restore_quasistatic_step(sroot, step - 1, fastload)
-        info["duration"] = sroot["inc"][step] - sroot["inc"][step - 1]
-        info["i_n"] = np.copy(system.i)
-
-        if apply_trigger:
-
-            dx = file["/param/xyield/dx"][...]
-
-            if branch is not None:
-                system.trigger(p=info["p"], eps=dx, direction=1)
-            else:
-                system.eventDrivenStep(dx, kick)
-
-    return system, info
-
-
 def cli_run(cli_args=None):
     """
-    Rerun an event and store output at different increments that are selected at:
-    *   Given event sizes "A" unit the event is system spanning (``--A-step`` controls interval).
-    *   Given time-steps if no longer checking at "A" (interval controlled by ``--t-step``).
-
-    Customisation:
-    *   ``--t-step=0``: Break simulation when ``A = N``.
-    *   ``--A-step=0``: Store at fixed time intervals from the beginning.
-
-    Storage:
-    *   An exact copy of the input file.
-    *   The position of all particles ("/Dynamics/x/{iiter:d}").
-    *   Metadata:
-        - "/Dynamics/inc": Increment number (-> time).
-        - "/Dynamics/A": Actual number of blocks that yielded at least once.
-        - "/Dynamics/stored": The stored "iiter".
-        - "/Dynamics/sync-A": List of "iiter" stored due to given "A".
-        - "/Dynamics/sync-t": List of "iiter" stored due to given "inc" after checking for "A".
+    Rerun an system-spanning event and store average output from the moment that the event spans
+    the system.
     """
 
     class MyFmt(
@@ -128,15 +56,12 @@ def cli_run(cli_args=None):
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("-v", "--version", action="version", version=version)
 
-    # output selection
-    parser.add_argument("--A-step", type=int, default=1, help="Control sync-A storage")
-    parser.add_argument("--t-step", type=int, default=500, help="Control sync-t storage")
-
     # input selection
     parser.add_argument("--step", type=int, help="Step to run (state: step - 1, then trigger)")
     parser.add_argument("--branch", type=int, help="Branch (if 'Trigger')")
 
-    # output file
+    # output selection
+    parser.add_argument("--t-step", type=int, default=500, help="Save every t-step")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output file")
 
@@ -147,7 +72,6 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
     assert os.path.abspath(args.file) != os.path.abspath(args.output)
     tools._check_overwrite_file(args.output, args.force)
-    assert args.A_step > 0 or args.t_step > 0
 
     # basic assertions
     with h5py.File(args.file) as src:
@@ -158,154 +82,44 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.output, "w") as file:
 
-        # copy from input
-
         with h5py.File(args.file) as src:
-
             GooseHDF5.copy(src, file, ["/param", "/meta", "/realisation"])
-            root = file.create_group("Dynamics")
-            root.create_group("x")
 
-            meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
-            meta.attrs["file"] = os.path.basename(args.file)
-            meta.attrs["A-step"] = args.A_step
-            meta.attrs["t-step"] = args.t_step
-            meta.attrs["step"] = args.step
+        meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+        meta.attrs["file"] = os.path.basename(args.file)
+        meta.attrs["step"] = args.step
+        meta.attrs["t-step"] = args.t_step
 
-            if args.branch is not None:
-                sroot = src[f"/Trigger/branches/{args.branch:d}"]
-                p = sroot["p"][args.step]
-                meta.attrs["branch"] = args.branch
-                meta.attrs["p"] = p
-                fastload = False
+        root = file.create_group("Relaxation")
 
-                if os.path.exists(QuasiStatic.filename2fastload(args.file)):
-                    fastload = (
-                        QuasiStatic.filename2fastload(args.file),
-                        f"/QuasiStatic/{src['/Trigger/step'][args.branch]:d}",
-                    )
+        system, info = Dynamics.load_system(filepath=args.file, step=args.step, branch=args.branch, apply_trigger=True)
 
-            else:
-                sroot = src["/QuasiStatic"]
-                kick = sroot["kick"][args.step]
-                fastload = True
-
-            root.create_dataset("x_frame", data=[sroot["x_frame"][args.step - 1]], maxshape=(None,))
-            root.create_dataset("inc", data=[sroot["inc"][args.step - 1]], maxshape=(None,))
-
-            # ensure a chunk that will be big enough
-            system = QuasiStatic.allocate_system(file)
-            system.restore_quasistatic_step(sroot, args.step, fastload)
-            i_n = system.i
-            system.restore_quasistatic_step(sroot, args.step - 1, fastload)
-            nchunk = np.max(i_n - system.i)
-            file["/param/xyield/nchunk"][...] = int(
-                max(1.5 * nchunk, file["/param/xyield/nchunk"][...])
-            )
-            system.restore_quasistatic_step(sroot, args.step - 1, fastload)
-
-            # estimate number of steps
-            maxinc = sroot["inc"][args.step] - sroot["inc"][args.step - 1]
-
-        # store state for fast access
-
-        i = system.chunk.start
-        file["/fastload/state"] = system.chunk.state_at(i)
-        file["/fastload/index"] = i
-        file["/fastload/value"] = system.chunk.data[:, 0]
-
-        # storage preparation
-
-        storage.create_extendible(root, "A", np.uint64, desc='Size "A" of each stored item')
-        storage.create_extendible(root, "sync-A", np.uint64, desc="Items stored due to sync-A")
-        storage.create_extendible(root, "sync-t", np.uint64, desc="Items stored due to sync-t")
+        if args.branch is not None:
+            meta.attrs["branch"] = args.branch
+            meta.attrs["p"] = p
 
         # rerun dynamics and store every other time
 
-        pbar = tqdm.tqdm(total=maxinc)
+        pbar = tqdm.tqdm(total=info["duration"])
         pbar.set_description(args.output)
 
-        dx = file["/param/xyield/dx"][...]
-        i_n = system.i
-        i = np.copy(i_n)
-        N = system.N
+        systemspanning = False
 
-        A = 0  # maximal A encountered so far
-        A_next = 0  # next A at which to write output
-        A_istore = 0  # storage index for sync-A storage
-        t_istore = 0  # storage index for sync-t storage
-        A_check = args.A_step > 0  # switch to store sync-A
-        trigger = True  # signal if trigger is needed
-        store = True  # signal if storage is needed
-        iiter = 0  # total number of elapsed iterations
-        istore = 0  # index of the number of storage steps
-        stop = False
-        last_stored_iiter = -1  # last written increment
+        while not systemspanning:
+            system.timeStepsUntilEvent()
+            systemspanning = np.all(np.equal(system.i, info["i_n"]))
 
-        while True:
+        ret = 1
 
-            if store:
-
-                if iiter != last_stored_iiter:
-                    root["x"][str(istore)] = system.x
-                    storage.dset_extend1d(root, "x_frame", istore, system.x_frame)
-                    storage.dset_extend1d(root, "inc", istore, system.inc)
-                    storage.dset_extend1d(root, "A", istore, np.sum(np.not_equal(i, i_n)))
-                    file.flush()
-                    istore += 1
-                    last_stored_iiter = iiter
-                store = False
-                pbar.n = iiter
-                pbar.refresh()
-
-            if stop:
-
-                break
-
-            if trigger:
-
-                trigger = False
-                if args.branch is not None:
-                    system.trigger(p=p, eps=dx, direction=1)
-                else:
-                    system.eventDrivenStep(dx, kick)
-
-            if A_check:
-
-                niter = system.timeStepsUntilEvent()
-                iiter += niter
-                stop = niter == 0
-                i = np.copy(system.i)
-                a = np.sum(np.not_equal(i, i_n))
-                A = max(A, a)
-
-                if (A >= A_next and A % args.A_step == 0) or A == N:
-                    storage.dset_extend1d(root, "sync-A", A_istore, istore)
-                    A_istore += 1
-                    store = True
-                    A_next += args.A_step
-
-                if A == N:
-                    storage.dset_extend1d(root, "sync-t", t_istore, istore)
-                    t_istore += 1
-                    store = True
-                    A_check = False
-                    if args.t_step == 0:
-                        stop = True
-
-            else:
-
-                inc_n = system.inc
+        with GooseHDF5.ExtendableList(file, "v") as ret_v, GooseHDF5.ExtendableList(file, "f_frame") as ret_fext, GooseHDF5.ExtendableList(file, "f_potential") as ret_fpot:
+            while ret != 0:
+                ret_v.append(np.mean(system.v))
+                ret_fext.append(np.mean(system.f_frame))
+                ret_fpot.append(np.mean(system.f_potential))
                 ret = system.minimise(max_iter=args.t_step, max_iter_is_error=False)
                 assert ret >= 0
-                iiter += system.inc - inc_n
-                stop = ret == 0
-                storage.dset_extend1d(root, "sync-t", t_istore, istore)
-                t_istore += 1
-                store = True
 
         meta.attrs["completed"] = 1
-
 
 class AlignedAverage(enstat.static):
     """

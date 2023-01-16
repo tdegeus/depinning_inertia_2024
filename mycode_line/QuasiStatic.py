@@ -1518,7 +1518,9 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
 
                     if is2d:
                         xhat = np.fft.fft2(x)
-                        structure += np.real(xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1 :, idx + 1 :]))
+                        structure += np.real(
+                            xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1 :, idx + 1 :])
+                        )
                     else:
                         xhat = np.fft.fft(x)
                         structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1 :]))
