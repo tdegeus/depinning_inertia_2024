@@ -217,7 +217,7 @@ class MyTests(unittest.TestCase):
             ["--dev", "-f", "-o", os.path.join(dirname, "AfterSystemSpanning.h5"), infoname]
         )
 
-        QuasiStatic.cli_roughnessaftersystemspanning(
+        QuasiStatic.cli_stateaftersystemspanning(
             [
                 "--dev",
                 "-f",
