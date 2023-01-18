@@ -161,7 +161,7 @@ class Normalisation:
             assert self.system == "System"
             self.system = "SystemLongRange"
 
-        if "width" in file["param"]:
+        if "width" in file["param"] and "k2" not in file["param"]:
             self.width = file["param"]["width"][...]
             assert self.system == "System"
             self.system = "System2d"
@@ -170,9 +170,13 @@ class Normalisation:
             assert self.system == "System"
             self.system = "SystemThermalRandomForceNormal"
 
-        if "k2" in file["param"]:
+        if "k2" in file["param"] and "width" not in file["param"]:
             assert self.system == "System"
             self.system = "SystemQuartic"
+
+        if "k2" in file["param"] and "width" in file["param"]:
+            assert self.system == "System"
+            self.system = "System2dQuartic"
 
     def asdict(self):
         """
@@ -468,6 +472,28 @@ class System2d(model.System2d, DataMap):
         )
 
 
+class System2dQuartic(model.System2dQuartic, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.System2dQuartic.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k2=file["param"]["k2"][...],
+            k4=file["param"]["k4"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            chunk=self.chunk,
+            width=file["param"]["width"][...],
+        )
+
+
 class SystemThermalRandomForceNormal(model.SystemThermalRandomForceNormal, DataMap):
     def __init__(self, file: h5py.File, **kwargs):
         """
@@ -520,6 +546,9 @@ def allocate_system(file: h5py.File, **kwargs):
 
     if norm.system == "SystemQuartic":
         return SystemQuartic(file, **kwargs)
+
+    if norm.system == "System2dQuartic":
+        return System2dQuartic(file, **kwargs)
 
 
 def _compare_versions(ver, cmpver):
