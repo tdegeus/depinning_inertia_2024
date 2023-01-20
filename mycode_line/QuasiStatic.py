@@ -116,6 +116,8 @@ class Normalisation:
         self.kappa = None
         self.k2 = None
         self.k4 = None
+        self.a1 = None
+        self.a2 = None
         self.k_neighbours = None
         self.mu = file["param"]["mu"][...]
         self.k_frame = file["param"]["k_frame"][...]
@@ -129,6 +131,9 @@ class Normalisation:
         if "k2" in file["param"]:
             self.k2 = file["param"]["k2"][...]
             self.k4 = file["param"]["k4"][...]
+        elif "a1" in file["param"]:
+            self.a1 = file["param"]["a1"][...]
+            self.a2 = file["param"]["a2"][...]
         else:
             self.k_neighbours = file["param"]["k_neighbours"][...]
 
@@ -177,6 +182,13 @@ class Normalisation:
         if "k2" in file["param"] and "width" in file["param"]:
             assert self.system == "System"
             self.system = "System2dQuartic"
+
+        if "a1" in file["param"] and "width" not in file["param"]:
+            assert self.system == "System"
+            self.system = "SystemQuarticFD"
+
+        if "a1" in file["param"] and "width" in file["param"]:
+            raise OSError("System2dQuarticFD not implemented yet.")
 
     def asdict(self):
         """
@@ -451,6 +463,27 @@ class SystemQuartic(model.SystemQuartic, DataMap):
         )
 
 
+class SystemQuarticFD(model.SystemQuarticFD, DataMap):
+    def __init__(self, file: h5py.File, **kwargs):
+        """
+        Initialise system.
+        """
+
+        DataMap.__init__(self, file, **kwargs)
+
+        model.SystemQuarticFD.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            a1=file["param"]["a1"][...],
+            a2=file["param"]["a2"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            chunk=self.chunk,
+        )
+
+
 class System2d(model.System2d, DataMap):
     def __init__(self, file: h5py.File, **kwargs):
         """
@@ -546,6 +579,9 @@ def allocate_system(file: h5py.File, **kwargs):
 
     if norm.system == "SystemQuartic":
         return SystemQuartic(file, **kwargs)
+
+    if norm.system == "SystemQuarticFD":
+        return SystemQuarticFD(file, **kwargs)
 
     if norm.system == "System2dQuartic":
         return System2dQuartic(file, **kwargs)
@@ -724,6 +760,8 @@ def cli_generate(cli_args=None):
     parser.add_argument("--width", type=int, help="Run in 2d with this width")
     parser.add_argument("--k2", type=float, help="Use quartic interactions (combined with --k4)")
     parser.add_argument("--k4", type=float, help="Use quartic interactions (combined with --k2)")
+    parser.add_argument("--a1", type=float, help="Use quartic interactions (combined with --a2)")
+    parser.add_argument("--a2", type=float, help="Use quartic interactions (combined with --a1)")
 
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
@@ -752,7 +790,7 @@ def cli_generate(cli_args=None):
                 eta=args.eta,
                 dt=args.dt,
                 distribution=args.distribution,
-                interactions=args.k2 is None,
+                interactions=args.k2 is None and args.a1 is None,
             )
 
             file["/param/k_frame"][...] = float(args.kframe / args.size)
@@ -774,6 +812,11 @@ def cli_generate(cli_args=None):
                 assert args.k4 is not None
                 file["/param/k2"] = args.k2
                 file["/param/k4"] = args.k4
+
+            if args.a1 is not None:
+                assert args.a2 is not None
+                file["/param/a1"] = args.a1
+                file["/param/a2"] = args.a2
 
     executable = entry_points["cli_run"]
 
