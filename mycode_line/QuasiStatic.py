@@ -35,6 +35,7 @@ entry_points = dict(
     cli_run="QuasiStatic_Run",
     cli_list_systemspanning="QuasiStatic_ReRun_ListSystemSpanning",
     cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
+    cli_plotstateaftersystemspanning="QuasiStatic_PlotStateAfterSystemSpanning",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
     cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning",
 )
@@ -1411,6 +1412,106 @@ def cli_generatefastload(cli_args=None):
             last_start = np.copy(i)
             last_step = step
 
+
+def cli_plotstateaftersystemspanning(cli_args=None):
+    """
+    Plot state after system-spanning events.
+    """
+
+    import GooseMPL as gplt  # noqa: F401
+    import matplotlib.pyplot as plt  # noqa: F401
+
+    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("files", nargs="*", type=str, help="Input files")
+
+    args = tools._parse(parser, cli_args)
+    assert np.all([os.path.isfile(f) for f in args.files])
+
+    info = None
+    state = None
+    structure = None
+    realisation = None
+
+    for file in args.files:
+        with h5py.File(file) as f:
+            if "full" in f:
+                info = file
+            if "heightheight" in f:
+                state = file
+            if "q" in f:
+                structure = file
+
+    if info is not None:
+        with h5py.File(info) as f:
+            basedir = pathlib.Path(info).parent
+            paths = f["/lookup/filepath"].asstr()[...]
+            file = f["/avalanche/file"][...]
+            step = f["/avalanche/step"][...]
+            A = f["/avalanche/A"][...]
+            N = f["/normalisation/N"][...]
+            keep = A == N
+            file = file[keep]
+            step = step[keep]
+            for i in range(file.size):
+                if (basedir / paths[file[i]]).exists():
+                    realisation = basedir / paths[file[i]]
+                    step = step[i]
+                    break
+
+    ncols = int(state is not None) + int(structure is not None) + int(realisation is not None)
+    fig, axes = gplt.subplots(ncols=ncols)
+    icol = 0
+    if ncols == 1:
+        axes = [axes]
+
+    if realisation is not None:
+        with h5py.File(realisation) as f:
+            x = f[f"/QuasiStatic/x/{step:d}"][...]
+            axes[icol].plot(x - np.mean(x))
+            icol += 1
+
+    if state is not None:
+        with h5py.File(state) as f:
+            x = f["/heightheight/A"][...]
+            y = f["/heightheight/R"][...]
+            axes[icol].plot(x, y)
+            axes[icol].set_xscale("log")
+            axes[icol].set_yscale("log")
+            keep = x < 200
+            gplt.fit_powerlaw(x[keep], y[keep], axis=axes[icol], c="r", extrapolate=True, auto_fmt="r")
+            axes[icol].legend()
+            icol += 1
+
+    if structure is not None:
+        with h5py.File(structure) as f:
+            x = f["/q"][...]
+            y = enstat.static.restore(
+                first = f["first"][...],
+                second = f["second"][...],
+                norm = f["norm"][...],
+            ).mean()
+            axes[icol].plot(x, y)
+            axes[icol].set_xscale("log")
+            axes[icol].set_yscale("log")
+            gplt.fit_powerlaw(x, y, axis=axes[icol], c="r", extrapolate=True, auto_fmt="q")
+            axes[icol].legend()
+            icol += 1
+
+    plt.show()
 
 def cli_stateaftersystemspanning(cli_args=None):
     """
