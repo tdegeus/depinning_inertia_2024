@@ -42,11 +42,9 @@ class MyTests(unittest.TestCase):
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        QuasiStatic.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, dirname])
-
-        with h5py.File(filename, "a") as file:
-            file["param"]["xyield"]["nchunk"][...] = 150
-
+        QuasiStatic.cli_generate(
+            ["--dev", "--eta", 1e0, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
+        )
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_generatefastload(["--dev", filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
@@ -91,7 +89,6 @@ class MyTests(unittest.TestCase):
         Trigger.cli_ensembleinfo(["--dev", "-o", tinfo, tfile])
 
         with h5py.File(tfile, "a") as file:
-            file["param"]["xyield"]["nchunk"][...] = 10000
             branch = np.arange(file["/Trigger/step"].size)
 
         Trigger.cli_run(["--dev", tfile, "--check", branch[0]])
@@ -106,7 +103,7 @@ class MyTests(unittest.TestCase):
         Trigger.cli_merge_batch([tfile, "-o", clonedir])
         res = g5.compare(tfile, cfile)
 
-        for key in ["/meta/Trigger_Generate", "/param/xyield/nchunk"]:
+        for key in ["/meta/Trigger_Generate"]:
             if key in res["!="]:
                 res["!="].remove(key)
 

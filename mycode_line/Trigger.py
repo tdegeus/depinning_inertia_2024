@@ -135,7 +135,7 @@ def cli_run(cli_args=None):
             assert np.all(np.array(args.check) < branches.size)
             branches = [i for i in args.check]
 
-        dx = file["/param/xyield/dx"][...]
+        du = file["/param/potentials/du"][...]
         system = QuasiStatic.allocate_system(file)
         pbar = tqdm.tqdm(branches, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, A = {-1:8d}")
 
@@ -156,10 +156,10 @@ def cli_run(cli_args=None):
 
             if root["p"][1] > 0 or args.check is not None:
                 try_p = np.array([root["p"][1]])
-                assert np.all(np.logical_and(try_p >= 0, try_p < system.N))
+                assert np.all(np.logical_and(try_p >= 0, try_p < system.size))
             else:
-                try_p = root["try_p"][1] + np.arange(system.N)
-                try_p = np.where(try_p < system.N, try_p, try_p - system.N)
+                try_p = root["try_p"][1] + np.arange(system.size)
+                try_p = np.where(try_p < system.size, try_p, try_p - system.size)
 
             fastload = False
             if os.path.exists(QuasiStatic.filename2fastload(args.file)):
@@ -172,17 +172,17 @@ def cli_run(cli_args=None):
 
                 system.restore_quasistatic_step(root, 0, fastload)
                 inc = system.inc
-                i_n = system.i
+                i_n = np.copy(system.chunk.index_at_align)
 
-                system.trigger(p=p, eps=dx, direction=1)
+                system.trigger(p=p, eps=du, direction=1)
 
                 while True:
                     ret = system.minimise(time_activity=True)
                     if ret == 0:
                         break
-                    system.chunk.align(system.x)
+                    system.chunk.align(system.u)
 
-                A = np.sum(system.i != i_n)
+                A = np.sum(system.chunk.index_at_align != i_n)
 
                 if args.check is not None:
                     assert A >= 0
@@ -193,7 +193,7 @@ def cli_run(cli_args=None):
             pbar.set_description(f"{basename}: branch = {ibranch:8d}, p = {p:8d}, A = {A:8d}")
             pbar.refresh()
 
-            S = np.sum(system.i - i_n)
+            S = np.sum(system.chunk.index_at_align - i_n)
             T = system.quasistaticActivityLast() - inc
             f_frame = np.mean(system.f_frame)
 
@@ -205,13 +205,13 @@ def cli_run(cli_args=None):
                 assert root["T"][1] == T
                 assert root["inc"][1] == system.inc
                 assert np.isclose(root["f_frame"][1], f_frame)
-                assert np.allclose(root["x"]["1"][...], system.x)
+                assert np.allclose(root["u"]["1"][...], system.u)
 
             else:
 
-                root["x"]["1"] = system.x
+                root["u"]["1"] = system.u
                 storage.dset_extend1d(root, "inc", 1, system.inc)
-                storage.dset_extend1d(root, "x_frame", 1, system.x_frame)
+                storage.dset_extend1d(root, "u_frame", 1, system.u_frame)
                 storage.dset_extend1d(root, "completed", 1, True)
                 storage.dset_extend1d(root, "p", 1, p)
                 storage.dset_extend1d(root, "S", 1, S)
@@ -330,7 +330,7 @@ def cli_ensembleinfo(cli_args=None):
                     source.append(filename)
 
                 if i == 0:
-                    output["N"] = file["/param/xyield/initseq"].size
+                    output["N"] = file["/param/potentials/initseq"].size
 
                 if len(ignore) > 0:
                     print(f"{filepath} ignoring: " + ", ".join(_to_str_ranges(ignore)))
@@ -414,8 +414,8 @@ def cli_generate(cli_args=None):
 
         # I.    Definition of the state
 
-        /Trigger/branches/{ibranch:d}/x/0         # particle positions [N]
-        /Trigger/branches/{ibranch:d}/x_frame     # frame position per step (*)
+        /Trigger/branches/{ibranch:d}/u/0         # particle positions [N]
+        /Trigger/branches/{ibranch:d}/u_frame     # frame position per step (*)
         /Trigger/branches/{ibranch:d}/inc         # increment per step (*)
 
         # III.  Trigger control parameters
@@ -428,7 +428,7 @@ def cli_generate(cli_args=None):
         /Trigger/branches/{ibranch:d}/completed   # check that the dynamics finished (*)
         /Trigger/branches/{ibranch:d}/T           # duration of the event (*)
 
-        # V.    Basic output that can be reconstructed from "x"/"x_frame"
+        # V.    Basic output that can be reconstructed from "u"/"u_frame"
 
         /Trigger/branches/{ibranch:d}/S           # number of times that blocks yielded (***)
         /Trigger/branches/{ibranch:d}/A           # number of blocks that yielded (***)
@@ -478,7 +478,7 @@ def cli_generate(cli_args=None):
 
         executable = entry_points["cli_run"]
         commands = [f"{executable} {file}" for file in files]
-        shelephant.yaml.dump(outdir / "commands.yaml", commands)
+        shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
 
         for filename in tqdm.tqdm(files):
 
@@ -496,9 +496,9 @@ def cli_generate(cli_args=None):
                 A = info["full"][filename]["A"][...]
                 step = info["full"][filename]["step"][...].astype(np.int64)
                 kick = info["full"][filename]["kick"][...]
-                x_frame = info["full"][filename]["x_frame"][...]
+                u_frame = info["full"][filename]["u_frame"][...]
                 f_frame = info["full"][filename]["f_frame"][...]
-                steadystate = QuasiStatic.steadystate(x_frame, f_frame, kick, A, N)
+                steadystate = QuasiStatic.steadystate(u_frame, f_frame, kick, A, N)
                 assert np.all(A[~kick] == 0)
                 systemspanning = step[np.logical_and(A == N, step > steadystate)]
 
@@ -542,15 +542,15 @@ def cli_generate(cli_args=None):
                         )
 
                     qsroot = source["QuasiStatic"]
-                    x = qsroot["x"][str(s)][...]
-                    x_frame = qsroot["x_frame"][s]
+                    u = qsroot["u"][str(s)][...]
+                    u_frame = qsroot["u_frame"][s]
                     inc = qsroot["inc"][s]
 
                     if load:
                         system.restore_quasistatic_step(qsroot, s)
                         system.advanceToFixedForce(f)
-                        x = system.x
-                        x_frame = system.x_frame
+                        u = system.u
+                        u_frame = system.u_frame
                         assert np.isclose(np.mean(system.f_frame), f)
 
                     storage.dset_extend1d(dest, "/Trigger/step", ibranch, s)
@@ -559,10 +559,10 @@ def cli_generate(cli_args=None):
 
                     root = dest.create_group(f"/Trigger/branches/{ibranch:d}")
 
-                    root.create_group("x").create_dataset("0", data=x)
+                    root.create_group("u").create_dataset("0", data=u)
                     root.create_dataset("inc", data=[inc], maxshape=(None,), dtype=np.uint64)
                     root.create_dataset(
-                        "x_frame", data=[x_frame], maxshape=(None,), dtype=np.float64
+                        "u_frame", data=[u_frame], maxshape=(None,), dtype=np.float64
                     )
 
                     root.create_dataset("try_p", data=[-1, 0], maxshape=(None,), dtype=np.int64)
@@ -622,11 +622,6 @@ def cli_merge(cli_args=None):
 
         test = GooseHDF5.compare(src, dest, GooseHDF5.getdatapaths(src, root="/param"))
 
-        for path in ["/param/xyield/nchunk"]:
-            for key in ["!=", "->", "<-"]:
-                if path in test[key]:
-                    test[key].remove(path)
-
         assert len(test["!="]) == 0
         assert len(test["->"]) == 0
         assert len(test["<-"]) == 0
@@ -641,8 +636,8 @@ def cli_merge(cli_args=None):
 
             assert sroot["inc"][0] == droot["inc"][0]
             assert sroot["try_p"][1] == droot["try_p"][1]
-            assert np.isclose(sroot["x_frame"][0], droot["x_frame"][0])
-            assert np.allclose(sroot["x"]["0"][...], droot["x"]["0"][...])
+            assert np.isclose(sroot["u_frame"][0], droot["u_frame"][0])
+            assert np.allclose(sroot["u"]["0"][...], droot["u"]["0"][...])
 
         if f"/meta/{entry_points['cli_run']}" not in dest:
             GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
@@ -668,9 +663,9 @@ def cli_merge(cli_args=None):
                 assert len(test["=="]) > 0
                 continue
 
-            src.copy(sroot["x"]["1"], droot["x"], "1")
+            src.copy(sroot["u"]["1"], droot["u"], "1")
             storage.dset_extend1d(droot, "inc", 1, sroot["inc"][1])
-            storage.dset_extend1d(droot, "x_frame", 1, sroot["x_frame"][1])
+            storage.dset_extend1d(droot, "u_frame", 1, sroot["u_frame"][1])
             storage.dset_extend1d(droot, "completed", 1, sroot["completed"][1])
             storage.dset_extend1d(droot, "p", 1, sroot["p"][1])
             storage.dset_extend1d(droot, "S", 1, sroot["S"][1])
@@ -856,4 +851,4 @@ def cli_job_rerun(cli_args=None):
 
         commands.append(f"{excecutable} {opts} {src}")
 
-    shelephant.yaml.dump(args.output, commands)
+    shelephant.yaml.dump(args.output, commands, force=True)

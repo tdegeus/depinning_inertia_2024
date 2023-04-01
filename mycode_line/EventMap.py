@@ -68,8 +68,8 @@ def cli_run(cli_args=None):
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--avalanche", action="store_true", help="Truncated once A == N")
-    parser.add_argument("-x", action="store_true", help="Store x")
-    parser.add_argument("-s", action="store_true", help="Store S")
+    parser.add_argument("-u", action="store_true", help="Store u (slip)")
+    parser.add_argument("-s", action="store_true", help="Store S (avalanche size)")
     parser.add_argument("--smax", type=int, help="Truncate at a maximum total S")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output file")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
@@ -80,7 +80,7 @@ def cli_run(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     tools._check_overwrite_file(args.output, args.force)
-    assert args.x or args.s
+    assert args.u or args.s
 
     with h5py.File(args.file) as file, h5py.File(args.output, "w") as output:
 
@@ -101,35 +101,34 @@ def cli_run(cli_args=None):
         meta.attrs["step"] = args.step
         meta.attrs["Smax"] = args.smax if args.smax else sys.maxsize
 
-        output["x0"] = system.x[system.organisation]
+        output["u0"] = system.u
         output["t0"] = system.t
-        output["organisation"] = system.organisation
 
         tref = system.t
-        i_n = system.i
+        i_n = np.copy(system.chunk.index_at_align)
         iter = 0
-        dx = file["/param/xyield/dx"][...]
+        du = file["/param/potentials/du"][...]
         avalanche = True
 
         if "Trigger" in file:
-            system.trigger(p=root["p"][1], eps=dx, direction=1)
+            system.trigger(p=root["p"][1], eps=du, direction=1)
         else:
-            system.eventDrivenStep(dx, root["kick"][args.step])
+            system.eventDrivenStep(du, root["kick"][args.step])
 
         with g5.ExtendableList(output, "r", np.uint64) as dset_r, g5.ExtendableList(
             output, "t", np.float64
-        ) as dset_t, g5.ExtendableList(output, "dx", np.float64) as dset_dx, g5.ExtendableList(
+        ) as dset_t, g5.ExtendableList(output, "du", np.float64) as dset_dx, g5.ExtendableList(
             output, "ds", np.int64
         ) as dset_ds:
 
             while True:
 
                 iter += 1
-                i_t = np.copy(system.i)
-                x_t = np.copy(system.x)
+                i_t = np.copy(system.chunk.index_at_align)
+                u_t = np.copy(system.u)
                 ret = system.timeStepsUntilEvent()
-                i = system.i
-                x = system.x
+                i = system.chunk.index_at_align
+                u = system.u
                 t = system.t
 
                 for r in np.argwhere(i != i_t).ravel():
@@ -137,11 +136,11 @@ def cli_run(cli_args=None):
                     dset_t.append(t - tref)
                     if args.s:
                         dset_ds.append(i[r] - i_t[r])
-                    if args.x:
-                        dset_dx.append(x[r] - x_t[r])
+                    if args.u:
+                        dset_dx.append(u[r] - u_t[r])
 
                 i_t = np.copy(i)
-                x_t = np.copy(x)
+                u_t = np.copy(u)
 
                 if np.sum(i - i_n) >= args.smax:
                     break
@@ -153,7 +152,7 @@ def cli_run(cli_args=None):
                     file.flush()
 
                 if avalanche:
-                    if np.sum(i != i_n) == system.N:
+                    if np.sum(i != i_n) == system.size:
                         output["t_A=N"] = t - tref
                         avalanche = False
                         if args.avalanche:
@@ -191,21 +190,19 @@ def cli_paraview(cli_args=None):
         f"{args.output}.xdmf"
     ) as xdmf:
 
-        x0 = file["x0"][...]
+        u0 = file["u0"][...]
         t = file["t"][...]
         r = file["r"][...]
         ds = file["ds"][...]
-        dx = file["dx"][...]
-        organisation = file["organisation"][...]
+        du = file["du"][...]
 
-        assert np.all(organisation.ravel() == np.arange(x0.size))
-        assert x0.ndim == 2
+        assert u0.ndim == 2
 
-        mesh = GooseFEM.Mesh.Quad4.Regular(x0.shape[0] - 1, x0.shape[1] - 1)
+        mesh = GooseFEM.Mesh.Quad4.Regular(u0.shape[0] - 1, u0.shape[1] - 1)
         coor = xh.as3d(mesh.coor())
-        coor[:, 2] = (x0 - np.mean(x0)).ravel()
+        coor[:, 2] = (u0 - np.mean(u0)).ravel()
 
-        x0 = x0.ravel()
+        u0 = u0.ravel()
 
         out["coor"] = coor
         out["conn"] = mesh.conn()
@@ -226,7 +223,7 @@ def cli_paraview(cli_args=None):
         for ibin in tqdm.tqdm(range(1, args.bins + 1)):
 
             keep = np.logical_and(t >= tsave[ibin - 1], t < tsave[ibin])
-            np.add.at(X, r[keep], dx[keep])
+            np.add.at(X, r[keep], du[keep])
             np.add.at(S, r[keep], ds[keep])
 
             disp = np.zeros_like(coor)
@@ -237,7 +234,7 @@ def cli_paraview(cli_args=None):
 
             xdmf += xh.TimeStep(time=tsave[ibin])
             xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
-            xdmf += xh.Attribute(out[f"/disp/{ibin:d}"], xh.AttributeCenter.Node, name="dx")
+            xdmf += xh.Attribute(out[f"/disp/{ibin:d}"], xh.AttributeCenter.Node, name="du")
             xdmf += xh.Attribute(out[f"/S/{ibin:d}"], xh.AttributeCenter.Node, name="S")
 
 

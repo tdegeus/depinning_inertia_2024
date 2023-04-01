@@ -32,11 +32,9 @@ class MyTests(unittest.TestCase):
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        QuasiStatic.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, dirname])
-
-        with h5py.File(filename, "a") as file:
-            file["param"]["xyield"]["nchunk"][...] = 100
-
+        QuasiStatic.cli_generate(
+            ["--dev", "--eta", 1e0, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
+        )
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
@@ -50,7 +48,19 @@ class MyTests(unittest.TestCase):
 
     def test_history(self):
 
-        ret = g5.compare(infoname, historic)
+        with h5py.File(infoname) as file_a:
+            with h5py.File(historic) as file_b:
+                ret, a, b = g5.compare_rename(
+                    file_a,
+                    file_b,
+                    rename=[
+                        ["/normalisation/k_interactions", "/normalisation/k_neighbours"],
+                        ["/normalisation/u", "/normalisation/x"],
+                        ["/avalanche/u_frame", "/avalanche/x_frame"],
+                        ["/loading/u_frame", "/loading/x_frame"],
+                        ["/full/id=0000.h5/u_frame", "/full/id=0000.h5/x_frame"],
+                    ],
+                )
 
         for key in [
             "/lookup/uuid",
@@ -62,6 +72,7 @@ class MyTests(unittest.TestCase):
             "/normalisation/system",
             "/normalisation/name",
             "/normalisation/f",
+            "/normalisation/dynamics",
         ]:
             if key in ret["!="]:
                 ret["!="].remove(key)
@@ -73,6 +84,8 @@ class MyTests(unittest.TestCase):
         self.assertEqual(ret["!="], [])
         self.assertEqual(ret["->"], [])
         self.assertEqual(ret["<-"], [])
+        self.assertEqual(a["!="], [])
+        self.assertEqual(b["!="], [])
 
 
 if __name__ == "__main__":

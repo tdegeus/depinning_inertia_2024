@@ -75,9 +75,9 @@ def cli_run(cli_args=None):
     # basic assertions
     with h5py.File(args.file) as src:
         if args.branch is not None:
-            assert f"/Trigger/branches/{args.branch:d}/x/{args.step - 1:d}" in src
+            assert f"/Trigger/branches/{args.branch:d}/u/{args.step - 1:d}" in src
         else:
-            assert f"/QuasiStatic/x/{args.step - 1:d}" in src
+            assert f"/QuasiStatic/u/{args.step - 1:d}" in src
 
     with h5py.File(args.output, "w") as file:
 
@@ -110,7 +110,7 @@ def cli_run(cli_args=None):
 
         while not systemspanning:
             system.timeStepsUntilEvent()
-            systemspanning = np.all(np.not_equal(system.i, info["i_n"]))
+            systemspanning = np.all(np.not_equal(system.chunk.index_at_align, info["i_n"]))
             pbar.n = system.inc - inc_n
             pbar.update()
 

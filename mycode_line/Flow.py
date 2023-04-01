@@ -246,52 +246,18 @@ def cli_generate(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    QuasiStatic._generate_cli_options(parser)
 
     parser.add_argument(
-        "--nstep",
-        type=lambda x: int(float(x)),
-        help="#output steps to run.",
-    )
-    parser.add_argument(
         "--output",
-        type=lambda x: int(float(x)),
+        type=lambda arg: int(float(arg)),
         help="Number of time-steps between writing global output variables.",
     )
     parser.add_argument(
         "--snapshot",
-        type=lambda x: int(float(x)),
+        type=lambda arg: int(float(arg)),
         default=0,
         help="Write snapshot every n output steps.",
-    )
-    parser.add_argument(
-        "-n",
-        "--nsim",
-        type=lambda x: int(float(x)),
-        default=1,
-        help="#simulations",
-    )
-    parser.add_argument(
-        "-N",
-        "--size",
-        type=lambda x: int(float(x)),
-        default=5000,
-        help="#particles",
-    )
-    parser.add_argument(
-        "--develop",
-        action="store_true",
-        help="Allow uncommitted changes",
-    )
-    parser.add_argument(
-        "--dt",
-        type=float,
-        help="Time-step",
-    )
-    parser.add_argument(
-        "--eta",
-        type=float,
-        required=True,
-        help="Damping coefficient.",
     )
     parser.add_argument(
         "--gammadot",
@@ -299,25 +265,6 @@ def cli_generate(cli_args=None):
         required=True,
         help="Driving rate.",
     )
-    parser.add_argument(
-        "-s",
-        "--start",
-        type=int,
-        default=0,
-        help="Start simulation (correct seed if extending ensemble.",
-    )
-    parser.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=version,
-    )
-    parser.add_argument(
-        "outdir",
-        type=str,
-        help="Output directory",
-    )
-
     args = tools._parse(parser, cli_args)
 
     known_gammadot = np.array([1e-2, 1e-1, 1e-0, 1e1])
@@ -332,6 +279,7 @@ def cli_generate(cli_args=None):
 
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+    opts = QuasiStatic._generate_parse(args)
 
     files = []
 
@@ -343,10 +291,8 @@ def cli_generate(cli_args=None):
         with h5py.File(outdir / files[-1], "w") as file:
             QuasiStatic.generate(
                 file=file,
-                N=args.size,
                 seed=seed,
-                eta=args.eta,
-                dt=args.dt,
+                **opts,
             )
             file["/Flow/gammadot"] = args.gammadot
             file["/Flow/output/interval"] = args.output
@@ -354,7 +300,7 @@ def cli_generate(cli_args=None):
 
     executable = entry_points["cli_run"]
     commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
-    shelephant.yaml.dump(outdir / "commands.yaml", commands)
+    shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
 
 
 def run_create_extendible(file: h5py.File):
@@ -365,7 +311,7 @@ def run_create_extendible(file: h5py.File):
     storage.create_extendible(file, "/Flow/output/f_frame", np.float64)
     storage.create_extendible(file, "/Flow/output/f_potential", np.float64)
     storage.create_extendible(file, "/Flow/output/f_damping", np.float64)
-    storage.create_extendible(file, "/Flow/output/x", np.float64)
+    storage.create_extendible(file, "/Flow/output/u", np.float64)
     storage.create_extendible(file, "/Flow/output/inc", np.uint32)
     storage.create_extendible(file, "/Flow/snapshot/inc", np.uint32)
 
@@ -389,11 +335,11 @@ def cli_run(cli_args=None):
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument(
-        "-n", "--nstep", type=lambda x: int(float(x)), default=1000, help="#output steps to run"
+        "-n", "--nstep", type=lambda arg: int(float(arg)), default=1000, help="#output steps to run"
     )
     parser.add_argument(
         "--snapshot",
-        type=lambda x: int(float(x)),
+        type=lambda arg: int(float(arg)),
         help="Write snapshot every n output steps.",
     )
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -407,7 +353,7 @@ def cli_run(cli_args=None):
 
         restart = False
 
-        if "/Flow/snapshot/x" in file:
+        if "/Flow/snapshot/u" in file:
             restart = True
 
         inc = 0
@@ -425,15 +371,15 @@ def cli_run(cli_args=None):
         if restart:
             dt = file["/param/dt"][...]
             inc = file["/Flow/snapshot/inc"][-1]
-            system.x = file[f"/Flow/snapshot/x/{inc:d}"][...]
+            system.u = file[f"/Flow/snapshot/u/{inc:d}"][...]
             system.v = file[f"/Flow/snapshot/v/{inc:d}"][...]
             system.a = file[f"/Flow/snapshot/a/{inc:d}"][...]
-            system.x_frame = gammadot * dt * inc
+            system.u_frame = gammadot * dt * inc
             i = int(inc / output)
             assert np.isclose(file["/Flow/output/f_frame"][i], np.mean(system.f_frame))
             assert np.isclose(file["/Flow/output/f_potential"][i], np.mean(system.f_potential))
             assert np.isclose(file["/Flow/output/f_damping"][i], np.mean(system.f_damping))
-            assert np.isclose(file["/Flow/output/x"][i], np.mean(system.x))
+            assert np.isclose(file["/Flow/output/u"][i], np.mean(system.u))
         else:
             run_create_extendible(file)
 
@@ -442,7 +388,7 @@ def cli_run(cli_args=None):
             "/Flow/output/f_frame",
             "/Flow/output/f_potential",
             "/Flow/output/f_damping",
-            "/Flow/output/x",
+            "/Flow/output/u",
         ]
 
         for istep in pbar:
@@ -454,15 +400,15 @@ def cli_run(cli_args=None):
             if snapshot > 0:
                 if inc % snapshot == 0:
                     st = True
-                    if "/Flow/snapshot/x" in file:
-                        if str(inc) in file["/Flow/snapshot/x"]:
+                    if "/Flow/snapshot/u" in file:
+                        if str(inc) in file["/Flow/snapshot/u"]:
                             st = False
                     if st:
                         i = file["/Flow/snapshot/inc"].size
                         for key in ["/Flow/snapshot/inc"]:
                             file[key].resize((i + 1,))
                         file["/Flow/snapshot/inc"][i] = inc
-                        file[f"/Flow/snapshot/x/{inc:d}"] = system.x
+                        file[f"/Flow/snapshot/u/{inc:d}"] = system.u
                         file[f"/Flow/snapshot/v/{inc:d}"] = system.v
                         file[f"/Flow/snapshot/a/{inc:d}"] = system.a
                         file.flush()
@@ -477,7 +423,7 @@ def cli_run(cli_args=None):
                     file["/Flow/output/f_frame"][i] = np.mean(system.f_frame)
                     file["/Flow/output/f_potential"][i] = np.mean(system.f_potential)
                     file["/Flow/output/f_damping"][i] = np.mean(system.f_damping)
-                    file["/Flow/output/x"][i] = np.mean(system.x)
+                    file["/Flow/output/u"][i] = np.mean(system.u)
                     file.flush()
 
 
@@ -510,7 +456,7 @@ def cli_plot(cli_args=None):
 
     with h5py.File(args.file) as file:
 
-        x_frame = file["/Flow/gammadot"][...] * file["/param/dt"] * file["/Flow/output/inc"][...]
+        u_frame = file["/Flow/gammadot"][...] * file["/param/dt"] * file["/Flow/output/inc"][...]
         f_frame = file["/Flow/output/f_frame"][...]
         f_potential = file["/Flow/output/f_potential"][...]
 
@@ -519,8 +465,8 @@ def cli_plot(cli_args=None):
         opts["marker"] = args.marker
 
     fig, ax = plt.subplots()
-    ax.plot(x_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
-    ax.plot(x_frame, -f_potential, label=r"$f_\text{potential}$", c="r", **opts)
+    ax.plot(u_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
+    ax.plot(u_frame, -f_potential, label=r"$f_\text{potential}$", c="r", **opts)
     ax.set_xlabel(r"$x_\text{frame}$")
     ax.set_ylabel(r"$f$")
     ax.legend()
