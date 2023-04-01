@@ -38,11 +38,9 @@ class MyTests(unittest.TestCase):
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        QuasiStatic.cli_generate(["--dev", "--eta", 1e0, "-N", 50, "-n", 1, dirname])
-
-        with h5py.File(filename, "a") as file:
-            file["param"]["xyield"]["nchunk"][...] = 100
-
+        QuasiStatic.cli_generate(
+            ["--dev", "--eta", 1e0, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
+        )
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename, "--fastload"])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
@@ -63,19 +61,19 @@ class MyTests(unittest.TestCase):
             system = QuasiStatic.allocate_system(file)
             jump = QuasiStatic.allocate_system(file)
 
-        dx = system.chunk.data[..., -1] * 0.5
+        du = system.chunk.data[..., -1] * 0.5
         n = 50
 
         for i in range(1, n):
-            system.chunk_goto(dx * i)
-            system.x = dx * i
+            system.chunk_goto(du * i)
+            system.u = du * i
 
-        jump.chunk_goto(system.x)
-        jump.x = system.x
+        jump.chunk_goto(system.u)
+        jump.u = system.u
 
-        self.assertTrue(np.all(np.equal(system.i, jump.i)))
-        self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
-        self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
+        self.assertTrue(np.all(np.equal(system.chunk.index_at_align, jump.chunk.index_at_align)))
+        self.assertTrue(np.allclose(system.chunk.left_of_align, jump.chunk.left_of_align))
+        self.assertTrue(np.allclose(system.chunk.right_of_align, jump.chunk.right_of_align))
 
     def test_y_delta(self):
         """
@@ -86,30 +84,32 @@ class MyTests(unittest.TestCase):
 
         with h5py.File(filename) as file, h5py.File(deltaname, "w") as delta:
             datasets = list(
-                g5.getdatapaths(file, root="/param", fold="/param/xyield/weibull", fold_symbol="")
+                g5.getdatapaths(
+                    file, root="/param", fold="/param/potentials/weibull", fold_symbol=""
+                )
             )
-            datasets.remove("/param/xyield/weibull")
+            datasets.remove("/param/potentials/weibull")
             g5.copy(file, delta, datasets)
             g5.copy(file, delta, g5.getdatapaths(file, root="/realisation"))
-            delta["/param/xyield/delta/mean"] = 2.0
+            delta["/param/potentials/delta/mean"] = 2.0
 
         with h5py.File(deltaname) as file:
             system = QuasiStatic.allocate_system(file)
             jump = QuasiStatic.allocate_system(file)
 
-        dx = system.chunk.data[..., -1] * 0.5
+        du = system.chunk.data[..., -1] * 0.5
         n = 50
 
         for i in range(1, n):
-            system.chunk_goto(dx * i)
-            system.x = dx * i
+            system.chunk_goto(du * i)
+            system.u = du * i
 
-        jump.chunk_goto(system.x)
-        jump.x = system.x
+        jump.chunk_goto(system.u)
+        jump.u = system.u
 
-        self.assertTrue(np.all(np.equal(system.i, jump.i)))
-        self.assertTrue(np.allclose(system.y_left(), jump.y_left()))
-        self.assertTrue(np.allclose(system.y_right(), jump.y_right()))
+        self.assertTrue(np.all(np.equal(system.chunk.index_at_align, jump.chunk.index_at_align)))
+        self.assertTrue(np.allclose(system.chunk.left_of_align, jump.chunk.left_of_align))
+        self.assertTrue(np.allclose(system.chunk.right_of_align, jump.chunk.right_of_align))
 
     def test_fastload(self):
         """
@@ -120,8 +120,8 @@ class MyTests(unittest.TestCase):
             system = QuasiStatic.allocate_system(file)
             step = int(0.2 * file["/QuasiStatic/inc"].size)
             system.restore_quasistatic_step(file["QuasiStatic"], step)
-            yleft = system.y_left()
-            yright = system.y_right()
+            yleft = system.chunk.left_of_align
+            yright = system.chunk.right_of_align
             fpot = system.f_potential
 
         QuasiStatic.cli_generatefastload(["--dev", filename, "--force"])
@@ -129,8 +129,8 @@ class MyTests(unittest.TestCase):
         with h5py.File(filename) as file:
             system = QuasiStatic.allocate_system(file)
             system.restore_quasistatic_step(file["QuasiStatic"], step)
-            self.assertTrue(np.allclose(yleft, system.y_left()))
-            self.assertTrue(np.allclose(yright, system.y_right()))
+            self.assertTrue(np.allclose(yleft, system.chunk.left_of_align))
+            self.assertTrue(np.allclose(yright, system.chunk.right_of_align))
             self.assertTrue(np.allclose(fpot, system.f_potential))
 
         # just a call
@@ -143,9 +143,6 @@ class MyTests(unittest.TestCase):
         """
         Rerun using huge chunk.
         """
-
-        with h5py.File(filename, "a") as file:
-            file["param"]["xyield"]["nchunk"][...] = 2000
 
         QuasiStatic.cli_run(["--dev", "--check", 950, filename])
         QuasiStatic.cli_run(["--dev", "--check", 951, filename])

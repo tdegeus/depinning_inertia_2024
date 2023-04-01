@@ -252,9 +252,9 @@ def fill_avalanche(broken):
     zero = np.zeros_like(broken)[0]
 
     x = np.argwhere(broken).ravel()
-    dx = np.diff(x)
-    maxdx = np.max(dx)
-    j = np.argwhere(dx == maxdx).ravel()
+    du = np.diff(x)
+    maxdx = np.max(du)
+    j = np.argwhere(du == maxdx).ravel()
 
     x0 = x[j[0]]
     x1 = x[j[0] + 1]

@@ -13,6 +13,7 @@ import uuid
 
 import enstat
 import FrictionQPotSpringBlock  # noqa: F401
+import FrictionQPotSpringBlock as fsb
 import FrictionQPotSpringBlock.Line1d as model
 import GooseEYE as eye
 import h5py
@@ -100,96 +101,71 @@ class Normalisation:
         :return: Basic information as follows::
             mu: Elastic stiffness (float).
             k_frame: Stiffness of the load-frame (float).
-            k_neighbours: Stiffness of the neighbour interactions (float).
+            k_interactions: Stiffness of the neighbour interactions (float).
             eta: Damping (float).
             m: Mass (float).
             seed: Base seed (uint64) or uuid (str).
             N: Number of blocks (int).
+            shape: Shape of the system (tuple of int).
             dt: Time step of time discretisation.
             system: Name of the system class (str).
             potential: Name of the potential (str).
-            kappa: Weakening 'stiffness', if SemiSmooth potential is used (float).
-            alpha: Interaction range, if long-range interactions are used (float).
         """
 
-        self.alpha = None
-        self.width = None
-        self.kappa = None
-        self.k2 = None
-        self.k4 = None
-        self.a1 = None
-        self.a2 = None
-        self.k_neighbours = None
         self.mu = file["param"]["mu"][...]
         self.k_frame = file["param"]["k_frame"][...]
         self.eta = file["param"]["eta"][...]
         self.m = file["param"]["m"][...]
         self.N = file["param"]["normalisation"]["N"][...]
+        self.shape = file["param"]["normalisation"]["shape"][...]
         self.dt = file["param"]["dt"][...]
-        self.x = 1
+        self.u = 1
         self.seed = None
+        self.potential = str(file["/param/potentials/type"].asstr()[...])
+        self.interactions = str(file["/param/interactions/type"].asstr()[...])
+        self.dynamics = str(file["/param/dynamics"].asstr()[...])
 
-        if "k2" in file["param"]:
-            self.k2 = file["param"]["k2"][...]
-            self.k4 = file["param"]["k4"][...]
-        elif "a1" in file["param"]:
+        if self.interactions == "Laplace":
+            self.k_interactions = file["param"]["interactions"]["k"][...]
+        elif self.interactions == "Quartic":
             self.a1 = file["param"]["a1"][...]
             self.a2 = file["param"]["a2"][...]
+        elif self.interactions == "QuadraticGradient":
+            self.k1 = file["param"]["k1"][...]
+            self.k2 = file["param"]["k2"][...]
+        elif self.interactions == "LongRange":
+            self.k_interactions = file["param"]["interactions"]["k"][...]
+            self.alpha = file["param"]["alpha"][...]
         else:
-            self.k_neighbours = file["param"]["k_neighbours"][...]
+            raise ValueError(f"Unknown interactions: {self.interactions:s}")
 
         if "realisation" in file:
             self.seed = file["realisation"]["seed"][...]
 
-        if "x" in file["param"]["normalisation"]:
-            self.x = file["param"]["normalisation"]["x"][...]
+        if "u" in file["param"]["normalisation"]:
+            self.u = file["param"]["normalisation"]["u"][...]
 
-        if "potential" not in file["param"]:
-            self.potential = "Cusp"
-        else:
-            self.potential = file["/param/potential/name"].asstr()[...]
-
-        if self.potential == "Cusp":
-            self.system = "System"
-            self.f = self.mu * self.x
+        if self.potential == "Cuspy":
+            self.f = self.mu * self.u
         elif self.potential == "SemiSmooth":
-            self.system = "SystemSemiSmooth"
             self.kappa = file["param"]["kappa"][...]
-            self.f = self.mu * self.x * (1 - self.mu / (self.mu + self.kappa))
+            self.f = self.mu * self.u * (1 - self.mu / (self.mu + self.kappa))
         elif self.potential == "Smooth":
-            self.system = "SystemSmooth"
-            self.f = self.mu * self.x / np.pi
+            self.f = self.mu * self.u / np.pi
         else:
             raise ValueError(f"Unknown potential: {self.potential:s}")
 
-        if "alpha" in file["param"]:
-            self.alpha = file["param"]["alpha"][...]
-            assert self.system == "System"
-            self.system = "SystemLongRange"
+        if len(self.shape) == 1:
+            self.system = "Line1d"
+        elif len(self.shape) == 2:
+            self.system = "Line2d"
+        else:
+            raise ValueError("Unknown shape")
 
-        if "width" in file["param"] and "k2" not in file["param"]:
-            self.width = file["param"]["width"][...]
-            assert self.system == "System"
-            self.system = "System2d"
-
-        if "thermal" in file["param"]:
-            assert self.system == "System"
-            self.system = "SystemThermalRandomForceNormal"
-
-        if "k2" in file["param"] and "width" not in file["param"]:
-            assert self.system == "System"
-            self.system = "SystemQuartic"
-
-        if "k2" in file["param"] and "width" in file["param"]:
-            assert self.system == "System"
-            self.system = "System2dQuartic"
-
-        if "a1" in file["param"] and "width" not in file["param"]:
-            assert self.system == "System"
-            self.system = "SystemQuarticFD"
-
-        if "a1" in file["param"] and "width" in file["param"]:
-            raise OSError("System2dQuarticFD not implemented yet.")
+        extra = []
+        if self.dynamics == "nopassing":
+            extra.append("Nopassing")
+        self.system = "_".join([self.system, "System", self.potential, self.interactions] + extra)
 
     def asdict(self):
         """
@@ -206,125 +182,111 @@ class Normalisation:
             potential=self.potential,
             seed=self.seed,
             system=self.system,
-            x=self.x,
+            dynamics=self.dynamics,
+            u=self.u,
         )
 
-        if self.k_neighbours is not None:
-            ret["k_neighbours"] = self.k_neighbours
-
-        if self.k2 is not None:
+        if self.interactions == "Laplace":
+            ret["k_interactions"] = self.k_interactions
+        elif self.interactions == "Quartic":
+            ret["a1"] = self.a1
+            ret["a2"] = self.a2
+        elif self.interactions == "QuadraticGradient":
+            ret["k1"] = self.k1
             ret["k2"] = self.k2
-            ret["k4"] = self.k4
-
-        if self.alpha is not None:
+        elif self.interactions == "LongRange":
+            ret["k_interactions"] = self.k_interactions
             ret["alpha"] = self.alpha
 
-        if self.kappa is not None:
+        if self.potential == "SemiSmooth":
             ret["kappa"] = self.kappa
-
-        if self.width is not None:
-            ret["width"] = self.width
 
         return ret
 
 
-class DataMap:
+def _common_param(file: h5py.File) -> dict:
     """
-    File interaction needed to allocate a System (or one of its subclasses).
+    Get common parameters from file.
     """
 
-    def __init__(self, file: h5py.File, nchunk: int = None, chunk_use_max: bool = True):
-        """
-        Initialise system.
+    file_yield = file["param"]["potentials"]
+    assert np.all(file_yield["initstate"][...].ravel() == np.arange(file_yield["initstate"].size))
+    assert np.all(file_yield["initseq"][...].ravel() == np.zeros(file_yield["initseq"].size))
 
-        :param nchunk: Overwrite the default chuck.
-        :param chunk_use_max: If True, use the maximum between the option and the value in the file.
-        """
+    ret = {
+        "shape": file_yield["initstate"].shape,
+        "offset": file_yield["xoffset"][...],
+        "seed": file["realisation"]["seed"][...],
+    }
 
-        file_yield = file["param"]["xyield"]
-        initstate = file["realisation"]["seed"][...] + file_yield["initstate"][...]
-        initseq = file_yield["initseq"][...]
-        xoffset = file_yield["xoffset"][...]
+    if "weibull" in file_yield:
+        ret["distribution"] = "weibull"
+        ret["parameters"] = [
+            file_yield["weibull"]["k"][...],
+            2 * file_yield["weibull"]["mean"][...],
+            file_yield["weibull"]["offset"][...],
+        ]
+    elif "delta" in file_yield:
+        ret["distribution"] = "delta"
+        ret["parameters"] = [2 * file_yield["delta"]["mean"][...], 0]
+    elif "random" in file_yield:
+        ret["distribution"] = "random"
+        ret["parameters"] = [
+            2 * file_yield["random"]["mean"][...],
+            file_yield["random"]["offset"][...],
+        ]
+    else:
+        raise OSError("Distribution not supported")
 
-        if nchunk is None:
-            nchunk = file_yield["nchunk"][...]
-        elif chunk_use_max:
-            nchunk = max(file_yield["nchunk"][...], nchunk)
+    return ret
 
-        assert nchunk > 30
-        align = prrng.alignment(margin=30, min_margin=6, buffer=5, strict=False)
 
-        if "weibull" in file_yield:
-            distribution = prrng.distribution.weibull
-            parameters = [
-                file_yield["weibull"]["k"][...],
-                2 * file_yield["weibull"]["mean"][...],
-                file_yield["weibull"]["offset"][...],
-            ]
-        elif "delta" in file_yield:
-            distribution = prrng.distribution.delta
-            parameters = [2 * file_yield["delta"]["mean"][...], 0]
-        elif "random" in file_yield:
-            distribution = prrng.distribution.random
-            parameters = [
-                2 * file_yield["random"]["mean"][...],
-                file_yield["random"]["offset"][...],
-            ]
-        else:
-            raise OSError("Distribution not supported")
+class SystemExtra:
+    """ """
 
-        self.chunk = prrng.pcg32_tensor_cumsum_1_1(
-            shape=[nchunk],
-            initstate=initstate,
-            initseq=initseq,
-            distribution=distribution,
-            parameters=parameters,
-            align=align,
-        )
-
-        self.chunk += xoffset
+    def __init__(self, file: h5py.File):
         self.normalisation = Normalisation(file)
 
     def chunk_goto(
         self,
-        x: ArrayLike,
+        u: ArrayLike,
         fastload: tuple(str, str) = None,
     ):
         """
-        Update the yield positions to be able to accommodate a target position ``x``.
+        Update the yield positions to be able to accommodate a target position ``u``.
         Note: the position is not updated!
 
-        :param x: Target position.
+        :param u: Target position.
         :param fastload: If available ``(filename, groupname)`` of the closest fastload info.
         """
 
-        if self.chunk.contains(x):
-            return self.chunk.align(x)
+        if self.chunk.contains(u):
+            return self.chunk.align(u)
 
         front = self.chunk.data[:, 0]
         back = self.chunk.data[:, -1]
 
-        if np.all(x < 2 * back - front):
-            return self.chunk.align(x)
+        if np.all(u < 2 * back - front):
+            return self.chunk.align(u)
 
         if fastload is None:
-            return self.chunk.align(x)
+            return self.chunk.align(u)
 
         if len(fastload) != 2:
-            return self.chunk.align(x)
+            return self.chunk.align(u)
 
         if fastload[0] is None:
-            return self.chunk.align(x)
+            return self.chunk.align(u)
 
         if not os.path.exists(fastload[0]):
-            return self.chunk.align(x)
+            return self.chunk.align(u)
 
         with h5py.File(fastload[0]) as loadfile:
             if fastload[1] in loadfile:
                 root = loadfile[fastload[1]]
                 self.chunk.restore(root["state"][...], root["value"][...], root["index"][...])
 
-        return self.chunk.align(x)
+        return self.chunk.align(u)
 
     def restore_quasistatic_step(
         self,
@@ -336,16 +298,16 @@ class DataMap:
         Quench and restore an a quasi-static step for the relevant root.
         The ``root`` group should contain::
 
-            root["x"][str(step)]   # Positions
+            root["u"][str(step)]   # Positions
             root["inc"][step]      # Increment (-> time)
-            root["x_frame"][step]  # Loading frame position
+            root["u_frame"][step]  # Loading frame position
 
         :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
         :param fastload: Use fastload file (if detected), see :py:func:`cli_generatefastload`.
         """
 
-        x = root["x"][str(step)][...]
+        u = root["u"][str(step)][...]
 
         if type(fastload) == tuple or type(fastload) == list:
             pass
@@ -354,104 +316,124 @@ class DataMap:
         else:
             fastload = None
 
-        self.chunk_goto(x, fastload)
+        self.chunk_goto(u, fastload)
         self.quench()
         self.inc = root["inc"][step]
-        self.x_frame = root["x_frame"][step]
-        self.x = x
+        self.u_frame = root["u_frame"][step]
+        self.u = u
 
 
-class System(model.System, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Cuspy_Laplace(model.System_Cuspy_Laplace, SystemExtra):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.System.__init__(
+        model.System_Cuspy_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
+            **_common_param(file),
         )
 
 
-class SystemSemiSmooth(model.SystemSemiSmooth, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Cuspy_Laplace_Nopassing(model.System_Cuspy_Laplace_Nopassing, SystemExtra):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.SystemSemiSmooth.__init__(
+        model.System_Cuspy_Laplace_Nopassing.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            **_common_param(file),
+        )
+
+
+class Line1d_System_SemiSmooth_Laplace(model.System_SemiSmooth_Laplace, SystemExtra):
+    def __init__(self, file: h5py.File):
+        """
+        Initialise system.
+        """
+
+        SystemExtra.__init__(self, file)
+
+        model.System_SemiSmooth_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
             kappa=file["param"]["kappa"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
+            **_common_param(file),
         )
 
 
-class SystemSmooth(model.SystemSmooth, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Smooth_Laplace(model.System_Smooth_Laplace, SystemExtra):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.SystemSmooth.__init__(
+        model.System_Smooth_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
+            **_common_param(file),
         )
 
 
-class SystemLongRange(model.SystemLongRange, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Cuspy_LongRange(model.System_Cuspy_LongRange, SystemExtra):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.SystemLongRange.__init__(
+        model.System_Cuspy_LongRange.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
             alpha=file["param"]["alpha"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
+            **_common_param(file),
         )
 
 
-class SystemQuartic(model.SystemQuartic, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Cuspy_QuarticGradient(model.System_Cuspy_QuarticGradient, SystemExtra):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.SystemQuartic.__init__(
+        model.System_Cuspy_QuarticGradient.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
@@ -460,19 +442,19 @@ class SystemQuartic(model.SystemQuartic, DataMap):
             k4=file["param"]["k4"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
+            **_common_param(file),
         )
 
 
-class SystemQuarticFD(model.SystemQuarticFD, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Cuspy_Quartic(model.System_Cuspy_Quartic, SystemExtra):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.SystemQuarticFD.__init__(
+        model.System_Cuspy_Quartic.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
@@ -481,75 +463,55 @@ class SystemQuarticFD(model.SystemQuarticFD, DataMap):
             a2=file["param"]["a2"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
+            **_common_param(file),
         )
 
 
-class System2d(model.System2d, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
+class Line1d_System_Cuspy_Laplace_RandomForcing(
+    model.System_Cuspy_Laplace_RandomForcing, SystemExtra
+):
+    def __init__(self, file: h5py.File):
         """
         Initialise system.
         """
 
-        DataMap.__init__(self, file, **kwargs)
+        SystemExtra.__init__(self, file)
 
-        model.System2d.__init__(
+        model.System_Cuspy_Laplace_RandomForcing.__init__(
             self,
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            chunk=self.chunk,
-            width=file["param"]["width"][...],
-        )
-
-
-class System2dQuartic(model.System2dQuartic, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
-        """
-        Initialise system.
-        """
-
-        DataMap.__init__(self, file, **kwargs)
-
-        model.System2dQuartic.__init__(
-            self,
-            m=file["param"]["m"][...],
-            eta=file["param"]["eta"][...],
-            mu=file["param"]["mu"][...],
-            k2=file["param"]["k2"][...],
-            k4=file["param"]["k4"][...],
-            k_frame=file["param"]["k_frame"][...],
-            dt=file["param"]["dt"][...],
-            chunk=self.chunk,
-            width=file["param"]["width"][...],
-        )
-
-
-class SystemThermalRandomForceNormal(model.SystemThermalRandomForceNormal, DataMap):
-    def __init__(self, file: h5py.File, **kwargs):
-        """
-        Initialise system.
-        """
-
-        DataMap.__init__(self, file, **kwargs)
-
-        model.SystemThermalRandomForceNormal.__init__(
-            self,
-            m=file["param"]["m"][...],
-            eta=file["param"]["eta"][...],
-            mu=file["param"]["mu"][...],
-            k_neighbours=file["param"]["k_neighbours"][...],
-            k_frame=file["param"]["k_frame"][...],
-            dt=file["param"]["dt"][...],
-            chunk=self.chunk,
             mean=file["param"]["thermal"]["mean"][...],
             stddev=file["param"]["thermal"]["stddev"][...],
-            seed=file["param"]["thermal"]["seed"][...],
+            seed_forcing=file["param"]["thermal"]["seed"][...],
             dinc_init=file["param"]["thermal"]["dinc_init"][...],
             dinc=file["param"]["thermal"]["dinc"][...],
+            **_common_param(file),
+        )
+
+
+class Line2d_System_Cuspy_Laplace(fsb.Line2d.System_Cuspy_Laplace, SystemExtra):
+    def __init__(self, file: h5py.File):
+        """
+        Initialise system.
+        """
+
+        SystemExtra.__init__(self, file)
+
+        fsb.Line2d.System_Cuspy_Laplace.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            k_interactions=file["param"]["interactions"]["k"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            width=file["param"]["width"][...],
+            **_common_param(file),
         )
 
 
@@ -560,32 +522,31 @@ def allocate_system(file: h5py.File, **kwargs):
 
     norm = Normalisation(file)
 
-    if norm.system == "System":
-        return System(file, **kwargs)
+    if norm.system == "Line1d_System_Cuspy_Laplace":
+        return Line1d_System_Cuspy_Laplace(file, **kwargs)
 
-    if norm.system == "SystemSemiSmooth":
-        return SystemSemiSmooth(file, **kwargs)
+    if norm.system == "Line1d_System_SemiSmooth_Laplace":
+        return Line1d_System_SemiSmooth_Laplace(file, **kwargs)
 
-    if norm.system == "SystemSmooth":
-        return SystemSmooth(file, **kwargs)
+    if norm.system == "Line1d_System_Smooth_Laplace":
+        return Line1d_System_Smooth_Laplace(file, **kwargs)
 
-    if norm.system == "SystemThermalRandomForceNormal":
-        return SystemThermalRandomForceNormal(file, **kwargs)
+    if norm.system == "Line1d_System_Cuspy_Quartic":
+        return Line1d_System_Cuspy_Quartic(file, **kwargs)
 
-    if norm.system == "SystemLongRange":
-        return SystemLongRange(file, **kwargs)
+    if norm.system == "Line1d_System_Cuspy_QuarticGradient":
+        return Line1d_System_Cuspy_QuarticGradient(file, **kwargs)
 
-    if norm.system == "System2d":
-        return System2d(file, **kwargs)
+    if norm.system == "Line1d_System_Cuspy_Laplace_RandomForcing":
+        return Line1d_System_Cuspy_Laplace_RandomForcing(file, **kwargs)
 
-    if norm.system == "SystemQuartic":
-        return SystemQuartic(file, **kwargs)
+    if norm.system == "Line1d_System_Cuspy_LongRange":
+        return Line1d_System_Cuspy_LongRange(file, **kwargs)
 
-    if norm.system == "SystemQuarticFD":
-        return SystemQuarticFD(file, **kwargs)
+    if norm.system == "Line2d_System_Cuspy_Laplace":
+        return Line2d_System_Cuspy_Laplace(file, **kwargs)
 
-    if norm.system == "System2dQuartic":
-        return System2dQuartic(file, **kwargs)
+    raise ValueError(f"Unknown system: {norm.system}")
 
 
 def _compare_versions(ver, cmpver):
@@ -668,12 +629,15 @@ def create_check_meta(
 
 def generate(
     file: h5py.File,
-    N: int,
+    shape: list[int],
     seed: int,
     eta: float = None,
     dt: float = None,
+    k_frame: float = None,
+    potential: dict = {"type": "Cuspy", "mu": 1.0},
     distribution: str = "weibull",
-    interactions: bool = True,
+    interactions: dict = {"type": "Laplace", "k": 1.0},
+    nopassing: bool = False,
 ):
     """
     Generate a simulation file.
@@ -683,11 +647,15 @@ def generate(
     :param seed: Base seed.
     :param eta: Damping coefficient.
     :param dt: Time step.
+    :param k_frame: Frame stiffness. Default: ``1 / L**2``.
+    :param potential: Select potential.
     :param distribution: Distribution of potentials.
-    :param interactions: Whether to include ``k_neighbours``.
+    :param interactions: Select interactions.
+    :param nopassing: Run overdamped dynamics with no passing rule.
     """
 
-    N = int(N)
+    N = np.prod(shape)
+    L = min(shape)
 
     if eta is None and dt is None:
         eta = 1
@@ -699,36 +667,142 @@ def generate(
     else:
         assert eta is not None
 
-    if interactions:
-        file["/param/k_neighbours"] = 1.0
+    file["/param/interactions/type"] = interactions["type"]
+    if interactions["type"] == "Laplace":
+        file["/param/interactions/k"] = interactions["k"]
+    elif interactions["type"] == "Quartic":
+        file["/param/interactions/a1"] = interactions["a1"]
+        file["/param/interactions/a2"] = interactions["a2"]
+    elif interactions["type"] == "QuarticGradient":
+        file["/param/interactions/k1"] = interactions["k1"]
+        file["/param/interactions/k2"] = interactions["k2"]
+    elif interactions["type"] == "LongRange":
+        file["/param/interactions/k"] = interactions["k"]
+        file["/param/interactions/alpha"] = interactions["alpha"]
+    else:
+        raise ValueError(f"Unknown interactions: {interactions['type']}")
 
     file["/realisation/seed"] = seed
     file["/param/m"] = 1.0
     file["/param/eta"] = eta
-    file["/param/mu"] = 1.0
-    file["/param/k_frame"] = 1.0 / N
+    file["/param/mu"] = potential["mu"]
+    file["/param/k_frame"] = 1.0 / L**2
     file["/param/dt"] = dt
-    file["/param/xyield/initstate"] = np.arange(N).astype(np.int64)
-    file["/param/xyield/initseq"] = np.zeros(N, dtype=np.int64)
-    file["/param/xyield/nchunk"] = min(5000, max(1000, int(2 * N)))
-    file["/param/xyield/xoffset"] = -100
-    file["/param/xyield/dx"] = 1e-3
+    file["/param/dynamics"] = "normal"
+    file["/param/potentials/type"] = potential["type"]
+    file["/param/potentials/initstate"] = np.arange(N).reshape(shape).astype(np.int64)
+    file["/param/potentials/initseq"] = np.zeros(shape, dtype=np.int64)
+    file["/param/potentials/xoffset"] = -100
+    file["/param/potentials/du"] = 1e-3
 
     if distribution.lower() == "weibull":
-        file["/param/xyield/weibull/offset"] = 1e-5
-        file["/param/xyield/weibull/mean"] = 1
-        file["/param/xyield/weibull/k"] = 2
+        file["/param/potentials/weibull/offset"] = 1e-5
+        file["/param/potentials/weibull/mean"] = 1
+        file["/param/potentials/weibull/k"] = 2
     elif distribution.lower() == "delta":
-        file["/param/xyield/delta/mean"] = 1
+        file["/param/potentials/delta/mean"] = 1
     elif distribution.lower() == "random":
-        file["/param/xyield/random/offset"] = 1e-5
-        file["/param/xyield/random/mean"] = 1
+        file["/param/potentials/random/offset"] = 1e-5
+        file["/param/potentials/random/mean"] = 1
     else:
         raise ValueError(f"Unknown distribution: {distribution}")
 
-    file["/param/potential/name"] = "Cusp"
+    if k_frame is not None:
+        file["/param/k_frame"][...] = k_frame
+
+    if nopassing:
+        file["/param/dynamics"][...] = "nopassing"
+
     file["/param/normalisation/N"] = N
-    file["/param/normalisation/x"] = 1
+    file["/param/normalisation/shape"] = shape
+    file["/param/normalisation/u"] = 1
+    file["/param/data_version"] = "1.0"
+
+
+def _generate_cli_options(parser):
+
+    parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
+    parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+
+    parser.add_argument("--size", type=int, help="1d system")
+    parser.add_argument("--shape", nargs=2, type=int, help="2d system")
+
+    parser.add_argument("--dt", type=float, help="Time-step")
+    parser.add_argument("--eta", type=float, help="Damping coefficient")
+    parser.add_argument(
+        "--nstep", default=20000, help="#load-steps to run", type=lambda arg: int(float(arg))
+    )
+
+    parser.add_argument("--kframe", type=float, help="Overwrite k_frame")
+
+    parser.add_argument("--distribution", type=str, default="Weibull", help="Distribution type")
+    parser.add_argument("--cuspy", nargs=1, type=float, help="Smooth potential: mu")
+    parser.add_argument("--smooth", nargs=1, type=float, help="Smooth potential: mu")
+    parser.add_argument("--semismooth", nargs=2, type=float, help="Smooth potential: mu, kappa")
+
+    parser.add_argument("--laplace", nargs=1, type=float, help="Laplace interactions: k")
+    parser.add_argument("--quartic", nargs=2, type=float, help="Quartic interactions: a1, a2")
+    parser.add_argument("--quarticgradient", nargs=2, type=float, help="Quartic gradient: k1, k2")
+    parser.add_argument("--longrange", nargs=2, type=float, help="LongRange interactions: k, alpha")
+
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("outdir", type=str, help="Output directory")
+
+
+def _generate_parse(args):
+
+    assert args.size is not None or args.shape is not None
+    assert sum([args.cuspy is not None, args.smooth is not None, args.semismooth is not None]) <= 1
+    assert (
+        sum(
+            [
+                args.laplace is not None,
+                args.quartic is not None,
+                args.quarticgradient is not None,
+                args.longrange is not None,
+            ]
+        )
+        <= 1
+    )
+
+    potential = {"type": "Cuspy", "mu": 1.0}
+    interactions = {"type": "Laplace", "k": 1.0}
+
+    if args.cuspy is not None:
+        potential = {"type": "Cuspy", "mu": args.cuspy[0]}
+    if args.smooth is not None:
+        potential = {"type": "Smooth", "mu": args.smooth[0]}
+    if args.semismooth is not None:
+        potential = {"type": "SemiSmooth", "mu": args.semismooth[0], "kappa": args.semismooth[1]}
+
+    if args.laplace is not None:
+        interactions = {"type": "Laplace", "k": args.laplace[0]}
+    if args.quartic is not None:
+        interactions = {"type": "Quartic", "a1": args.quartic[0], "a2": args.quartic[1]}
+    if args.quarticgradient is not None:
+        interactions = {
+            "type": "QuarticGradient",
+            "k1": args.quarticgradient[0],
+            "k2": args.quarticgradient[1],
+        }
+    if args.longrange is not None:
+        interactions = {
+            "type": "LongRange",
+            "k": args.longrange[0],
+            "alpha": args.longrange[1],
+        }
+
+    ret = {}
+    ret["shape"] = [args.size] if args.shape is None else args.shape
+    ret["eta"] = args.eta
+    ret["dt"] = args.dt
+    ret["k_frame"] = args.kframe
+    ret["potential"] = potential
+    ret["distribution"] = args.distribution
+    ret["interactions"] = interactions
+
+    return ret
 
 
 def cli_generate(cli_args=None):
@@ -746,35 +820,15 @@ def cli_generate(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--dt", type=float, help="Time-step")
-    parser.add_argument("--eta", type=float, help="Damping coefficient")
-    parser.add_argument("--fastload", action="store_true", help="Store fastload file")
-    parser.add_argument("--nopassing", action="store_true", help="Job scripts for overdamped run")
-    parser.add_argument("--nstep", type=int, default=20000, help="#load-steps to run")
-    parser.add_argument("--kframe", type=float, default=1, help="k_frame = X / N, with X this arg.")
-    parser.add_argument("--distribution", type=str, default="Weibull", help="Distribution type")
-    parser.add_argument("--smooth", action="store_true", help="Smooth potential")
-    parser.add_argument("--kappa", type=float, help="SemiSmooth potential with slope kappa")
-    parser.add_argument("--alpha", type=float, help="Long range interaction with this exponent")
-    parser.add_argument("--width", type=int, help="Run in 2d with this width")
-    parser.add_argument("--k2", type=float, help="Use quartic interactions (combined with --k4)")
-    parser.add_argument("--k4", type=float, help="Use quartic interactions (combined with --k2)")
-    parser.add_argument("--a1", type=float, help="Use quartic interactions (combined with --a2)")
-    parser.add_argument("--a2", type=float, help="Use quartic interactions (combined with --a1)")
-
-    parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
-    parser.add_argument("-N", "--size", type=int, default=5000, help="#particles")
-    parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("outdir", type=str, help="Output directory")
+    _generate_cli_options(parser)
+    parser.add_argument("--nopassing", action="store_true", help="Overdamped dynamics")
 
     args = tools._parse(parser, cli_args)
     assert args.nopassing or args.eta is not None
 
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+    opts = _generate_parse(args)
 
     files = []
 
@@ -786,52 +840,22 @@ def cli_generate(cli_args=None):
         with h5py.File(outdir / files[-1], "w") as file:
             generate(
                 file=file,
-                N=args.size,
                 seed=seed,
-                eta=args.eta,
-                dt=args.dt,
-                distribution=args.distribution,
-                interactions=args.k2 is None and args.a1 is None,
+                nopassing=args.nopassing,
+                **opts,
             )
-
-            file["/param/k_frame"][...] = float(args.kframe / args.size)
-
-            if args.smooth:
-                file["/param/potential/name"][...] = "Smooth"
-
-            if args.kappa is not None:
-                file["/param/potential/name"][...] = "SemiSmooth"
-                file["/param/kappa"] = args.kappa
-
-            if args.alpha is not None:
-                file["/param/alpha"] = args.alpha
-
-            if args.width is not None:
-                file["/param/width"] = args.width
-
-            if args.k2 is not None:
-                assert args.k4 is not None
-                file["/param/k2"] = args.k2
-                file["/param/k4"] = args.k4
-
-            if args.a1 is not None:
-                assert args.a2 is not None
-                file["/param/a1"] = args.a1
-                file["/param/a2"] = args.a2
 
     executable = entry_points["cli_run"]
 
-    opts = []
+    opts = ["--fastload"]
     if args.nopassing:
         opts += ["--nopassing"]
-    if args.fastload:
-        opts += ["--fastload"]
     opts = " ".join(opts)
     if len(opts) > 0:
         opts = " " + opts
 
     commands = [f"{executable}{opts} --nstep {args.nstep:d} {file}" for file in files]
-    shelephant.yaml.dump(outdir / "commands.yaml", commands)
+    shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
 
 
 def cli_run(cli_args=None):
@@ -857,13 +881,6 @@ def cli_run(cli_args=None):
     parser.add_argument("--fastload", action="store_true", help="Append fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
 
-    # different dynamics
-    parser.add_argument(
-        "--nopassing",
-        action="store_true",
-        help="Use no-passing rule (instead of inertial dynamics: assume m = 0)",
-    )
-
     # different loading
     parser.add_argument(
         "--fixed-step",
@@ -883,16 +900,12 @@ def cli_run(cli_args=None):
 
         system = allocate_system(file)
         meta = dict(dynamics="normal", loading="event-driven")
-
-        if args.nopassing:
-            minimise = system.minimise_nopassing
+        if isinstance(system, Line1d_System_Cuspy_Laplace_Nopassing):
             meta["dynamics"] = "nopassing"
-        else:
-            minimise = system.minimise
 
         if args.fixed_step:
             meta["loading"] = "fixed-step"
-            dx_particle = 1e-3 * system.normalisation.x
+            dx_particle = 1e-3 * system.normalisation.u
             dx_frame = (
                 dx_particle
                 * (system.normalisation.k_frame + system.normalisation.mu)
@@ -902,17 +915,17 @@ def cli_run(cli_args=None):
         create_check_meta(file, f"/meta/{progname}", dev=args.develop, **meta)
 
         if "QuasiStatic" not in file:
-            ret = minimise()
+            ret = system.minimise()
             assert ret == 0
             system.t = 0.0
 
-            file.create_group("/QuasiStatic/x").create_dataset("0", data=system.x)
+            file.create_group("/QuasiStatic/u").create_dataset("0", data=system.u)
             root = file["/QuasiStatic"]
             storage.create_extendible(root, "inc", np.uint64, desc="'Time' (increment number).")
-            storage.create_extendible(root, "x_frame", np.float64, desc="Position of load frame.")
+            storage.create_extendible(root, "u_frame", np.float64, desc="Position of load frame.")
             storage.create_extendible(root, "kick", bool, desc="Kick used.")
             storage.dset_extend1d(root, "inc", 0, system.inc)
-            storage.dset_extend1d(root, "x_frame", 0, system.x_frame)
+            storage.dset_extend1d(root, "u_frame", 0, system.u_frame)
             storage.dset_extend1d(root, "kick", 0, True)
             file.flush()
         else:
@@ -926,7 +939,7 @@ def cli_run(cli_args=None):
             step = root["inc"].size
 
         kick = root["kick"][step - 1]
-        dx = file["/param/xyield/dx"][...]
+        du = file["/param/potentials/du"][...]
         system.restore_quasistatic_step(root, step - 1)
 
         desc = f"{basename}: step = {step:8d}, niter = {'-':8s}"
@@ -936,15 +949,15 @@ def cli_run(cli_args=None):
 
             if args.fixed_step:
                 kick = True
-                system.x_frame += dx_frame
+                system.u_frame += dx_frame
             else:
                 kick = not kick
-                system.eventDrivenStep(dx, kick)
+                system.eventDrivenStep(du, kick)
 
             if kick:
                 inc_n = system.inc
 
-                ret = minimise()
+                ret = system.minimise()
                 assert ret == 0
 
                 niter = system.inc - inc_n
@@ -954,13 +967,13 @@ def cli_run(cli_args=None):
             if args.check is not None:
                 assert root["inc"][step] == system.inc
                 assert root["kick"][step] == kick
-                assert np.isclose(root["x_frame"][step], system.x_frame)
-                assert np.allclose(root["x"][str(step)][...], system.x)
+                assert np.isclose(root["u_frame"][step], system.u_frame)
+                assert np.allclose(root["u"][str(step)][...], system.u)
             else:
                 storage.dset_extend1d(root, "inc", step, system.inc)
-                storage.dset_extend1d(root, "x_frame", step, system.x_frame)
+                storage.dset_extend1d(root, "u_frame", step, system.u_frame)
                 storage.dset_extend1d(root, "kick", step, kick)
-                root["x"][str(step)] = system.x
+                root["u"][str(step)] = system.u
                 file.flush()
 
                 if args.fastload:
@@ -974,7 +987,7 @@ def cli_run(cli_args=None):
 
 
 def steadystate(
-    x_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs
+    u_frame: ArrayLike, f_frame: ArrayLike, kick: ArrayLike, A: ArrayLike, N: int, **kwargs
 ) -> int:
     """
     Estimate the first step of the steady-state. Constraints:
@@ -987,7 +1000,7 @@ def steadystate(
 
         Keywords arguments that are not explicitly listed are ignored.
 
-    :param x_frame: Position of the load frame [nstep].
+    :param u_frame: Position of the load frame [nstep].
     :param f_frame: Average driving force [nstep].
     :param kick: Whether a kick was applied [nstep].
     :param A: Number of blocks that yielded at least once [nstep].
@@ -1000,7 +1013,7 @@ def steadystate(
 
     tangent = np.empty_like(f_frame)
     tangent[0] = np.inf
-    tangent[1:] = (f_frame[1:] - f_frame[0]) / (x_frame[1:] - x_frame[0])
+    tangent[1:] = (f_frame[1:] - f_frame[0]) / (u_frame[1:] - u_frame[0])
 
     i_yield = np.argmax(A == N)
     i_tangent = np.argmax(tangent <= 0.95 * tangent[~np.isnan(tangent)][1])
@@ -1025,7 +1038,7 @@ def basic_output(file: h5py.File) -> dict:
     :param file: Open simulation HDF5 archive (read-only).
 
     :return: Basic output as follows::
-        x_frame: Position of the load frame [nstep].
+        u_frame: Position of the load frame [nstep].
         f_frame: Average driving force [nstep].
         f_potential: Average elastic force [nstep].
         S: Number of times a particle yielded [nstep].
@@ -1044,7 +1057,7 @@ def basic_output(file: h5py.File) -> dict:
     root = file["QuasiStatic"]
     nstep = root["inc"].size
     steps = np.arange(nstep)
-    ret["x_frame"] = root["x_frame"][...]
+    ret["u_frame"] = root["u_frame"][...]
     ret["f_frame"] = np.empty((nstep), dtype=float)
     ret["f_potential"] = np.empty((nstep), dtype=float)
     ret["S"] = np.empty((nstep), dtype=int)
@@ -1057,18 +1070,18 @@ def basic_output(file: h5py.File) -> dict:
         system.restore_quasistatic_step(root, step)
 
         if j == 0:
-            i_n = system.i
+            i_n = np.copy(system.chunk.index_at_align)
 
-        i = system.i
-        ret["x_frame"][step] = system.x_frame
+        i = system.chunk.index_at_align
+        assert np.isclose(ret["u_frame"][step], system.u_frame)
         ret["f_frame"][step] = np.mean(system.f_frame)
         ret["f_potential"][step] = -np.mean(system.f_potential)
         ret["S"][step] = np.sum(i - i_n)
         ret["A"][step] = np.sum(i != i_n)
         i_n = np.copy(i)
 
-    ret["steadystate"] = steadystate(N=system.N, **ret)
-    ret["x_frame"] /= system.normalisation.x
+    ret["steadystate"] = steadystate(N=system.size, **ret)
+    ret["u_frame"] /= system.normalisation.u
     ret["f_frame"] /= system.normalisation.f
     ret["f_potential"] /= system.normalisation.f
 
@@ -1201,7 +1214,7 @@ def cli_ensembleinfo(cli_args=None):
             combine_load[key] = np.array(combine_load[key], dtype=np.uint64)
             combine_kick[key] = np.array(combine_kick[key], dtype=np.uint64)
 
-        for key in ["x_frame", "f_frame", "f_potential"]:
+        for key in ["u_frame", "f_frame", "f_potential"]:
             combine_load[key] = np.array(combine_load[key])
             combine_kick[key] = np.array(combine_kick[key])
 
@@ -1282,7 +1295,7 @@ def cli_list_systemspanning(cli_args=None):
             f"{args.exec} {args.options} --step {step[i]:d} {rname[i]} -o {fname[i]}_step={step[i]:d}.h5"
         )
 
-    shelephant.yaml.dump(args.output, ret)
+    shelephant.yaml.dump(args.output, ret, force=True)
 
 
 def cli_rerun_eventmap(cli_args=None):
@@ -1332,7 +1345,7 @@ def cli_rerun_eventmap(cli_args=None):
     fname = [os.path.normpath(f).split(".h5")[0] for f in fname]
     opts = ["-s"]
     if is2d:
-        opts += ["-x"]
+        opts += ["-u"]
     opts = " ".join(opts)
 
     c = [
@@ -1340,7 +1353,7 @@ def cli_rerun_eventmap(cli_args=None):
         for s, smax, r, f in zip(step, S, rname, fname)
     ]
 
-    shelephant.yaml.dump(args.output, c)
+    shelephant.yaml.dump(args.output, c, force=True)
 
 
 def cli_generatefastload(cli_args=None):
@@ -1480,8 +1493,8 @@ def cli_plotstateaftersystemspanning(cli_args=None):
 
     if realisation is not None:
         with h5py.File(realisation) as f:
-            x = f[f"/QuasiStatic/x/{step:d}"][...]
-            axes[icol].plot(x - np.mean(x))
+            u = f[f"/QuasiStatic/u/{step:d}"][...]
+            axes[icol].plot(u - np.mean(u))
             icol += 1
 
     if state is not None:
@@ -1492,7 +1505,9 @@ def cli_plotstateaftersystemspanning(cli_args=None):
             axes[icol].set_xscale("log")
             axes[icol].set_yscale("log")
             keep = x < 200
-            gplt.fit_powerlaw(x[keep], y[keep], axis=axes[icol], c="r", extrapolate=True, auto_fmt="r")
+            gplt.fit_powerlaw(
+                x[keep], y[keep], axis=axes[icol], c="r", extrapolate=True, auto_fmt="r"
+            )
             axes[icol].legend()
             icol += 1
 
@@ -1500,9 +1515,9 @@ def cli_plotstateaftersystemspanning(cli_args=None):
         with h5py.File(structure) as f:
             x = f["/q"][...]
             y = enstat.static.restore(
-                first = f["first"][...],
-                second = f["second"][...],
-                norm = f["norm"][...],
+                first=f["first"][...],
+                second=f["second"][...],
+                norm=f["norm"][...],
             ).mean()
             axes[icol].plot(x, y)
             axes[icol].set_xscale("log")
@@ -1512,6 +1527,7 @@ def cli_plotstateaftersystemspanning(cli_args=None):
             icol += 1
 
     plt.show()
+
 
 def cli_stateaftersystemspanning(cli_args=None):
     """
@@ -1628,8 +1644,8 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                     system.restore_quasistatic_step(source["QuasiStatic"], s)
 
-                    xr = system.y_right() - system.x
-                    xl = system.x - system.y_left()
+                    xr = system.chunk.right_of_align - system.u
+                    xl = system.u - system.chunk.left_of_align
                     x = np.minimum(xl, xl)
 
                     hist_xr_log += xr
@@ -1640,7 +1656,7 @@ def cli_stateaftersystemspanning(cli_args=None):
                     hist_xl_lin += xl
                     hist_x_lin += x
 
-                    ensemble.heightheight(system.x[system.organisation])
+                    ensemble.heightheight(system.u)
 
                 for name, hist in zip(
                     ["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]
@@ -1740,17 +1756,17 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
 
-                    x = source["QuasiStatic"]["x"][str(s)][...][system.organisation]
-                    x -= x.mean()
+                    u = source["QuasiStatic"]["u"][str(s)][...][system.organisation]
+                    u -= u.mean()
 
                     if is2d:
-                        xhat = np.fft.fft2(x)
+                        uhat = np.fft.fft2(u)
                         structure += np.real(
-                            xhat[1:idx, 1:idx] * np.flip(xhat[idx + 1 :, idx + 1 :])
+                            uhat[1:idx, 1:idx] * np.flip(uhat[idx + 1 :, idx + 1 :])
                         )
                     else:
-                        xhat = np.fft.fft(x)
-                        structure += np.real(xhat[1:idx] * np.flip(xhat[idx + 1 :]))
+                        uhat = np.fft.fft(u)
+                        structure += np.real(uhat[1:idx] * np.flip(uhat[idx + 1 :]))
 
             output["first"][...] = structure.first
             output["second"][...] = structure.second
@@ -1812,10 +1828,10 @@ def cli_plot(cli_args=None):
 
         A = out["A"][...]
         kick = out["kick"][...]
-        x_frame = out["x_frame"][...]
+        u_frame = out["u_frame"][...]
         f_frame = out["f_frame"][...]
         f_potential = out["f_potential"][...]
-        ss = steadystate(x_frame, f_frame, kick, A, N)
+        ss = steadystate(u_frame, f_frame, kick, A, N)
 
     opts = {}
     if args.marker is not None:
@@ -1823,12 +1839,12 @@ def cli_plot(cli_args=None):
 
     fig, axes = gplt.subplots(ncols=2)
 
-    axes[0].plot(x_frame, f_frame, label=r"$f_\text{frame}$", **opts)
-    axes[0].plot(x_frame, f_potential, label=r"$f_\text{potential}$", **opts)
-    axes[0].plot(x_frame[A == N], f_frame[A == N], ls="none", color="r", marker="o")
+    axes[0].plot(u_frame, f_frame, label=r"$f_\text{frame}$", **opts)
+    axes[0].plot(u_frame, f_potential, label=r"$f_\text{potential}$", **opts)
+    axes[0].plot(u_frame[A == N], f_frame[A == N], ls="none", color="r", marker="o")
 
     if ss is not None:
-        axes[0].axvline(x_frame[ss], c="k", ls="--", lw=1)
+        axes[0].axvline(u_frame[ss], c="k", ls="--", lw=1)
 
     axes[0].set_xlabel(r"$x_\text{frame}$")
     axes[0].set_ylabel(r"$f$")
