@@ -510,7 +510,6 @@ class Line2d_System_Cuspy_Laplace(fsb.Line2d.System_Cuspy_Laplace, SystemExtra):
             k_interactions=file["param"]["interactions"]["k"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            width=file["param"]["width"][...],
             **_common_param(file),
         )
 
@@ -829,13 +828,14 @@ def cli_generate(cli_args=None):
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     opts = _generate_parse(args)
+    n = args.size if args.shape is None else np.prod(args.shape)
 
     files = []
 
     for i in range(args.start, args.start + args.nsim):
 
         files += [f"id={i:04d}.h5"]
-        seed = i * args.size
+        seed = i * n
 
         with h5py.File(outdir / files[-1], "w") as file:
             generate(
