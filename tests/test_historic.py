@@ -73,6 +73,7 @@ class MyTests(unittest.TestCase):
             "/normalisation/name",
             "/normalisation/f",
             "/normalisation/dynamics",
+            "/normalisation/shape",
         ]:
             if key in ret["!="]:
                 ret["!="].remove(key)

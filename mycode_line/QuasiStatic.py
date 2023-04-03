@@ -16,6 +16,7 @@ import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock as fsb
 import FrictionQPotSpringBlock.Line1d as model
 import GooseEYE as eye
+import GooseHDF5 as g5
 import h5py
 import numpy as np
 import prrng
@@ -29,6 +30,7 @@ from . import tools
 from ._version import version
 
 entry_points = dict(
+    cli_checkdata="QuasiStatic_CheckData",
     cli_ensembleinfo="QuasiStatic_EnsembleInfo",
     cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
@@ -48,7 +50,111 @@ file_defaults = dict(
 )
 
 
-def dependencies(system: model.System) -> list[str]:
+def cli_checkdata(cli_args=None):
+    """
+    Check the version of the data, and list the required changes.
+    Does not check all field of derived data (e.g. EnsembleInfo).
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    # developer options
+    parser.add_argument("--develop", action="store_true", help="Development mode")
+    parser.add_argument("-v", "--version", action="version", version=version)
+
+    # input file
+    parser.add_argument("file", type=str, help="Simulation file (read only)")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    rename = {}
+    reshape = {}
+    remove = []
+    add = []
+
+    with h5py.File(args.file) as src:
+        if "data_version" not in src["param"]:
+            paths = g5.getdatapaths(src, fold=["/QuasiStatic/x"])
+            N = src["param"]["xyield"]["initstate"].size
+            is2d = "width" in src["param"]
+            width = None if not is2d else src["param"]["width"][...]
+            shape = [N] if not is2d else [int(N / width), width]
+            shape = "[" + ", ".join([str(s) for s in shape]) + "]"
+            add.append(f"/param/normalisation/shape = {shape}")
+
+            for path in paths:
+                # renaming
+                for r in [
+                    re.sub(r"(.*)(/)(xyield)(/)(.*)", r"\1\2potential\4\5", path),
+                    re.sub(r"(.*)(/)(x)([/|_|$])(.*)", r"\1\2u\4\5", path),
+                    re.sub(r"(.*)(/[[fk]_]?)(neighbours)(.*)", r"\1\2interactions\4", path),
+                ]:
+                    if path != r:
+                        rename[path] = r
+                # reshaping to 2d
+                if is2d:
+                    for r in [
+                        re.sub(r"(.*)(/)(x)([/])(.*)", r"\1\2u\4\5", path),
+                        re.sub(r"(.*)(/)(f[_]?\w*)([/])(.*)", r"\1\2\3\4\5", path),
+                    ]:
+                        if path != r:
+                            reshape[path] = shape
+                # removing nchunk
+                if re.match(r"(.*)(/)(nchunk)(.*)", path):
+                    remove.append(path)
+
+            if "k2" in src["param"]:
+                rename["/param/k2"] = ["/param/interactions/k1"]
+                rename["/param/k4"] = ["/param/interactions/k2"]
+                add.append('/param/interactions/type = "QuarticGradient"')
+            elif "a1" in src["param"]:
+                rename["/param/a1"] = ["/param/interactions/a1"]
+                rename["/param/a2"] = ["/param/interactions/a2"]
+                add.append('/param/interactions/type = "Quartic"')
+            elif "alpha" in src["param"]:
+                rename["/param/k_neighbours"] = ["/param/interactions/k"]
+                rename["/param/alpha"] = ["/param/interactions/alpha"]
+                add.append('/param/interactions/type = "LongRange"')
+            else:
+                rename["/param/k_neighbours"] = ["/param/interactions/k"]
+                add.append('/param/interactions/type = "Laplace"')
+
+            if "potential" in src["param"]:
+                rename["/param/potential"] = ["/param/potential/type"]
+            else:
+                add.append('/param/potential/type = "Cuspy"')
+
+            if "kappa" in src["param"]:
+                rename["/param/kappa"] = ["/param/potential/kappa"]
+
+            m = f"/meta/{entry_points['cli_run']}"
+            if m in src:
+                if "dynamics" in src[m].attrs:
+                    rename[f"{m}:dynamics"] = ["/param/dynamics"]
+
+    ret = []
+    for path in rename:
+        ret.append(f"Rename {path} -> {rename[path]}")
+    for path in reshape:
+        ret.append(f"Reshape {path} -> {reshape[path]}")
+    for path in remove:
+        ret.append(f"Remove {path}")
+    for path in add:
+        ret.append(f"Add {path}")
+
+    print("\n".join(sorted(ret)))
+
+
+def dependencies() -> list[str]:
     """
     Return list with version strings.
     Compared to model.System.version_dependencies() this adds the version of prrng.
@@ -100,16 +206,18 @@ class Normalisation:
         :param file: Open simulation HDF5 archive (read-only).
         :return: Basic information as follows::
             mu: Elastic stiffness (float).
+            potential: Type of potential (str)
             k_frame: Stiffness of the load-frame (float).
-            k_interactions: Stiffness of the neighbour interactions (float).
+            k_interactions: Stiffness of the interactions (float).
+            interactions: Type of interactions (str).
             eta: Damping (float).
             m: Mass (float).
+            dynamics: Type of dynamics (str).
             seed: Base seed (uint64) or uuid (str).
             N: Number of blocks (int).
             shape: Shape of the system (tuple of int).
             dt: Time step of time discretisation.
-            system: Name of the system class (str).
-            potential: Name of the potential (str).
+            system: Name of the system, see below (str).
         """
 
         self.mu = file["param"]["mu"][...]
@@ -179,6 +287,7 @@ class Normalisation:
             m=self.m,
             mu=self.mu,
             N=self.N,
+            shape=self.shape,
             potential=self.potential,
             seed=self.seed,
             system=self.system,
@@ -438,8 +547,8 @@ class Line1d_System_Cuspy_QuarticGradient(model.System_Cuspy_QuarticGradient, Sy
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
+            k1=file["param"]["k1"][...],
             k2=file["param"]["k2"][...],
-            k4=file["param"]["k4"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
             **_common_param(file),
@@ -751,7 +860,7 @@ def _generate_cli_options(parser):
 
 def _generate_parse(args):
 
-    assert args.size is not None or args.shape is not None
+    assert args.size or args.shape
     assert sum([args.cuspy is not None, args.smooth is not None, args.semismooth is not None]) <= 1
     assert (
         sum(
@@ -1332,7 +1441,7 @@ def cli_rerun_eventmap(cli_args=None):
         S = file["/avalanche/S"][...]
         N = file["/normalisation/N"][...]
         fname = file["/lookup/filepath"].asstr()[...][file["/avalanche/file"][...]]
-        is2d = "width" in file["/normalisation"]
+        is2d = file["/normalisation/shape"].size == 2
 
     if args.systemspanning:
         keep = A == N
@@ -1568,10 +1677,9 @@ def cli_stateaftersystemspanning(cli_args=None):
         step = info["/avalanche/step"][...]
         A = info["/avalanche/A"][...]
         N = info["/normalisation/N"][...]
-        is2d = "width" in info["/normalisation"]
-
-        if is2d:
-            width = info["/normalisation/width"][...]
+        shape = info["/normalisation/shape"][...]
+        L = min(shape)
+        is2d = shape.size == 2
 
         keep = A == N
         file = file[keep]
@@ -1584,18 +1692,11 @@ def cli_stateaftersystemspanning(cli_args=None):
     hist_xr_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
     hist_xl_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
 
-    if is2d:
-        roi = int((width - width % 2) / 2)
-        roi = int(roi - roi % 2 + 1)
-        w = int((roi - roi % 2) / 2 + 1)
-        reshape = [w, w]
-        roi = [roi, roi]
-    else:
-        roi = int((N - N % 2) / 2)
-        roi = int(roi - roi % 2 + 1)
-        w = int((roi - roi % 2) / 2 + 1)
-        reshape = [w]
-        roi = [roi]
+    roi = int((L - L % 2) / 2)
+    roi = int(roi - roi % 2 + 1)
+    w = int((roi - roi % 2) / 2 + 1)
+    reshape = [w for _ in shape]
+    roi = [roi for _ in shape]
 
     ensemble = eye.Ensemble(roi, variance=True, periodic=True)
 
@@ -1718,12 +1819,8 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
         step = info["/avalanche/step"][...]
         A = info["/avalanche/A"][...]
         N = info["/normalisation/N"][...]
-        is2d = "width" in info["/normalisation"]
-
-        if is2d:
-            width = int(info["/normalisation/width"][...])
-        else:
-            width = int(N)
+        shape = info["/normalisation/shape"][...]
+        L = min(shape)
 
         keep = A == N
         file = file[keep]
@@ -1731,16 +1828,13 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
 
-        assert width % 2 == 0
-        q = np.fft.fftfreq(width)
-        idx = int(width / 2)
+        assert L % 2 == 0
+        q = np.fft.fftfreq(L)
+        idx = int(L / 2)
         output["q"] = q[1:idx]
         assert np.all(q[1:idx] + np.flip(q[idx + 1 :]) == 0)
-
-        if is2d:
-            structure = enstat.static(shape=(idx - 1, idx - 1))
-        else:
-            structure = enstat.static(shape=(idx - 1,))
+        qshape = [idx - 1 for _ in shape]
+        structure = enstat.static(shape=qshape)
 
         output["first"] = structure.first
         output["second"] = structure.second
@@ -1759,7 +1853,7 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
                     u = source["QuasiStatic"]["u"][str(s)][...][system.organisation]
                     u -= u.mean()
 
-                    if is2d:
+                    if len(shape) == 2:
                         uhat = np.fft.fft2(u)
                         structure += np.real(
                             uhat[1:idx, 1:idx] * np.flip(uhat[idx + 1 :, idx + 1 :])
