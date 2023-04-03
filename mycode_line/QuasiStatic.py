@@ -236,14 +236,14 @@ class Normalisation:
         if self.interactions == "Laplace":
             self.k_interactions = file["param"]["interactions"]["k"][...]
         elif self.interactions == "Quartic":
-            self.a1 = file["param"]["a1"][...]
-            self.a2 = file["param"]["a2"][...]
+            self.a1 = file["param"]["interactions"]["a1"][...]
+            self.a2 = file["param"]["interactions"]["a2"][...]
         elif self.interactions == "QuadraticGradient":
-            self.k1 = file["param"]["k1"][...]
-            self.k2 = file["param"]["k2"][...]
+            self.k1 = file["param"]["interactions"]["k1"][...]
+            self.k2 = file["param"]["interactions"]["k2"][...]
         elif self.interactions == "LongRange":
             self.k_interactions = file["param"]["interactions"]["k"][...]
-            self.alpha = file["param"]["alpha"][...]
+            self.alpha = file["param"]["interactions"]["alpha"][...]
         else:
             raise ValueError(f"Unknown interactions: {self.interactions:s}")
 
