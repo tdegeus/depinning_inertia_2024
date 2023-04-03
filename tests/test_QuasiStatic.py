@@ -1,4 +1,5 @@
 import os
+import pathlib
 import shutil
 import sys
 import unittest
@@ -19,10 +20,10 @@ from mycode_line import Dynamics  # noqa: E402
 from mycode_line import EventMap  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
-dirname = os.path.join(os.path.dirname(__file__), "output")
+dirname = pathlib.Path(__file__).parent / "output"
 idname = "id=0000.h5"
-filename = os.path.join(dirname, idname)
-infoname = os.path.join(dirname, "EnsembleInfo.h5")
+filename = dirname / idname
+infoname = dirname / "EnsembleInfo.h5"
 
 
 class MyTests(unittest.TestCase):
@@ -35,11 +36,10 @@ class MyTests(unittest.TestCase):
             if os.path.isfile(file):
                 os.remove(file)
 
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
+        dirname.mkdir(parents=True, exist_ok=True)
 
         QuasiStatic.cli_generate(
-            ["--dev", "--eta", 1e0, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
+            ["--dev", "--eta", 1, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
         )
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename, "--fastload"])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
@@ -80,7 +80,7 @@ class MyTests(unittest.TestCase):
         Jumping in yield history: delta distribution.
         """
 
-        deltaname = os.path.join(dirname, "id=delta.h5")
+        deltaname = dirname / "id=delta.h5"
 
         with h5py.File(filename) as file, h5py.File(deltaname, "w") as delta:
             datasets = list(
@@ -149,7 +149,7 @@ class MyTests(unittest.TestCase):
         QuasiStatic.cli_run(["--dev", "--check", 952, filename])
         QuasiStatic.cli_run(["--dev", "--check", 953, filename])
 
-        tmp = os.path.join(dirname, "EnsembleInfo_duplicate.h5")
+        tmp = dirname / "EnsembleInfo_duplicate.h5"
         QuasiStatic.cli_ensembleinfo(["--dev", "-f", "-o", tmp, filename])
 
         with h5py.File(infoname) as src, h5py.File(tmp) as dest:
@@ -177,12 +177,12 @@ class MyTests(unittest.TestCase):
                 t = step[i[-1]]
                 break
 
-        out_s = os.path.join(dirname, "EventMap_s.h5")
-        out_t = os.path.join(dirname, "EventMap_t.h5")
+        out_s = dirname / "EventMap_s.h5"
+        out_t = dirname / "EventMap_t.h5"
         EventMap.cli_run(["--dev", "-f", "-s", "-o", out_s, "--step", str(s), path])
         EventMap.cli_run(["--dev", "-f", "-s", "-o", out_t, "--step", str(t), path])
 
-        out = os.path.join(dirname, "EventMapInfo.h5")
+        out = dirname / "EventMapInfo.h5"
         EventMap.cli_basic_output(["--dev", "-f", "-o", out, out_s, out_t])
 
     def test_measuredynamics(self):
@@ -200,8 +200,8 @@ class MyTests(unittest.TestCase):
                 s = step[i[-2]]
                 break
 
-        out = os.path.join(dirname, "MeasureDynamics_s.h5")
-        ens = os.path.join(dirname, "MeasureDynamics_average.h5")
+        out = dirname / "MeasureDynamics_s.h5"
+        ens = dirname / "MeasureDynamics_average.h5"
         Dynamics.cli_run(["--dev", "-f", "--step", s, "-o", out, path])
         Dynamics.cli_average_systemspanning(["-f", "--dev", "-o", ens, out])
 
@@ -211,7 +211,7 @@ class MyTests(unittest.TestCase):
         """
 
         QuasiStatic.cli_stateaftersystemspanning(
-            ["--dev", "-f", "-o", os.path.join(dirname, "AfterSystemSpanning.h5"), infoname]
+            ["--dev", "-f", "-o", dirname / "AfterSystemSpanning.h5", infoname]
         )
 
         QuasiStatic.cli_stateaftersystemspanning(
@@ -219,7 +219,7 @@ class MyTests(unittest.TestCase):
                 "--dev",
                 "-f",
                 "-o",
-                os.path.join(dirname, "RoughnessAfterSystemSpanning.h5"),
+                dirname / "RoughnessAfterSystemSpanning.h5",
                 infoname,
             ]
         )
