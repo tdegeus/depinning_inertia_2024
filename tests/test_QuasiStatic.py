@@ -17,6 +17,7 @@ if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
 from mycode_line import Dynamics  # noqa: E402
+from mycode_line import Trigger  # noqa: E402
 from mycode_line import EventMap  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
@@ -27,7 +28,9 @@ infoname = dirname / "EnsembleInfo.h5"
 
 
 class MyTests(unittest.TestCase):
-    """ """
+    """
+    Various detailed tests.
+    """
 
     @classmethod
     def setUpClass(self):
@@ -215,14 +218,48 @@ class MyTests(unittest.TestCase):
         )
 
         QuasiStatic.cli_stateaftersystemspanning(
-            [
-                "--dev",
-                "-f",
-                "-o",
-                dirname / "RoughnessAfterSystemSpanning.h5",
-                infoname,
-            ]
+            ["--dev", "-f", "-o", dirname / "RoughnessAfterSS.h5", infoname]
         )
+
+
+class MyGlobalTests(unittest.TestCase):
+    """
+    Test various system types.
+    """
+
+    @classmethod
+    def setUpClass(self):
+
+        dirname.mkdir(parents=True, exist_ok=True)
+
+        for file in [filename, infoname]:
+            if os.path.isfile(file):
+                os.remove(file)
+
+    @classmethod
+    def tearDownClass(self):
+        """
+        Remove the temporary directory.
+        """
+
+        shutil.rmtree(dirname)
+
+    def test_2d(self):
+        """
+        2d system
+        """
+
+        QuasiStatic.cli_generate(
+            ["--dev", "--eta", 1, "--shape", 10, 10, "-n", 1, dirname, "--kframe", 1 / 100]
+        )
+        QuasiStatic.cli_run(["--dev", "-n", 300, filename, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 300, filename, "--fastload"])
+        QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+
+        workdir = dirname / "2d"
+        Trigger.cli_generate(["--dev", "-o", workdir, infoname])
+        Trigger.cli_run(["--dev", workdir / idname])
+        shutil.rmtree(workdir)
 
 
 if __name__ == "__main__":

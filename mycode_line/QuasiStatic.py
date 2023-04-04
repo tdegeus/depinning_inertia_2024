@@ -372,8 +372,8 @@ class SystemExtra:
         if self.chunk.contains(u):
             return self.chunk.align(u)
 
-        front = self.chunk.data[:, 0]
-        back = self.chunk.data[:, -1]
+        front = self.chunk.data[..., 0]
+        back = self.chunk.data[..., -1]
 
         if np.all(u < 2 * back - front):
             return self.chunk.align(u)
@@ -1091,7 +1091,7 @@ def cli_run(cli_args=None):
                             i = system.chunk.start
                             fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
                             fload[f"/QuasiStatic/{step:d}/index"] = i
-                            fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
+                            fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
                             fload.flush()
 
 
