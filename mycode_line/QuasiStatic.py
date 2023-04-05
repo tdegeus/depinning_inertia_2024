@@ -1231,6 +1231,7 @@ def cli_ensembleinfo(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
+    assert list(np.unique(args.files)) == args.files
     tools._check_overwrite_file(args.output, args.force)
     info = dict(
         filepath=[os.path.relpath(i, os.path.dirname(args.output)) for i in args.files],
@@ -1260,8 +1261,10 @@ def cli_ensembleinfo(cli_args=None):
                     test = Normalisation(file).asdict()
                     seed = test.pop("seed")
                     for key in norm:
-                        if key in ["potential", "system"]:
+                        if key in ["potential", "system", "dynamics"]:
                             assert str(norm[key]) == str(test[key])
+                        elif key == "shape":
+                            assert list(norm[key]) == list(test[key])
                         else:
                             assert np.isclose(norm[key], test[key])
 

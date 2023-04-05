@@ -23,6 +23,7 @@ from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = pathlib.Path(__file__).parent / "output"
 idname = "id=0000.h5"
+idname2 = "id=0001.h5"
 filename = dirname / idname
 infoname = dirname / "EnsembleInfo.h5"
 
@@ -250,11 +251,12 @@ class MyGlobalTests(unittest.TestCase):
         """
 
         QuasiStatic.cli_generate(
-            ["--dev", "--eta", 1, "--shape", 10, 10, "-n", 1, dirname, "--kframe", 1 / 100]
+            ["--dev", "--eta", 1, "--shape", 10, 10, "-n", 2, dirname, "--kframe", 1 / 100]
         )
-        QuasiStatic.cli_run(["--dev", "-n", 300, filename, "--fastload"])
-        QuasiStatic.cli_run(["--dev", "-n", 300, filename, "--fastload"])
-        QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 600, dirname / idname2, "--fastload"])
+        QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, dirname / idname, dirname / idname2])
 
         workdir = dirname / "2d"
         Trigger.cli_generate(["--dev", "-o", workdir, infoname])
