@@ -1532,7 +1532,7 @@ def cli_generatefastload(cli_args=None):
             i = system.chunk.start
             output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
             output[f"/QuasiStatic/{step:d}/index"] = i
-            output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[:, 0]
+            output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
             output.flush()
             last_start = np.copy(i)
             last_step = step
