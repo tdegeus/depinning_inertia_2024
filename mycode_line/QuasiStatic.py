@@ -16,6 +16,7 @@ import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock as fsb
 import FrictionQPotSpringBlock.Line1d as model
 import GooseEYE as eye
+import GooseFEM
 import GooseHDF5 as g5
 import h5py
 import numpy as np
@@ -23,6 +24,7 @@ import prettytable
 import prrng
 import shelephant
 import tqdm
+import XDMFWrite_h5py as xh
 from numpy.typing import ArrayLike
 
 from . import storage
@@ -36,6 +38,7 @@ entry_points = dict(
     cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
     cli_plot="QuasiStatic_Plot",
+    cli_paraview="QuasiStatic_Paraview",
     cli_run="QuasiStatic_Run",
     cli_checkdynamics="QuasiStatic_CheckDynamics",
     cli_checkfastload="QuasiStatic_CheckFastLoad",
@@ -137,12 +140,12 @@ def cli_checkdata(cli_args=None):
                 add.append('/param/potential/type = "Cuspy"')
 
             if "kappa" in src["param"]:
-                rename["/param/kappa"] = ["/param/potential/kappa"]
+                rename["/param/kappa"] = "/param/potential/kappa"
 
             m = f"/meta/{entry_points['cli_run']}"
             if m in src:
                 if "dynamics" in src[m].attrs:
-                    rename[f"{m}:dynamics"] = ["/param/dynamics"]
+                    rename[f"{m}:dynamics"] = "/param/dynamics"
 
     ret = []
     for path in rename:
@@ -2068,7 +2071,6 @@ def cli_plot(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
 
     parser.add_argument("--bins", type=int, default=30, help="Number of bins.")
-    parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("-i", "--input", type=str, help="Realisation, if input in EnsembleInfo.")
     parser.add_argument("file", type=str, help="Simulation file")
@@ -2101,17 +2103,13 @@ def cli_plot(cli_args=None):
         kick = out["kick"][...]
         u_frame = out["u_frame"][...]
         f_frame = out["f_frame"][...]
-        f_potential = out["f_potential"][...]
         ss = steadystate(u_frame, f_frame, kick, A, N)
 
-    opts = {}
-    if args.marker is not None:
-        opts["marker"] = args.marker
+    opts = {"marker", "."}
 
     fig, axes = gplt.subplots(ncols=2)
 
     axes[0].plot(u_frame, f_frame, label=r"$f_\text{frame}$", **opts)
-    axes[0].plot(u_frame, f_potential, label=r"$f_\text{potential}$", **opts)
     axes[0].plot(u_frame[A == N], f_frame[A == N], ls="none", color="r", marker="o")
 
     if ss is not None:
@@ -2138,3 +2136,53 @@ def cli_plot(cli_args=None):
         plt.show()
 
     plt.close(fig)
+
+
+def cli_paraview(cli_args=None):
+    """
+    Write states to be viewed in Paraview.
+    """
+
+    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Simulation file")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    tools._check_overwrite_file(args.output, args.force)
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    tools._check_overwrite_file(f"{args.output}.h5", args.force)
+    tools._check_overwrite_file(f"{args.output}.xdmf", args.force)
+
+    with h5py.File(args.file) as file, h5py.File(f"{args.output}.h5", "w") as out, xh.TimeSeries(
+        f"{args.output}.xdmf"
+    ) as xdmf:
+        for i in range(file["/QuasiStatic/u_frame"].size):
+            u = file[f"/QuasiStatic/u/{i}"][...]
+
+            if u.ndim == 1:
+                u = u.reshape(-1, 1)
+
+            if i == 0:
+                mesh = GooseFEM.Mesh.Quad4.Regular(u.shape[0] - 1, u.shape[1] - 1)
+                coor = xh.as3d(mesh.coor())
+                out["coor"] = coor
+                out["conn"] = mesh.conn()
+                disp = np.zeros_like(coor)
+
+            disp[:, -1] = (u - np.mean(u)).ravel()
+            out[f"/disp/{i}"] = disp
+
+            xdmf += xh.TimeStep(time=i)
+            xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
+            xdmf += xh.Attribute(out[f"/disp/{i}"], xh.AttributeCenter.Node, name="du")

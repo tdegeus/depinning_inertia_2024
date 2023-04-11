@@ -11,11 +11,13 @@ import pathlib
 import textwrap
 
 import FrictionQPotSpringBlock  # noqa: F401
+import GooseFEM
 import GooseHDF5
 import h5py
 import numpy as np
 import shelephant
 import tqdm
+import XDMFWrite_h5py as xh
 
 from . import Dynamics
 from . import EventMap
@@ -32,6 +34,7 @@ entry_points = dict(
     cli_merge="Trigger_Merge",
     cli_merge_batch="Trigger_MergeBatch",
     cli_generate="Trigger_Generate",
+    cli_paraview="Trigger_Paraview",
     cli_ensembleinfo="Trigger_EnsembleInfo",
     cli_job_rerun="Trigger_Job_Rerun",
 )
@@ -826,3 +829,69 @@ def cli_job_rerun(cli_args=None):
         commands.append(f"{excecutable} {opts} {src}")
 
     shelephant.yaml.dump(args.output, commands, force=True)
+
+
+def cli_paraview(cli_args=None):
+    """
+    Write states to be viewed in Paraview.
+    """
+
+    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Simulation file")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    tools._check_overwrite_file(args.output, args.force)
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    tools._check_overwrite_file(f"{args.output}.h5", args.force)
+    tools._check_overwrite_file(f"{args.output}.xdmf", args.force)
+
+    with h5py.File(args.file) as file, h5py.File(f"{args.output}.h5", "w") as out, xh.TimeSeries(
+        f"{args.output}.xdmf"
+    ) as xdmf:
+        for i in range(file["/Trigger/step"].size):
+            if f"/Trigger/branches/{i}/u/1" not in file:
+                break
+
+            u = file[f"/Trigger/branches/{i}/u/0"][...]
+            u1 = file[f"/Trigger/branches/{i}/u/1"][...]
+
+            if u.ndim == 1:
+                u = u.reshape(-1, 1)
+                u1 = u1.reshape(-1, 1)
+
+            if i == 0:
+                mesh = GooseFEM.Mesh.Quad4.Regular(u.shape[0] - 1, u.shape[1] - 1)
+                coor = xh.as3d(mesh.coor())
+                out["coor"] = coor
+                out["conn"] = mesh.conn()
+                disp = np.zeros_like(coor)
+
+            disp[:, -1] = (u - np.mean(u)).ravel()
+            out[f"/disp/{2 * i}"] = disp
+            out[f"/S/{2 * i}"] = np.zeros(u.size, dtype=np.int64)
+
+            xdmf += xh.TimeStep(time=2 * i)
+            xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
+            xdmf += xh.Attribute(out[f"/disp/{2 * i}"], xh.AttributeCenter.Node, name="du")
+            xdmf += xh.Attribute(out[f"/S/{2 * i}"], xh.AttributeCenter.Node, name="S")
+
+            disp[:, -1] = (u1 - np.mean(u1)).ravel()
+            out[f"/disp/{2 * i + 1}"] = disp
+            out[f"/S/{2 * i + 1}"] = (u1 - u).ravel()
+
+            xdmf += xh.TimeStep(time=2 * i + 1)
+            xdmf += xh.Unstructured(out["coor"], out["conn"], xh.ElementType.Quadrilateral)
+            xdmf += xh.Attribute(out[f"/disp/{2 * i + 1}"], xh.AttributeCenter.Node, name="du")
+            xdmf += xh.Attribute(out[f"/S/{2 * i + 1}"], xh.AttributeCenter.Node, name="S")
