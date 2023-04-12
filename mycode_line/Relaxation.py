@@ -80,7 +80,6 @@ def cli_run(cli_args=None):
             assert f"/QuasiStatic/u/{args.step - 1:d}" in src
 
     with h5py.File(args.output, "w") as file:
-
         with h5py.File(args.file) as src:
             GooseHDF5.copy(src, file, ["/param", "/meta", "/realisation"])
 

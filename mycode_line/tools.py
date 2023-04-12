@@ -270,7 +270,6 @@ def fill_avalanche(broken):
 
 
 def _parse(parser: argparse.ArgumentParser, cli_args: list[str]) -> argparse.ArgumentParser:
-
     if cli_args is None:
         return parser.parse_args(sys.argv[1:])
 
@@ -278,7 +277,6 @@ def _parse(parser: argparse.ArgumentParser, cli_args: list[str]) -> argparse.Arg
 
 
 def _check_overwrite_file(filepath: str, force: bool):
-
     if force or not os.path.isfile(filepath):
         return
 
@@ -287,9 +285,7 @@ def _check_overwrite_file(filepath: str, force: bool):
 
 
 def _create_or_clear_directory(dirpath: str, force: bool):
-
     if os.path.isdir(dirpath):
-
         if not force:
             if not click.confirm(f'Clear "{dirpath}"?'):
                 raise OSError("Cancelled")

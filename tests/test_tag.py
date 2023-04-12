@@ -11,14 +11,12 @@ from mycode_line import tag  # noqa: E402
 
 class MyTests(unittest.TestCase):
     def test_has_uncomitted(self):
-
         self.assertTrue(tag.has_uncommitted("4.4.dev1+hash.bash"))
         self.assertFalse(tag.has_uncommitted("4.4.dev1+hash"))
         self.assertFalse(tag.has_uncommitted("4.4.dev1"))
         self.assertFalse(tag.has_uncommitted("4.4"))
 
     def test_any_has_uncommitted(self):
-
         m = "main=3.2.1"
         o = "other"
 
@@ -28,35 +26,30 @@ class MyTests(unittest.TestCase):
         self.assertFalse(tag.any_has_uncommitted([m, f"{o}=4.4"]))
 
     def test_greater_equal(self):
-
         self.assertFalse(tag.greater_equal("4.4.dev1+hash.bash", "4.4"))
         self.assertFalse(tag.greater_equal("4.4.dev1+hash", "4.4"))
         self.assertFalse(tag.greater_equal("4.4.dev1", "4.4"))
         self.assertTrue(tag.greater_equal("4.4", "4.4"))
 
     def test_greater(self):
-
         self.assertFalse(tag.greater("4.4.dev1+hash.bash", "4.4"))
         self.assertFalse(tag.greater("4.4.dev1+hash", "4.4"))
         self.assertFalse(tag.greater("4.4.dev1", "4.4"))
         self.assertFalse(tag.greater("4.4", "4.4"))
 
     def test_less_equal(self):
-
         self.assertTrue(tag.less_equal("4.4.dev1+hash.bash", "4.4"))
         self.assertTrue(tag.less_equal("4.4.dev1+hash", "4.4"))
         self.assertTrue(tag.less_equal("4.4.dev1", "4.4"))
         self.assertTrue(tag.less_equal("4.4", "4.4"))
 
     def test_less(self):
-
         self.assertTrue(tag.less("4.4.dev1+hash.bash", "4.4"))
         self.assertTrue(tag.less("4.4.dev1+hash", "4.4"))
         self.assertTrue(tag.less("4.4.dev1", "4.4"))
         self.assertFalse(tag.less("4.4", "4.4"))
 
     def test_all_greater_equal(self):
-
         a = ["main=3.2.1", "other=4.4"]
         b = ["main=3.2.0", "other=4.4", "more=3.0.0"]
         self.assertTrue(tag.all_greater_equal(a, b))
@@ -75,5 +68,4 @@ class MyTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     unittest.main()

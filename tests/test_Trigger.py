@@ -34,7 +34,6 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-
         for file in [filename, infoname]:
             if os.path.isfile(file):
                 os.remove(file)
@@ -51,7 +50,6 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self):
-
         shutil.rmtree(dirname)
 
     def test_branch_trigger(self):
@@ -115,5 +113,4 @@ class MyTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     unittest.main(verbosity=2)

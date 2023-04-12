@@ -86,7 +86,6 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
     root = file["/full"]
 
     for config in root:
-
         gammadot = root[config]["gammadot"][...]
         frame = root[config]["f_frame"][...]
         potential = root[config]["f_potential"][...]
@@ -147,7 +146,6 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
     ep = []
 
     for key in f_frame:
-
         if -f_potential[key] - f_potential_std[key] < 0:
             continue
 
@@ -205,16 +203,13 @@ def cli_ensembleinfo(cli_args=None):
     tools._check_overwrite_file(args.output, args.force)
 
     with h5py.File(args.output, "w") as output:
-
         QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
         for i, filepath in enumerate(tqdm.tqdm(args.files)):
-
             fname = os.path.relpath(filepath, os.path.dirname(args.output))
             fname = fname.replace("/", "_")
 
             with h5py.File(filepath) as file:
-
                 output[f"/full/{fname}/f_frame"] = file["/Flow/output/f_frame"][...]
                 output[f"/full/{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
                 output[f"/full/{fname}/f_damping"] = file["/Flow/output/f_damping"][...]
@@ -284,7 +279,6 @@ def cli_generate(cli_args=None):
     files = []
 
     for i in range(args.start, args.start + args.nsim):
-
         files += [f"id={i:04d}.h5"]
         seed = i * args.size
 
@@ -350,7 +344,6 @@ def cli_run(cli_args=None):
     pbar = tqdm.tqdm(range(args.nstep), desc=args.file)
 
     with h5py.File(args.file, "a") as file:
-
         restart = False
 
         if "/Flow/snapshot/u" in file:
@@ -392,7 +385,6 @@ def cli_run(cli_args=None):
         ]
 
         for istep in pbar:
-
             ret = system.flowSteps(output, gammadot)
             assert ret != 0
             inc += output
@@ -455,7 +447,6 @@ def cli_plot(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file) as file:
-
         u_frame = file["/Flow/gammadot"][...] * file["/param/dt"] * file["/Flow/output/inc"][...]
         f_frame = file["/Flow/output/f_frame"][...]
         f_potential = file["/Flow/output/f_potential"][...]

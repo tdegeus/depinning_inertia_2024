@@ -7,7 +7,6 @@ library = "mycode_line"
 
 
 def read_entry_points(module):
-
     entry_points = []
 
     with open(f"{library}/{module}.py") as file:

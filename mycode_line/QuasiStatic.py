@@ -660,7 +660,6 @@ def allocate_system(file: h5py.File, **kwargs):
 
 
 def _compare_versions(ver, cmpver):
-
     if tag.greater_equal(cmpver, "6.0"):
         if tag.greater_equal(ver, cmpver):
             return True
@@ -830,7 +829,6 @@ def generate(
 
 
 def _generate_cli_options(parser):
-
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -861,7 +859,6 @@ def _generate_cli_options(parser):
 
 
 def _generate_parse(args):
-
     assert args.size or args.shape
     assert sum([args.cuspy is not None, args.smooth is not None, args.semismooth is not None]) <= 1
     assert (
@@ -944,7 +941,6 @@ def cli_generate(cli_args=None):
     files = []
 
     for i in range(args.start, args.start + args.nsim):
-
         files += [f"id={i:04d}.h5"]
         seed = i * n
 
@@ -1008,7 +1004,6 @@ def cli_run(cli_args=None):
     basename = os.path.basename(args.file)
 
     with h5py.File(args.file, "a") as file:
-
         system = allocate_system(file)
         meta = dict(dynamics="normal", loading="event-driven")
         if isinstance(system, Line1d_System_Cuspy_Laplace_Nopassing):
@@ -1057,7 +1052,6 @@ def cli_run(cli_args=None):
         pbar = tqdm.tqdm(range(step, step + args.nstep), desc=desc)
 
         for step in pbar:
-
             if args.fixed_step:
                 kick = True
                 system.u_frame += dx_frame
@@ -1177,7 +1171,6 @@ def basic_output(file: h5py.File) -> dict:
     ret["step"] = steps
 
     for j, step in enumerate(tqdm.tqdm(steps)):
-
         system.restore_quasistatic_step(root, step)
 
         if j == 0:
@@ -1247,15 +1240,12 @@ def cli_ensembleinfo(cli_args=None):
     pbar = tqdm.tqdm(info["filepath"], desc=fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
-
         create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
         for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
-
             pbar.set_description(fmt.format(filename), refresh=True)
 
             with h5py.File(filepath) as file:
-
                 if i == 0:
                     norm = Normalisation(file).asdict()
                     seed = norm.pop("seed")
@@ -1388,7 +1378,6 @@ def cli_list_systemspanning(cli_args=None):
     assert os.path.isfile(args.info)
 
     with h5py.File(args.info) as file:
-
         step = file["/avalanche/step"][...]
         A = file["/avalanche/A"][...]
         N = file["/normalisation/N"][...]
@@ -1440,7 +1429,6 @@ def cli_rerun_eventmap(cli_args=None):
     assert os.path.isfile(args.info)
 
     with h5py.File(args.info) as file:
-
         step = file["/avalanche/step"][...]
         A = file["/avalanche/A"][...]
         S = file["/avalanche/S"][...]
@@ -1503,7 +1491,6 @@ def cli_generatefastload(cli_args=None):
         tools._check_overwrite_file(output, args.force)
 
     with h5py.File(args.file) as file, h5py.File(output, "r+" if args.append else "w") as output:
-
         if not args.append:
             create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
@@ -1517,7 +1504,6 @@ def cli_generatefastload(cli_args=None):
                 stored = np.sort(np.array([int(i) for i in output["QuasiStatic"]]))
 
         for step in tqdm.tqdm(range(root["inc"].size)):
-
             if args.append:
                 if step in stored:
                     continue
@@ -1674,7 +1660,6 @@ def cli_stateaftersystemspanning(cli_args=None):
     basedir = os.path.dirname(args.ensembleinfo)
 
     with h5py.File(args.ensembleinfo) as info:
-
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
 
         paths = info["/lookup/filepath"].asstr()[...]
@@ -1712,7 +1697,6 @@ def cli_stateaftersystemspanning(cli_args=None):
             step = step[idx]
 
     with h5py.File(args.output, "w") as output:
-
         for name, hist in zip(["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]):
             root = output.create_group(f"/yield_distance/{name}/log")
             for key, value in hist:
@@ -1741,13 +1725,10 @@ def cli_stateaftersystemspanning(cli_args=None):
         output.flush()
 
         for f in tqdm.tqdm(np.unique(file)):
-
             with h5py.File(os.path.join(basedir, paths[f])) as source:
-
                 system = allocate_system(source)
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
-
                     system.restore_quasistatic_step(source["QuasiStatic"], s)
 
                     xr = system.chunk.right_of_align - system.u
@@ -1816,7 +1797,6 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
     basedir = os.path.dirname(args.ensembleinfo)
 
     with h5py.File(args.ensembleinfo) as info:
-
         assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
 
         paths = info["/lookup/filepath"].asstr()[...]
@@ -1832,7 +1812,6 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
         step = step[keep]
 
     with h5py.File(args.output, "w") as output:
-
         assert L % 2 == 0
         q = np.fft.fftfreq(L)
         idx = int(L / 2)
@@ -1848,13 +1827,10 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
         output.flush()
 
         for f in tqdm.tqdm(np.unique(file)):
-
             with h5py.File(os.path.join(basedir, paths[f])) as source:
-
                 system = allocate_system(source)
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
-
                     u = source["QuasiStatic"]["u"][str(s)][...][system.organisation]
                     u -= u.mean()
 

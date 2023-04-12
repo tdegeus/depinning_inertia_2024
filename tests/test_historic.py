@@ -24,7 +24,6 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-
         for file in [filename, infoname]:
             if os.path.isfile(file):
                 os.remove(file)
@@ -47,7 +46,6 @@ class MyTests(unittest.TestCase):
         shutil.rmtree(dirname)
 
     def test_history(self):
-
         with h5py.File(infoname) as file_a:
             with h5py.File(historic) as file_b:
                 ret, a, b = g5.compare_rename(
@@ -90,5 +88,4 @@ class MyTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     unittest.main(verbosity=2)
