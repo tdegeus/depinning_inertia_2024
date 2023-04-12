@@ -35,7 +35,6 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-
         for file in [filename, infoname]:
             if os.path.isfile(file):
                 os.remove(file)
@@ -230,7 +229,6 @@ class MyGlobalTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-
         dirname.mkdir(parents=True, exist_ok=True)
 
         for file in [filename, infoname]:
@@ -265,5 +263,4 @@ class MyGlobalTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     unittest.main(verbosity=2)

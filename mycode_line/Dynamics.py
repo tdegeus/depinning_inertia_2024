@@ -57,7 +57,6 @@ def restore_system(filepath: str, step: int = None, branch: int = None, apply_tr
     info = {}
 
     with h5py.File(filepath) as file:
-
         if branch is not None:
             sroot = file[f"/Trigger/branches/{branch:d}"]
             info["p"] = sroot["p"][step]
@@ -80,7 +79,6 @@ def restore_system(filepath: str, step: int = None, branch: int = None, apply_tr
         info["i_n"] = np.copy(system.chunk.index_at_align)
 
         if apply_trigger:
-
             du = file["/param/potentials/du"][...]
 
             if branch is not None:
@@ -157,11 +155,9 @@ def cli_run(cli_args=None):
             assert f"/QuasiStatic/u/{args.step - 1:d}" in src
 
     with h5py.File(args.output, "w") as file:
-
         # copy from input
 
         with h5py.File(args.file) as src:
-
             GooseHDF5.copy(src, file, ["/param", "/meta", "/realisation"])
             root = file.create_group("Dynamics")
             root.create_group("u")
@@ -239,9 +235,7 @@ def cli_run(cli_args=None):
         last_stored_iiter = -1  # last written increment
 
         while True:
-
             if store:
-
                 if iiter != last_stored_iiter:
                     root["u"][str(istore)] = system.u
                     storage.dset_extend1d(root, "u_frame", istore, system.u_frame)
@@ -255,11 +249,9 @@ def cli_run(cli_args=None):
                 pbar.refresh()
 
             if stop:
-
                 break
 
             if trigger:
-
                 trigger = False
                 if args.branch is not None:
                     system.trigger(p=p, eps=du, direction=1)
@@ -267,7 +259,6 @@ def cli_run(cli_args=None):
                     system.eventDrivenStep(du, kick)
 
             if A_check:
-
                 niter = system.timeStepsUntilEvent()
                 iiter += niter
                 stop = niter == 0
@@ -290,7 +281,6 @@ def cli_run(cli_args=None):
                         stop = True
 
             else:
-
                 inc_n = system.inc
                 ret = system.minimise(max_iter=args.t_step, max_iter_is_error=False)
                 assert ret >= 0
@@ -379,11 +369,8 @@ def cli_average_systemspanning(cli_args=None):
     t_end = []
 
     for ifile, filepath in enumerate(args.files):
-
         with h5py.File(filepath, "r") as file:
-
             if ifile == 0:
-
                 t_step = file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
                 norm = QuasiStatic.Normalisation(file).asdict()
                 norm.pop("seed")
@@ -391,7 +378,6 @@ def cli_average_systemspanning(cli_args=None):
                 dt = norm["dt"]
 
             else:
-
                 assert t_step == file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
                 n = QuasiStatic.Normalisation(file).asdict()
                 for key in norm:
@@ -444,11 +430,9 @@ def cli_average_systemspanning(cli_args=None):
     pbar.set_description(fmt.format(""))
 
     for ifile, filepath in enumerate(pbar):
-
         pbar.set_description(fmt.format(filepath), refresh=True)
 
         with h5py.File(filepath, "r") as file:
-
             root = file["Dynamics"]
             system = QuasiStatic.allocate_system(file)
 
@@ -486,7 +470,6 @@ def cli_average_systemspanning(cli_args=None):
             syncA["delta_t"].add_point(dt * delta_t[items_syncA], A[items_syncA])
 
             for item in tqdm.tqdm(range(nitem)):
-
                 if item not in items_syncA and t_ibin[item] < 0 and item > 0:
                     continue
 
@@ -506,7 +489,6 @@ def cli_average_systemspanning(cli_args=None):
                     [t_ibin[item] >= 0, item in items_syncA],
                     [t_ibin[item], A[item]],
                 ):
-
                     if not store:
                         continue
 
@@ -528,7 +510,6 @@ def cli_average_systemspanning(cli_args=None):
                 # syncA["align_moving"]
 
                 if item in items_syncA and np.sum(broken) > 0:
-
                     j = A[item]
                     roll = tools.center_avalanche(broken)
 
@@ -547,7 +528,6 @@ def cli_average_systemspanning(cli_args=None):
                     d["du"].subsample(j, system.u - u_n, roll, broken)
 
     with h5py.File(args.output, "w") as file:
-
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
         file["files"] = [os.path.relpath(i, os.path.dirname(args.output)) for i in args.files]
@@ -556,7 +536,6 @@ def cli_average_systemspanning(cli_args=None):
             file[f"/normalisation/{key}"] = norm[key]
 
         for title, data in zip(["sync-t", "sync-A"], [synct, syncA]):
-
             for key in data:
                 if key in ["align", "align_moving"]:
                     continue

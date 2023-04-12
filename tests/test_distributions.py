@@ -25,7 +25,6 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
@@ -43,7 +42,6 @@ class MyTests(unittest.TestCase):
         """
 
         for distro in ["weibull", "delta", "random"]:
-
             dname = dirname / distro
             filename = dname / "id=0000.h5"
             infoname = dname / "EnsembleInfo.h5"
@@ -74,5 +72,4 @@ class MyTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-
     unittest.main(verbosity=2)

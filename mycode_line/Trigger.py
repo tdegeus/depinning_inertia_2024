@@ -77,14 +77,11 @@ def cli_filter_completed(cli_args=None):
     ret = []
 
     for filepath in args.files:
-
         with h5py.File(filepath) as file:
-
             branches = np.arange(file["/Trigger/step"].size)
             completed = file["/Trigger/step"].size == 0
 
             for ibranch in branches:
-
                 root = file[f"/Trigger/branches/{ibranch:d}"]
 
                 if len(root["completed"]) >= 2:
@@ -126,7 +123,6 @@ def cli_run(cli_args=None):
     basename = os.path.basename(args.file)
 
     with h5py.File(args.file, "a" if args.check is None else "r") as file:
-
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
         branches = np.arange(file["/Trigger/step"].size)
@@ -140,7 +136,6 @@ def cli_run(cli_args=None):
         pbar = tqdm.tqdm(branches, desc=f"{basename}: branch = {-1:8d}, p = {-1:8d}, A = {-1:8d}")
 
         for ibranch in pbar:
-
             root = file[f"/Trigger/branches/{ibranch:d}"]
 
             if args.check is None:
@@ -169,7 +164,6 @@ def cli_run(cli_args=None):
                 )
 
             for p in try_p:
-
                 system.restore_quasistatic_step(root, 0, fastload)
                 inc = system.inc
                 i_n = np.copy(system.chunk.index_at_align)
@@ -198,7 +192,6 @@ def cli_run(cli_args=None):
             f_frame = np.mean(system.f_frame)
 
             if args.check is not None:
-
                 assert root["completed"][1]
                 assert root["S"][1] == S
                 assert root["A"][1] == A
@@ -208,7 +201,6 @@ def cli_run(cli_args=None):
                 assert np.allclose(root["u"]["1"][...], system.u)
 
             else:
-
                 root["u"]["1"] = system.u
                 storage.dset_extend1d(root, "inc", 1, system.inc)
                 storage.dset_extend1d(root, "u_frame", 1, system.u_frame)
@@ -280,7 +272,6 @@ def cli_ensembleinfo(cli_args=None):
     pbar.set_description(fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
-
         QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
 
         S = []
@@ -295,15 +286,12 @@ def cli_ensembleinfo(cli_args=None):
         source = []
 
         for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
-
             pbar.set_description(fmt.format(filename), refresh=True)
 
             with h5py.File(filepath) as file:
-
                 ignore = []
 
                 for ibranch in np.arange(file["/Trigger/step"].size):
-
                     root = file[f"/Trigger/branches/{ibranch:d}"]
 
                     if "completed" not in root:
@@ -462,7 +450,6 @@ def cli_generate(cli_args=None):
     basedir = pathlib.Path(args.ensembleinfo).parent
 
     with h5py.File(args.ensembleinfo) as info:
-
         N = info["/normalisation/N"][...]
         consider = sorted(info["full"])
         files = []
@@ -481,9 +468,7 @@ def cli_generate(cli_args=None):
         shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
 
         for filename in tqdm.tqdm(files):
-
             with h5py.File(basedir / filename) as source, h5py.File(outdir / filename, "w") as dest:
-
                 path = pathlib.Path(QuasiStatic.filename2fastload(source.filename))
                 if path.exists():
                     dfile = pathlib.Path(QuasiStatic.filename2fastload(dest.filename))
@@ -528,7 +513,6 @@ def cli_generate(cli_args=None):
                 ibranch = 0
 
                 for start, stop in zip(tqdm.tqdm(systemspanning[:-1]), systemspanning[1:]):
-
                     if args.delta_f is None:
                         s, f, load = start, f_frame[start], False
                     elif f_frame[start] + args.delta_f > f_frame[stop - 1]:
@@ -611,7 +595,6 @@ def cli_merge(cli_args=None):
     assert os.path.isfile(args.destination)
 
     with h5py.File(args.source) as src, h5py.File(args.destination, "a") as dest:
-
         # catching old bug
         if src["/Trigger/step"].size == 1 and "0" not in src["/Trigger/branches"]:
             return
@@ -630,7 +613,6 @@ def cli_merge(cli_args=None):
         branches = np.arange(src["/Trigger/step"].size)
 
         for ibranch in branches:
-
             sroot = src[f"/Trigger/branches/{ibranch:d}"]
             droot = dest[f"/Trigger/branches/{ibranch:d}"]
 
@@ -643,7 +625,6 @@ def cli_merge(cli_args=None):
             GooseHDF5.copy(src, dest, f"/meta/{entry_points['cli_run']}")
 
         for ibranch in branches:
-
             sroot = src[f"/Trigger/branches/{ibranch:d}"]
             droot = dest[f"/Trigger/branches/{ibranch:d}"]
 
@@ -753,9 +734,7 @@ def cli_job_rerun(cli_args=None):
     outdir.mkdir(parents=True, exist_ok=True)
 
     with h5py.File(args.info) as file:
-
         if f"/meta/{entry_points['cli_ensembleinfo']}" in file:
-
             N = file["N"][...]
             S = file["S"][...]
             A = file["A"][...]
@@ -783,7 +762,6 @@ def cli_job_rerun(cli_args=None):
             source = source[sorter]
 
         elif f"/meta/{QuasiStatic.entry_points['cli_ensembleinfo']}" in file or "avalanche" in file:
-
             N = file["/normalisation/N"][...]
             S = file["/avalanche/S"][...]
             A = file["/avalanche/A"][...]
@@ -792,11 +770,9 @@ def cli_job_rerun(cli_args=None):
             trigger = False
 
         else:
-
             raise ValueError("Not a Trigger.EnsembleInfo or QuasiStatic.EnsembleInfo file")
 
     if args.largest_avalanches is not None:
-
         assert args.system_spanning is None
         n = args.largest_avalanches
         assert n > 0
@@ -814,7 +790,6 @@ def cli_job_rerun(cli_args=None):
         source = source[sorter][:n]
 
     elif args.system_spanning is not None:
-
         assert args.largest_avalanches is None
         n = args.system_spanning
         assert n > 0
@@ -836,7 +811,6 @@ def cli_job_rerun(cli_args=None):
     commands = []
 
     for i in range(A.size):
-
         src = os.path.relpath(sourcedir / source[i], outdir)
 
         if trigger:

@@ -83,7 +83,6 @@ def cli_run(cli_args=None):
     assert args.u or args.s
 
     with h5py.File(args.file) as file, h5py.File(args.output, "w") as output:
-
         system = QuasiStatic.allocate_system(file)
 
         if args.smax is None:
@@ -120,9 +119,7 @@ def cli_run(cli_args=None):
         ) as dset_t, g5.ExtendableList(output, "du", np.float64) as dset_dx, g5.ExtendableList(
             output, "ds", np.int64
         ) as dset_ds:
-
             while True:
-
                 iter += 1
                 i_t = np.copy(system.chunk.index_at_align)
                 u_t = np.copy(system.u)
@@ -189,7 +186,6 @@ def cli_paraview(cli_args=None):
     with h5py.File(args.file) as file, h5py.File(f"{args.output}.h5", "w") as out, xh.TimeSeries(
         f"{args.output}.xdmf"
     ) as xdmf:
-
         u0 = file["u0"][...]
         t = file["t"][...]
         r = file["r"][...]
@@ -221,7 +217,6 @@ def cli_paraview(cli_args=None):
             tsave = np.linspace(0, np.max(t), args.bins + 1)
 
         for ibin in tqdm.tqdm(range(1, args.bins + 1)):
-
             keep = np.logical_and(t >= tsave[ibin - 1], t < tsave[ibin])
             np.add.at(X, r[keep], du[keep])
             np.add.at(S, r[keep], ds[keep])
@@ -266,7 +261,6 @@ def cli_plot(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file) as file:
-
         r = file["r"][...]
         t = file["t"][...]
         ds = file["ds"][...]
@@ -355,7 +349,6 @@ def cli_basic_output(cli_args=None):
     # store (compress where possible)
 
     with h5py.File(args.output, "w") as file:
-
         for key in ["t", "A", "S", "step"]:
             file[key] = data[key]
 
