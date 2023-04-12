@@ -983,7 +983,8 @@ def cli_run(cli_args=None):
     progname = entry_points[funcname]
 
     # development options
-    parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
+    parser.add_argument("--check", type=int, help="Rerun step to check consistency")
+    parser.add_argument("--check-dynamics", type=int, help="Rerun step with the same #time-steps")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--fastload", action="store_true", help="Append fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -1002,6 +1003,8 @@ def cli_run(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     basename = os.path.basename(args.file)
+    if args.check_dynamics:
+        args.check = args.check_dynamics
 
     with h5py.File(args.file, "a") as file:
         system = allocate_system(file)
@@ -1062,16 +1065,20 @@ def cli_run(cli_args=None):
             if kick:
                 inc_n = system.inc
 
-                ret = system.minimise()
-                assert ret == 0
+                if args.check_dynamics:
+                    system.timeSteps(root["inc"][step] - root["inc"][step - 1])
+                    assert system.residual() <= 1e-5
+                else:
+                    ret = system.minimise()
+                    assert ret == 0
 
                 niter = system.inc - inc_n
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
                 pbar.refresh()
 
             if args.check is not None:
-                assert root["inc"][step] == system.inc
                 assert root["kick"][step] == kick
+                assert root["inc"][step] == system.inc
                 assert np.isclose(root["u_frame"][step], system.u_frame)
                 assert np.allclose(root["u"][str(step)][...], system.u)
             else:
