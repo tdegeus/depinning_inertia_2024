@@ -393,7 +393,9 @@ class SystemExtra:
         with h5py.File(fastload[0]) as loadfile:
             if fastload[1] in loadfile:
                 root = loadfile[fastload[1]]
-                self.chunk.restore(root["state"][...], root["value"][...], root["index"][...])
+                self.chunk.restore(
+                    state=root["state"][...], value=root["value"][...], index=root["index"][...]
+                )
 
         return self.chunk.align(u)
 
@@ -1088,9 +1090,9 @@ def cli_run(cli_args=None):
                 if args.fastload:
                     with h5py.File(filename2fastload(args.file), "a") as fload:
                         if f"/QuasiStatic/{step:d}" not in fload:
-                            i = system.chunk.start
-                            fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
-                            fload[f"/QuasiStatic/{step:d}/index"] = i
+                            start = np.copy(system.chunk.start)
+                            fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(start)
+                            fload[f"/QuasiStatic/{step:d}/index"] = start
                             fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
                             fload.flush()
 
@@ -1522,19 +1524,19 @@ def cli_generatefastload(cli_args=None):
                 load = stored[np.argmax(stored > step)]
                 system.restore_quasistatic_step(root, load)
 
-            system.restore_quasistatic_step(root, step)
+            system.restore_quasistatic_step(root, step, fastload=False)
 
             if last_start is not None:
                 if np.all(np.equal(last_start, system.chunk.start)):
                     output[f"/QuasiStatic/{step:d}"] = output[f"/QuasiStatic/{last_step:d}"]
                     continue
 
-            i = system.chunk.start
-            output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(i)
-            output[f"/QuasiStatic/{step:d}/index"] = i
+            start = np.copy(system.chunk.start)
+            output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(start)
+            output[f"/QuasiStatic/{step:d}/index"] = start
             output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
             output.flush()
-            last_start = np.copy(i)
+            last_start = np.copy(start)
             last_step = step
 
 
