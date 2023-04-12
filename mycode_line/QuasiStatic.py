@@ -625,7 +625,7 @@ class Line2d_System_Cuspy_Laplace(fsb.Line2d.System_Cuspy_Laplace, SystemExtra):
         )
 
 
-def allocate_system(file: h5py.File, **kwargs):
+def allocate_system(file: h5py.File):
     """
     Allocate system.
     """
@@ -633,28 +633,28 @@ def allocate_system(file: h5py.File, **kwargs):
     norm = Normalisation(file)
 
     if norm.system == "Line1d_System_Cuspy_Laplace":
-        return Line1d_System_Cuspy_Laplace(file, **kwargs)
+        return Line1d_System_Cuspy_Laplace(file)
 
     if norm.system == "Line1d_System_SemiSmooth_Laplace":
-        return Line1d_System_SemiSmooth_Laplace(file, **kwargs)
+        return Line1d_System_SemiSmooth_Laplace(file)
 
     if norm.system == "Line1d_System_Smooth_Laplace":
-        return Line1d_System_Smooth_Laplace(file, **kwargs)
+        return Line1d_System_Smooth_Laplace(file)
 
     if norm.system == "Line1d_System_Cuspy_Quartic":
-        return Line1d_System_Cuspy_Quartic(file, **kwargs)
+        return Line1d_System_Cuspy_Quartic(file)
 
     if norm.system == "Line1d_System_Cuspy_QuarticGradient":
-        return Line1d_System_Cuspy_QuarticGradient(file, **kwargs)
+        return Line1d_System_Cuspy_QuarticGradient(file)
 
     if norm.system == "Line1d_System_Cuspy_Laplace_RandomForcing":
-        return Line1d_System_Cuspy_Laplace_RandomForcing(file, **kwargs)
+        return Line1d_System_Cuspy_Laplace_RandomForcing(file)
 
     if norm.system == "Line1d_System_Cuspy_LongRange":
-        return Line1d_System_Cuspy_LongRange(file, **kwargs)
+        return Line1d_System_Cuspy_LongRange(file)
 
     if norm.system == "Line2d_System_Cuspy_Laplace":
-        return Line2d_System_Cuspy_Laplace(file, **kwargs)
+        return Line2d_System_Cuspy_Laplace(file)
 
     raise ValueError(f"Unknown system: {norm.system}")
 
