@@ -45,7 +45,6 @@ class MyTests(unittest.TestCase):
             ["--dev", "--eta", 1e0, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
         )
         QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
-        QuasiStatic.cli_generatefastload(["--dev", filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
     @classmethod

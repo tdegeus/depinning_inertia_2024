@@ -957,7 +957,7 @@ def cli_generate(cli_args=None):
 
     executable = entry_points["cli_run"]
 
-    opts = ["--fastload"]
+    opts = []
     if args.nopassing:
         opts += ["--nopassing"]
     opts = " ".join(opts)
@@ -988,7 +988,6 @@ def cli_run(cli_args=None):
     # development options
     parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--fastload", action="store_true", help="Append fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
 
     # different loading
@@ -1006,7 +1005,7 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
     basename = os.path.basename(args.file)
 
-    with h5py.File(args.file, "a") as file:
+    with h5py.File(args.file, "a") as file, h5py.File(filename2fastload(args.file), "a") as fload:
         system = allocate_system(file)
         meta = dict(dynamics="normal", loading="event-driven")
         if isinstance(system, Line1d_System_Cuspy_Laplace_Nopassing):
@@ -1021,7 +1020,14 @@ def cli_run(cli_args=None):
                 / system.normalisation.k_frame
             )
 
-        create_check_meta(file, f"/meta/{progname}", dev=args.develop, **meta)
+        metapath = f"/meta/{progname}"
+        create_check_meta(file, metapath, dev=args.develop, **meta)
+
+        if "QuasiStatic" in fload:
+            assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
+        else:
+            create_check_meta(fload, metapath, dev=args.develop, **meta)
+            fload[metapath].attrs["uuid"] = file[metapath].attrs["uuid"]
 
         if "QuasiStatic" not in file:
             ret = system.minimise()
@@ -1053,6 +1059,7 @@ def cli_run(cli_args=None):
 
         desc = f"{basename}: step = {step:8d}, niter = {'-':8s}"
         pbar = tqdm.tqdm(range(step, step + args.nstep), desc=desc)
+        start = np.zeros_like(system.chunk.start)
 
         for step in pbar:
             if args.fixed_step:
@@ -1064,7 +1071,6 @@ def cli_run(cli_args=None):
 
             if kick:
                 inc_n = system.inc
-
                 ret = system.minimise()
                 assert ret == 0
 
@@ -1077,21 +1083,22 @@ def cli_run(cli_args=None):
                 assert root["kick"][step] == kick
                 assert np.isclose(root["u_frame"][step], system.u_frame)
                 assert np.allclose(root["u"][str(step)][...], system.u)
-            else:
-                storage.dset_extend1d(root, "inc", step, system.inc)
-                storage.dset_extend1d(root, "u_frame", step, system.u_frame)
-                storage.dset_extend1d(root, "kick", step, kick)
-                root["u"][str(step)] = system.u
-                file.flush()
+                break
 
-                if args.fastload:
-                    with h5py.File(filename2fastload(args.file), "a") as fload:
-                        if f"/QuasiStatic/{step:d}" not in fload:
-                            start = np.copy(system.chunk.start)
-                            fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(start)
-                            fload[f"/QuasiStatic/{step:d}/index"] = start
-                            fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
-                            fload.flush()
+            storage.dset_extend1d(root, "inc", step, system.inc)
+            storage.dset_extend1d(root, "u_frame", step, system.u_frame)
+            storage.dset_extend1d(root, "kick", step, kick)
+            root["u"][str(step)] = system.u
+            file.flush()
+
+            if np.all(system.chunk.start > start) or np.all(start == 0):
+                start = np.copy(system.chunk.start)
+                fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(start)
+                fload[f"/QuasiStatic/{step:d}/index"] = start
+                fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
+            else:
+                fload[f"/QuasiStatic/{step:d}"] = fload[f"/QuasiStatic/{step - 1:d}"]
+            fload.flush()
 
 
 def cli_checkdynamics(cli_args=None):
@@ -1657,7 +1664,6 @@ def cli_generatefastload(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    progname = entry_points[funcname]
 
     class MyFmt(
         argparse.RawDescriptionHelpFormatter,
@@ -1673,6 +1679,8 @@ def cli_generatefastload(cli_args=None):
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("file", type=str, help="Simulation file")
     args = tools._parse(parser, cli_args)
+    progname = entry_points["cli_run"]
+    metapath = f"/meta/{progname}"
 
     output = filename2fastload(args.file)
     if args.append:
@@ -1680,14 +1688,16 @@ def cli_generatefastload(cli_args=None):
     else:
         tools._check_overwrite_file(output, args.force)
 
-    with h5py.File(args.file) as file, h5py.File(output, "r+" if args.append else "w") as output:
+    with h5py.File(args.file) as file, h5py.File(output, "r+" if args.append else "w") as fload:
         if not args.append:
-            create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+            create_check_meta(fload, metapath, dev=args.develop)
+            fload[metapath].attrs["uuid"] = file[metapath].attrs["uuid"]
+        else:
+            assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
 
         system = allocate_system(file)
         root = file["QuasiStatic"]
-        last_start = None
-        last_step = None
+        start = np.zeros_like(system.chunk.start)
 
         if args.append:
             if "QuasiStatic" in output:
@@ -1702,18 +1712,14 @@ def cli_generatefastload(cli_args=None):
 
             system.restore_quasistatic_step(root, step, fastload=False)
 
-            if last_start is not None:
-                if np.all(np.equal(last_start, system.chunk.start)):
-                    output[f"/QuasiStatic/{step:d}"] = output[f"/QuasiStatic/{last_step:d}"]
-                    continue
-
-            start = np.copy(system.chunk.start)
-            output[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(start)
-            output[f"/QuasiStatic/{step:d}/index"] = start
-            output[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
-            output.flush()
-            last_start = np.copy(start)
-            last_step = step
+            if np.all(system.chunk.start > start) or np.all(start == 0):
+                start = np.copy(system.chunk.start)
+                fload[f"/QuasiStatic/{step:d}/state"] = system.chunk.state_at(start)
+                fload[f"/QuasiStatic/{step:d}/index"] = start
+                fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
+            else:
+                fload[f"/QuasiStatic/{step:d}"] = fload[f"/QuasiStatic/{step - 1:d}"]
+            fload.flush()
 
 
 def cli_plotstateaftersystemspanning(cli_args=None):

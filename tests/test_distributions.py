@@ -41,7 +41,7 @@ class MyTests(unittest.TestCase):
         Distributions: weibull, delta, random
         """
 
-        for distro in ["weibull", "delta", "random"]:
+        for distro in ["delta", "random", "weibull"]:
             dname = dirname / distro
             filename = dname / "id=0000.h5"
             infoname = dname / "EnsembleInfo.h5"
@@ -69,6 +69,8 @@ class MyTests(unittest.TestCase):
                 A = file["/loading/A"][...]
 
             self.assertTrue(np.all(A == 0))
+            os.remove(QuasiStatic.filename2fastload(filename))
+            os.remove(filename)
 
 
 if __name__ == "__main__":

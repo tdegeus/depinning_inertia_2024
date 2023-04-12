@@ -44,7 +44,7 @@ class MyTests(unittest.TestCase):
         QuasiStatic.cli_generate(
             ["--dev", "--eta", 1, "--size", 50, "-n", 1, dirname, "--kframe", 1 / 50]
         )
-        QuasiStatic.cli_run(["--dev", "-n", 1000, filename, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
 
     @classmethod
@@ -135,6 +135,8 @@ class MyTests(unittest.TestCase):
             self.assertTrue(np.allclose(yleft, system.chunk.left_of_align))
             self.assertTrue(np.allclose(yright, system.chunk.right_of_align))
             self.assertTrue(np.allclose(fpot, system.f_potential))
+
+        QuasiStatic.cli_checkfastload([filename])
 
         # just a call
         with h5py.File(filename) as file:
@@ -251,9 +253,9 @@ class MyGlobalTests(unittest.TestCase):
         QuasiStatic.cli_generate(
             ["--dev", "--eta", 1, "--shape", 10, 10, "-n", 2, dirname, "--kframe", 1 / 100]
         )
-        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname, "--fastload"])
-        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname, "--fastload"])
-        QuasiStatic.cli_run(["--dev", "-n", 600, dirname / idname2, "--fastload"])
+        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname])
+        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname])
+        QuasiStatic.cli_run(["--dev", "-n", 600, dirname / idname2])
         QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, dirname / idname, dirname / idname2])
 
         workdir = dirname / "2d"
