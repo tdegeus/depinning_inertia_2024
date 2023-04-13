@@ -115,9 +115,9 @@ def cli_checkdata(cli_args=None):
                 if re.match(r"(.*)(/)(nchunk)(.*)", path):
                     remove.append(path)
 
-            if "k2" in src["param"]:
-                rename["/param/k2"] = ["/param/interactions/k1"]
+            if "k4" in src["param"]:
                 rename["/param/k4"] = ["/param/interactions/k2"]
+                rename["/param/k4"] = ["/param/interactions/k4"]
                 add.append('/param/interactions/type = "QuarticGradient"')
             elif "a1" in src["param"]:
                 rename["/param/a1"] = ["/param/interactions/a1"]
@@ -242,8 +242,8 @@ class Normalisation:
             self.a1 = file["param"]["interactions"]["a1"][...]
             self.a2 = file["param"]["interactions"]["a2"][...]
         elif self.interactions == "QuadraticGradient":
-            self.k1 = file["param"]["interactions"]["k1"][...]
             self.k2 = file["param"]["interactions"]["k2"][...]
+            self.k4 = file["param"]["interactions"]["k4"][...]
         elif self.interactions == "LongRange":
             self.k_interactions = file["param"]["interactions"]["k"][...]
             self.alpha = file["param"]["interactions"]["alpha"][...]
@@ -304,8 +304,8 @@ class Normalisation:
             ret["a1"] = self.a1
             ret["a2"] = self.a2
         elif self.interactions == "QuadraticGradient":
-            ret["k1"] = self.k1
             ret["k2"] = self.k2
+            ret["k4"] = self.k4
         elif self.interactions == "LongRange":
             ret["k_interactions"] = self.k_interactions
             ret["alpha"] = self.alpha
@@ -552,8 +552,8 @@ class Line1d_System_Cuspy_QuarticGradient(model.System_Cuspy_QuarticGradient, Sy
             m=file["param"]["m"][...],
             eta=file["param"]["eta"][...],
             mu=file["param"]["mu"][...],
-            k1=file["param"]["interactions"]["k1"][...],
             k2=file["param"]["interactions"]["k2"][...],
+            k4=file["param"]["interactions"]["k4"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
             **_common_param(file),
@@ -786,8 +786,8 @@ def generate(
         file["/param/interactions/a1"] = interactions["a1"]
         file["/param/interactions/a2"] = interactions["a2"]
     elif interactions["type"] == "QuarticGradient":
-        file["/param/interactions/k1"] = interactions["k1"]
         file["/param/interactions/k2"] = interactions["k2"]
+        file["/param/interactions/k4"] = interactions["k4"]
     elif interactions["type"] == "LongRange":
         file["/param/interactions/k"] = interactions["k"]
         file["/param/interactions/alpha"] = interactions["alpha"]
@@ -854,7 +854,7 @@ def _generate_cli_options(parser):
 
     parser.add_argument("--laplace", nargs=1, type=float, help="Laplace interactions: k")
     parser.add_argument("--quartic", nargs=2, type=float, help="Quartic interactions: a1, a2")
-    parser.add_argument("--quarticgradient", nargs=2, type=float, help="Quartic gradient: k1, k2")
+    parser.add_argument("--quarticgradient", nargs=2, type=float, help="Quartic gradient: k2, k4")
     parser.add_argument("--longrange", nargs=2, type=float, help="LongRange interactions: k, alpha")
 
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -893,8 +893,8 @@ def _generate_parse(args):
     if args.quarticgradient is not None:
         interactions = {
             "type": "QuarticGradient",
-            "k1": args.quarticgradient[0],
-            "k2": args.quarticgradient[1],
+            "k2": args.quarticgradient[0],
+            "k4": args.quarticgradient[1],
         }
     if args.longrange is not None:
         interactions = {
