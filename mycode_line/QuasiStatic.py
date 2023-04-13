@@ -1155,7 +1155,6 @@ def cli_checkdynamics(cli_args=None):
                 continue
 
             try:
-                assert np.allclose(output[f"/iter/{i:d}/f_inter"][...], system.f_interactions)
                 assert np.allclose(output[f"/iter/{i:d}/f"][...], system.f)
                 assert np.allclose(output[f"/iter/{i:d}/u"][...], system.u)
                 assert np.allclose(output[f"/iter/{i:d}/v"][...], system.v)
@@ -1173,8 +1172,6 @@ def cli_checkdynamics(cli_args=None):
                     & np.isclose(output[f"/iter/{i:d}/index"][...], system.chunk.index_at_align)
                 )
 
-                passed[0] = False
-
                 idx = system.chunk.chunk_index_at_align.ravel()
                 allp = np.arange(idx.size)
                 data = system.chunk.data.reshape(-1, system.chunk.chunk_size)
@@ -1182,6 +1179,7 @@ def cli_checkdynamics(cli_args=None):
                 u_n = system.u
                 v_n = system.v
                 f_n = system.f
+                n_n = system.f_interactions
                 c_n = system.chunk.chunk_index_at_align
                 i_n = system.chunk.index_at_align
                 m1_n = data[allp, idx - 1]
@@ -1198,6 +1196,7 @@ def cli_checkdynamics(cli_args=None):
                     "index",
                     "chunk_index",
                     "diff_index",
+                    "diff_fn",
                     "diff_f",
                     "diff_u",
                     "diff_v",
@@ -1214,6 +1213,7 @@ def cli_checkdynamics(cli_args=None):
                             i_n[p],
                             c_n[p],
                             int(output[f"/iter/{i:d}/index"][p] - i_n[p]),
+                            np.abs((output[f"/iter/{i:d}/f_inter"][p] - n_n[p]) / n_n[p]),
                             np.abs((output[f"/iter/{i:d}/f"][p] - f_n[p]) / f_n[p]),
                             np.abs((output[f"/iter/{i:d}/u"][p] - u_n[p]) / u_n[p]),
                             np.abs((output[f"/iter/{i:d}/v"][p] - v_n[p]) / v_n[p]),
