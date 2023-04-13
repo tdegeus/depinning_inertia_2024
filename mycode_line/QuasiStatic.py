@@ -1142,6 +1142,8 @@ def cli_checkdynamics(cli_args=None):
                 output[f"/iter/{i:d}/yleft"] = system.chunk.left_of_align
                 output[f"/iter/{i:d}/yright"] = system.chunk.right_of_align
                 output[f"/iter/{i:d}/index"] = system.chunk.index_at_align
+                output[f"/iter/{i:d}/f"] = system.f
+                output[f"/iter/{i:d}/v"] = system.v
                 output.flush()
                 continue
 
@@ -1150,12 +1152,16 @@ def cli_checkdynamics(cli_args=None):
                 assert np.allclose(output[f"/iter/{i:d}/yleft"][...], system.chunk.left_of_align)
                 assert np.allclose(output[f"/iter/{i:d}/yright"][...], system.chunk.right_of_align)
                 assert np.allclose(output[f"/iter/{i:d}/index"][...], system.chunk.index_at_align)
+                assert np.allclose(output[f"/iter/{i:d}/f"][...], system.f)
+                assert np.allclose(output[f"/iter/{i:d}/v"][...], system.v)
             except AssertionError:
                 a = output[f"/iter/{i:d}/u"][...] != system.u
                 b = system.chunk.left_of_align != output[f"/iter/{i:d}/yleft"][...]
                 c = system.chunk.right_of_align != output[f"/iter/{i:d}/yright"][...]
                 d = system.chunk.right_of_align != output[f"/iter/{i:d}/index"][...]
-                failed = a | b | c | d
+                e = system.f != output[f"/iter/{i:d}/f"][...]
+                f = system.v != output[f"/iter/{i:d}/v"][...]
+                failed = a | b | c | d | e | f
                 for p in np.argwhere(failed).ravel():
                     u = system.u[p]
                     j = system.chunk.index_at_align[p]
@@ -1163,8 +1169,16 @@ def cli_checkdynamics(cli_args=None):
                     print("index = ", j, j / j)
                     print("chunk_index = ", system.chunk.chunk_index_at_align[p])
                     print("u = ", u, output[f"/iter/{i:d}/u"][p] / u)
-                    print("yleft = ", system.chunk.left_of_align[p] / u, output[f"/iter/{i:d}/yleft"][p] / u)
-                    print("yright = ", system.chunk.right_of_align[p] / u, output[f"/iter/{i:d}/yright"][p] / u)
+                    print(
+                        "yleft = ",
+                        system.chunk.left_of_align[p] / u,
+                        output[f"/iter/{i:d}/yleft"][p] / u,
+                    )
+                    print(
+                        "yright = ",
+                        system.chunk.right_of_align[p] / u,
+                        output[f"/iter/{i:d}/yright"][p] / u,
+                    )
                 raise AssertionError(f"Assertion failed at iteration {i:d}")
 
 
