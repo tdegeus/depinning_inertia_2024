@@ -37,6 +37,7 @@ entry_points = dict(
     cli_plot="QuasiStatic_Plot",
     cli_run="QuasiStatic_Run",
     cli_checkdynamics="QuasiStatic_CheckDynamics",
+    cli_checkfastload="QuasiStatic_CheckFastLoad",
     cli_list_systemspanning="QuasiStatic_ReRun_ListSystemSpanning",
     cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
     cli_plotstateaftersystemspanning="QuasiStatic_PlotStateAfterSystemSpanning",
@@ -1512,6 +1513,47 @@ def cli_rerun_eventmap(cli_args=None):
     ]
 
     shelephant.yaml.dump(args.output, c, force=True)
+
+
+def cli_checkfastload(cli_args=None):
+    """
+    Check the integrity of the fast load file.
+    """
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Simulation file (read only)")
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+
+    fload = filename2fastload(args.file)
+    assert os.path.isfile(fload)
+
+    with h5py.File(args.file) as file, h5py.File(fload) as fload:
+        system = allocate_system(file)
+
+        if "meta" in fload:
+            # may not be present in old files
+            metapath = f"/meta/{entry_points['cli_run']}"
+            assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
+
+        for step in tqdm.tqdm(sorted([int(i) for i in fload["QuasiStatic"]])):
+            state = fload[f"/QuasiStatic/{step:d}/state"][...]
+            index = fload[f"/QuasiStatic/{step:d}/index"][...]
+            value = fload[f"/QuasiStatic/{step:d}/value"][...]
+            system.chunk.align_at(index)
+            assert np.allclose(system.chunk.left_of_align, value)
+            assert np.all(system.chunk.state_at(index) == state)
 
 
 def cli_generatefastload(cli_args=None):
