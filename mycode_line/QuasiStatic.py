@@ -1143,6 +1143,8 @@ def cli_checkdynamics(cli_args=None):
                 allp = np.arange(idx.size)
                 data = system.chunk.data.reshape(-1, system.chunk.chunk_size)
                 output[f"/iter/{i:d}/f_inter"] = system.f_interactions
+                output[f"/iter/{i:d}/f_pot"] = system.f_potential
+                output[f"/iter/{i:d}/f_frame"] = system.f_frame
                 output[f"/iter/{i:d}/f"] = system.f
                 output[f"/iter/{i:d}/u"] = system.u
                 output[f"/iter/{i:d}/v"] = system.v
@@ -1164,6 +1166,8 @@ def cli_checkdynamics(cli_args=None):
             except AssertionError:
                 passed = (
                     np.isclose(output[f"/iter/{i:d}/f_inter"][...], system.f_interactions)
+                    & np.isclose(output[f"/iter/{i:d}/f_pot"][...], system.f_potential)
+                    & np.isclose(output[f"/iter/{i:d}/f_frame"][...], system.f_frame)
                     & np.isclose(output[f"/iter/{i:d}/f"][...], system.f)
                     & np.isclose(output[f"/iter/{i:d}/u"][...], system.u)
                     & np.isclose(output[f"/iter/{i:d}/v"][...], system.v)
@@ -1180,6 +1184,8 @@ def cli_checkdynamics(cli_args=None):
                 v_n = system.v
                 f_n = system.f
                 n_n = system.f_interactions
+                p_n = system.f_potential
+                f_f = system.f_frame
                 c_n = system.chunk.chunk_index_at_align
                 i_n = system.chunk.index_at_align
                 m1_n = data[allp, idx - 1]
@@ -1197,6 +1203,8 @@ def cli_checkdynamics(cli_args=None):
                     "chunk_index",
                     "diff_index",
                     "diff_fn",
+                    "diff_fp",
+                    "diff_ff",
                     "diff_f",
                     "diff_u",
                     "diff_v",
@@ -1214,6 +1222,8 @@ def cli_checkdynamics(cli_args=None):
                             c_n[p],
                             int(output[f"/iter/{i:d}/index"][p] - i_n[p]),
                             np.abs((output[f"/iter/{i:d}/f_inter"][p] - n_n[p]) / n_n[p]),
+                            np.abs((output[f"/iter/{i:d}/f_pot"][p] - p_n[p]) / p_n[p]),
+                            np.abs((output[f"/iter/{i:d}/f_frame"][p] - f_f[p]) / f_f[p]),
                             np.abs((output[f"/iter/{i:d}/f"][p] - f_n[p]) / f_n[p]),
                             np.abs((output[f"/iter/{i:d}/u"][p] - u_n[p]) / u_n[p]),
                             np.abs((output[f"/iter/{i:d}/v"][p] - v_n[p]) / v_n[p]),
