@@ -11,6 +11,7 @@ dependencies:
 - numpy
 - parallel
 - pre-commit
+- prettytable
 - pybind11
 - python
 - python-cppcolormap

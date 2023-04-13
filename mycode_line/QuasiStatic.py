@@ -19,6 +19,7 @@ import GooseEYE as eye
 import GooseHDF5 as g5
 import h5py
 import numpy as np
+import prettytable
 import prrng
 import shelephant
 import tqdm
@@ -1138,47 +1139,94 @@ def cli_checkdynamics(cli_args=None):
             system.timeStep()
 
             if mode == "w":
-                output[f"/iter/{i:d}/u"] = system.u
-                output[f"/iter/{i:d}/yleft"] = system.chunk.left_of_align
-                output[f"/iter/{i:d}/yright"] = system.chunk.right_of_align
-                output[f"/iter/{i:d}/index"] = system.chunk.index_at_align
+                idx = system.chunk.chunk_index_at_align.ravel()
+                allp = np.arange(idx.size)
+                data = system.chunk.data.reshape(-1, system.chunk.chunk_size)
+                output[f"/iter/{i:d}/f_inter"] = system.f_interactions
                 output[f"/iter/{i:d}/f"] = system.f
+                output[f"/iter/{i:d}/u"] = system.u
                 output[f"/iter/{i:d}/v"] = system.v
+                output[f"/iter/{i:d}/y_i-1"] = data[allp, idx - 1]
+                output[f"/iter/{i:d}/y_i"] = system.chunk.left_of_align
+                output[f"/iter/{i:d}/y_i+1"] = system.chunk.right_of_align
+                output[f"/iter/{i:d}/y_i+2"] = data[allp, idx + 2]
+                output[f"/iter/{i:d}/index"] = system.chunk.index_at_align
                 output.flush()
                 continue
 
             try:
-                assert np.allclose(output[f"/iter/{i:d}/u"][...], system.u)
-                assert np.allclose(output[f"/iter/{i:d}/yleft"][...], system.chunk.left_of_align)
-                assert np.allclose(output[f"/iter/{i:d}/yright"][...], system.chunk.right_of_align)
-                assert np.allclose(output[f"/iter/{i:d}/index"][...], system.chunk.index_at_align)
+                assert np.allclose(output[f"/iter/{i:d}/f_inter"][...], system.f_interactions)
                 assert np.allclose(output[f"/iter/{i:d}/f"][...], system.f)
+                assert np.allclose(output[f"/iter/{i:d}/u"][...], system.u)
                 assert np.allclose(output[f"/iter/{i:d}/v"][...], system.v)
+                assert np.allclose(output[f"/iter/{i:d}/y_i"][...], system.chunk.left_of_align)
+                assert np.allclose(output[f"/iter/{i:d}/y_i+1"][...], system.chunk.right_of_align)
+                assert np.allclose(output[f"/iter/{i:d}/index"][...], system.chunk.index_at_align)
             except AssertionError:
-                a = output[f"/iter/{i:d}/u"][...] != system.u
-                b = system.chunk.left_of_align != output[f"/iter/{i:d}/yleft"][...]
-                c = system.chunk.right_of_align != output[f"/iter/{i:d}/yright"][...]
-                d = system.chunk.right_of_align != output[f"/iter/{i:d}/index"][...]
-                e = system.f != output[f"/iter/{i:d}/f"][...]
-                f = system.v != output[f"/iter/{i:d}/v"][...]
-                failed = a | b | c | d | e | f
-                for p in np.argwhere(failed).ravel():
-                    u = system.u[p]
-                    j = system.chunk.index_at_align[p]
-                    print("---- p = ", p)
-                    print("index = ", j, j / j)
-                    print("chunk_index = ", system.chunk.chunk_index_at_align[p])
-                    print("u = ", u, output[f"/iter/{i:d}/u"][p] / u)
-                    print(
-                        "yleft = ",
-                        system.chunk.left_of_align[p] / u,
-                        output[f"/iter/{i:d}/yleft"][p] / u,
+                passed = (
+                    np.isclose(output[f"/iter/{i:d}/f_inter"][...], system.f_interactions)
+                    & np.isclose(output[f"/iter/{i:d}/f"][...], system.f)
+                    & np.isclose(output[f"/iter/{i:d}/u"][...], system.u)
+                    & np.isclose(output[f"/iter/{i:d}/v"][...], system.v)
+                    & np.isclose(output[f"/iter/{i:d}/y_i"][...], system.chunk.left_of_align)
+                    & np.isclose(output[f"/iter/{i:d}/y_i+1"][...], system.chunk.right_of_align)
+                    & np.isclose(output[f"/iter/{i:d}/index"][...], system.chunk.index_at_align)
+                )
+
+                passed[0] = False
+
+                idx = system.chunk.chunk_index_at_align.ravel()
+                allp = np.arange(idx.size)
+                data = system.chunk.data.reshape(-1, system.chunk.chunk_size)
+
+                u_n = system.u
+                v_n = system.v
+                f_n = system.f
+                c_n = system.chunk.chunk_index_at_align
+                i_n = system.chunk.index_at_align
+                m1_n = data[allp, idx - 1]
+                m0_n = data[allp, idx]
+                p1_n = data[allp, idx + 1]
+                p2_n = data[allp, idx + 2]
+
+                assert np.allclose(m0_n, system.chunk.left_of_align)
+                assert np.allclose(p1_n, system.chunk.right_of_align)
+
+                table = prettytable.PrettyTable()
+                table.field_names = [
+                    "p",
+                    "index",
+                    "chunk_index",
+                    "diff_index",
+                    "diff_f",
+                    "diff_u",
+                    "diff_v",
+                    "diff_y(i-1)",
+                    "diff_y(i)",
+                    "diff_y(i+1)",
+                    "diff_y(i+2)",
+                    "sorted",
+                ]
+                for p in np.argwhere(~passed).ravel():
+                    table.add_row(
+                        [
+                            p,
+                            i_n[p],
+                            c_n[p],
+                            int(output[f"/iter/{i:d}/index"][p] - i_n[p]),
+                            np.abs((output[f"/iter/{i:d}/f"][p] - f_n[p]) / f_n[p]),
+                            np.abs((output[f"/iter/{i:d}/u"][p] - u_n[p]) / u_n[p]),
+                            np.abs((output[f"/iter/{i:d}/v"][p] - v_n[p]) / v_n[p]),
+                            np.abs((output[f"/iter/{i:d}/y_i-1"][p] - m1_n[p]) / m1_n[p]),
+                            np.abs((output[f"/iter/{i:d}/y_i"][p] - m0_n[p]) / m0_n[p]),
+                            np.abs((output[f"/iter/{i:d}/y_i+1"][p] - p1_n[p]) / p1_n[p]),
+                            np.abs((output[f"/iter/{i:d}/y_i+2"][p] - p2_n[p]) / p2_n[p]),
+                            int(~(m1_n[p] <= u_n[p] < m0_n[p] < p1_n[p] < p2_n[p])),
+                        ]
                     )
-                    print(
-                        "yright = ",
-                        system.chunk.right_of_align[p] / u,
-                        output[f"/iter/{i:d}/yright"][p] / u,
-                    )
+                table.set_style(prettytable.SINGLE_BORDER)
+                print("")
+                print(table.get_string(sortby="p"))
                 raise AssertionError(f"Assertion failed at iteration {i:d}")
 
 
