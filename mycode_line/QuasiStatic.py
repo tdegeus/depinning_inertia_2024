@@ -36,6 +36,7 @@ entry_points = dict(
     cli_generate="QuasiStatic_Generate",
     cli_plot="QuasiStatic_Plot",
     cli_run="QuasiStatic_Run",
+    cli_checkdynamics="QuasiStatic_CheckDynamics",
     cli_list_systemspanning="QuasiStatic_ReRun_ListSystemSpanning",
     cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
     cli_plotstateaftersystemspanning="QuasiStatic_PlotStateAfterSystemSpanning",
@@ -1089,6 +1090,61 @@ def cli_run(cli_args=None):
                             fload[f"/QuasiStatic/{step:d}/index"] = start
                             fload[f"/QuasiStatic/{step:d}/value"] = system.chunk.data[..., 0]
                             fload.flush()
+
+
+def cli_checkdynamics(cli_args=None):
+    """
+    Check the detailed dynamics of a quasi-static step.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--step", type=int, required=True, help="Step to rerun")
+    parser.add_argument("--write", type=str, help="Write details to file")
+    parser.add_argument("--read", type=str, help="Read details from file and compare")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Simulation file (read-only)")
+
+    args = tools._parse(parser, cli_args)
+    assert os.path.isfile(args.file)
+    assert args.write is not None or args.read is not None
+    outpath = args.write if args.write is not None else args.read
+    mode = "w" if args.write is not None else "r"
+
+    with h5py.File(args.file) as file, h5py.File(outpath, mode) as output:
+        system = allocate_system(file)
+        root = file["/QuasiStatic"]
+        step = args.step
+        assert step < root["inc"].size
+        kick = root["kick"][step - 1]
+        du = file["/param/potentials/du"][...]
+        system.restore_quasistatic_step(root, step - 1)
+
+        # todo: fixed-step loading
+        kick = not kick
+        system.eventDrivenStep(du, kick)
+
+        for i in tqdm.tqdm(range(int(root["inc"][step] - system.inc))):
+            system.timeStep()
+
+            if mode == "w":
+                output[f"/iter/{i:d}/u"] = system.u
+                output[f"/iter/{i:d}/yleft"] = system.chunk.left_of_align
+                output[f"/iter/{i:d}/yright"] = system.chunk.right_of_align
+                output.flush()
+            else:
+                assert np.allclose(output[f"/iter/{i:d}/u"][...], system.u)
+                assert np.allclose(output[f"/iter/{i:d}/yleft"][...], system.chunk.left_of_align)
+                assert np.allclose(output[f"/iter/{i:d}/yright"][...], system.chunk.right_of_align)
 
 
 def steadystate(
