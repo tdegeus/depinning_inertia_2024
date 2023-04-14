@@ -1026,7 +1026,8 @@ def cli_run(cli_args=None):
         metapath = f"/meta/{progname}"
         create_check_meta(file, metapath, dev=args.develop, **meta)
 
-        if "QuasiStatic" in fload:
+        # files <11.7 do not have metadata
+        if "QuasiStatic" in fload and metapath in fload:
             assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
         else:
             create_check_meta(fload, metapath, dev=args.develop, **meta)
@@ -1645,7 +1646,7 @@ def cli_checkfastload(cli_args=None):
         system = allocate_system(file)
 
         if "meta" in fload:
-            # may not be present in old files
+            # files <11.7 do not have metadata
             metapath = f"/meta/{entry_points['cli_run']}"
             assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
 
