@@ -244,7 +244,7 @@ class Normalisation:
         elif self.interactions == "Quartic":
             self.a1 = file["param"]["interactions"]["a1"][...]
             self.a2 = file["param"]["interactions"]["a2"][...]
-        elif self.interactions == "QuadraticGradient":
+        elif self.interactions == "QuarticGradient":
             self.k2 = file["param"]["interactions"]["k2"][...]
             self.k4 = file["param"]["interactions"]["k4"][...]
         elif self.interactions == "LongRange":
@@ -306,7 +306,7 @@ class Normalisation:
         elif self.interactions == "Quartic":
             ret["a1"] = self.a1
             ret["a2"] = self.a2
-        elif self.interactions == "QuadraticGradient":
+        elif self.interactions == "QuarticGradient":
             ret["k2"] = self.k2
             ret["k4"] = self.k4
         elif self.interactions == "LongRange":

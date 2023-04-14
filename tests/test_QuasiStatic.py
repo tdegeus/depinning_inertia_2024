@@ -250,18 +250,40 @@ class MyGlobalTests(unittest.TestCase):
         2d system
         """
 
-        QuasiStatic.cli_generate(
-            ["--dev", "--eta", 1, "--shape", 10, 10, "-n", 2, dirname, "--kframe", 1 / 100]
-        )
-        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname])
-        QuasiStatic.cli_run(["--dev", "-n", 300, dirname / idname])
-        QuasiStatic.cli_run(["--dev", "-n", 600, dirname / idname2])
-        QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, dirname / idname, dirname / idname2])
-
         workdir = dirname / "2d"
-        Trigger.cli_generate(["--dev", "-o", workdir, infoname])
-        Trigger.cli_run(["--dev", workdir / idname])
-        shutil.rmtree(workdir)
+        iname = "EnsembleInfo.h5"
+        qdir = workdir / "QuasiStatic"
+        opts = ["--dev", "--eta", 1, "-n", 2, qdir]
+        QuasiStatic.cli_generate(opts + ["--shape", 10, 10, "--kframe", 1 / 100])
+        QuasiStatic.cli_run(["--dev", "-n", 300, qdir / idname])
+        QuasiStatic.cli_run(["--dev", "-n", 300, qdir / idname])
+        QuasiStatic.cli_run(["--dev", "-n", 600, qdir / idname2])
+        QuasiStatic.cli_ensembleinfo(["--dev", "-o", qdir / iname, qdir / idname, qdir / idname2])
+
+        tdir = workdir / "Trigger"
+        Trigger.cli_generate(["--dev", "-o", tdir, qdir / iname])
+        Trigger.cli_run(["--dev", tdir / idname])
+        shutil.rmtree(qdir)
+
+    def test_quarticgradient(self):
+        """
+        QuarticGradient
+        """
+
+        workdir = dirname / "quadratic_gradient"
+        iname = "EnsembleInfo.h5"
+        qdir = workdir / "QuasiStatic"
+        opts = ["--dev", "--eta", 1, "-n", 2, qdir, "--size", 50, "--kframe", 1 / 50]
+        QuasiStatic.cli_generate(opts + ["--quarticgradient", 1, 1])
+        QuasiStatic.cli_run(["--dev", "-n", 300, qdir / idname])
+        QuasiStatic.cli_run(["--dev", "-n", 300, qdir / idname])
+        QuasiStatic.cli_run(["--dev", "-n", 600, qdir / idname2])
+        QuasiStatic.cli_ensembleinfo(["--dev", "-o", qdir / iname, qdir / idname, qdir / idname2])
+
+        tdir = workdir / "Trigger"
+        Trigger.cli_generate(["--dev", "-o", tdir, qdir / iname])
+        Trigger.cli_run(["--dev", tdir / idname])
+        shutil.rmtree(qdir)
 
 
 if __name__ == "__main__":
