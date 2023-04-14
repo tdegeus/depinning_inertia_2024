@@ -188,7 +188,7 @@ def cli_run(cli_args=None):
             pbar.refresh()
 
             S = np.sum(system.chunk.index_at_align - i_n)
-            T = system.quasistaticActivityLast() - inc
+            T = system.quasistaticActivityLast - inc
             f_frame = np.mean(system.f_frame)
 
             if args.check is not None:

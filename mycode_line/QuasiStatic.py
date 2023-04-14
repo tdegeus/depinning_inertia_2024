@@ -1026,7 +1026,7 @@ def cli_run(cli_args=None):
         if "QuasiStatic" not in file:
             ret = system.minimise()
             assert ret == 0
-            system.t = 0.0
+            system.inc = 0
 
             file.create_group("/QuasiStatic/u").create_dataset("0", data=system.u)
             root = file["/QuasiStatic"]
