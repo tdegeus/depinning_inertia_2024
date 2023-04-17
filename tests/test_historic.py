@@ -63,6 +63,8 @@ class MyTests(unittest.TestCase):
         for key in [
             "/lookup/uuid",
             "/meta/QuasiStatic_EnsembleInfo",
+            "/lookup/dynamics/index",
+            "/lookup/dynamics/value",
             "/lookup/version/value",
             "/lookup/dependencies/index",
             "/lookup/dependencies/value",
