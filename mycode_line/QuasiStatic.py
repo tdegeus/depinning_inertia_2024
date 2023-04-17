@@ -8,6 +8,8 @@ import inspect
 import os
 import pathlib
 import re
+import shutil
+import tempfile
 import textwrap
 import uuid
 
@@ -33,7 +35,7 @@ from . import tools
 from ._version import version
 
 entry_points = dict(
-    cli_checkdata="QuasiStatic_CheckData",
+    cli_updatedata="QuasiStatic_UpdateData",
     cli_ensembleinfo="QuasiStatic_EnsembleInfo",
     cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
@@ -55,11 +57,181 @@ file_defaults = dict(
     cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning.h5",
 )
 
+data_version = "2.0"
 
-def cli_checkdata(cli_args=None):
+
+def _updatedata_fastload(src: h5py.File, dst: h5py.File, shape: list[int], uid: str):
+    dst["/param/data_version"] = data_version
+    metapath = "/meta/" + entry_points["cli_run"]
+    if metapath not in src:
+        create_check_meta(dst, metapath, dev=True)
+        dst[metapath].attrs["uuid"] = uid
+    else:
+        assert src[metapath].attrs["uuid"] == uid
+
+    root = "/QuasiStatic"
+    for s in sorted([int(i) for i in src["/QuasiStatic"]]):
+        if s == 0:
+            cp = True
+        elif f"{root}/{s - 1:d}/index" not in src:
+            cp = True
+        elif np.any(src[f"{root}/{s:d}/index"][...] == src[f"{root}/{s - 1:d}/index"])[...]:
+            cp = False
+        else:
+            cp = True
+
+        if cp:
+            for key in ["state", "value", "index"]:
+                n = f"{root}/{s:d}/{key}"
+                dst[n] = src[f"{root}/{s:d}/{key}"][...].reshape(shape)
+        else:
+            dst[f"{root}/{s:d}"] = dst[f"{root}/{s - 1:d}"]
+
+
+def _updatedata_1_0(src: h5py.File, dst: h5py.File):
+    paths = g5.getdatapaths(src)
+    rename = {path: path for path in paths}
+    rename["/param/normalisation/shape"] = "/param/shape"
+    remove = [
+        "/param/potentials/initseq",
+        "/param/potentials/initstate",
+        "/param/normalisation/N",
+        "/param/dynamics",
+        "/param/data_version",
+    ]
+
+    for path in paths:
+        # renaming
+        for r in [
+            re.sub(r"(/QuasiStatic/)(x/)([0-9]*)", r"\1u/\3", path),
+        ]:
+            if path != r:
+                rename[path] = r
+        # remove
+        if re.match(r"(.*)(/)(initstate)(.*)", path):
+            s = src[path][...].ravel()
+            assert np.all(s == np.arange(s.size))
+            remove.append(path)
+        if re.match(r"(.*)(/)(initseq)(.*)", path):
+            remove.append(path)
+            s = src[path][...].ravel()
+            assert np.all(s == np.zeros_like(s))
+
+    if "/param/dynamics" in src:
+        if src["/param/dynamics"].asstr()[...] == "nopassing":
+            remove.append("/param/m")
+
+    for path in remove:
+        paths.remove(path)
+
+    new_paths = [rename[path] for path in paths]
+    g5.copy(src, dst, paths, new_paths, expand_soft=False)
+    dst["/param/data_version"] = data_version
+
+
+def _updatedata_pre_0_0(src: h5py.File, dst: h5py.File):
+    paths = g5.getdatapaths(src)
+    N = src["param"]["xyield"]["initstate"].size
+    is2d = "width" in src["param"]
+    width = None if not is2d else src["param"]["width"][...]
+    shape = [N] if not is2d else [int(N / width), width]
+    dst["/param/shape"] = shape
+    dst["/param/data_version"] = data_version
+
+    rename = {path: path for path in paths}
+    reshape = {}
+    remove = []
+
+    for path in paths:
+        # renaming
+        for r in [
+            re.sub(r"(.*)(/)(xyield)(/)(.*)", r"\1\2potentials\4\5", path),
+            re.sub(r"(.*)(/)(x)([/|_|$])(.*)", r"\1\2u\4\5", path),
+            re.sub(r"(.*)(/[[fk]_]?)(neighbours)(.*)", r"\1\2interactions\4", path),
+            re.sub(r"(/QuasiStatic/)(x/)([0-9]*)", r"\1u/\3", path),
+        ]:
+            if path != r:
+                rename[path] = r
+        # reshaping to 2d
+        if is2d:
+            for r in [
+                re.sub(r"(.*)(/)(x)([/])(.*)", r"\1\2u\4\5", path),
+                re.sub(r"(.*)(/)(f[_]?\w*)([/])(.*)", r"\1\2\3\4\5", path),
+            ]:
+                if path != r:
+                    reshape[path] = shape
+        # remove
+        if re.match(r"(.*)(/)(nchunk)(.*)", path):
+            remove.append(path)
+        if re.match(r"(.*)(/)(initstate)(.*)", path):
+            s = src[path][...].ravel()
+            assert np.all(s == np.arange(s.size))
+            remove.append(path)
+        if re.match(r"(.*)(/)(initseq)(.*)", path):
+            remove.append(path)
+            s = src[path][...].ravel()
+            assert np.all(s == np.zeros_like(s))
+
+    if is2d:
+        remove.append("/param/width")
+
+    rename["/param/xyield/dx"] = "/param/potentials/du"
+    rename["/param/normalisation/x"] = "/param/normalisation/u"
+    remove.append("/param/normalisation/N")
+
+    if "k4" in src["param"]:
+        rename["/param/k4"] = "/param/interactions/k2"
+        rename["/param/k4"] = "/param/interactions/k4"
+        dst["/param/interactions/type"] = "QuarticGradient"
+    elif "a1" in src["param"]:
+        rename["/param/a1"] = "/param/interactions/a1"
+        rename["/param/a2"] = "/param/interactions/a2"
+        dst["/param/interactions/type"] = "Quartic"
+    elif "alpha" in src["param"]:
+        rename["/param/k_neighbours"] = "/param/interactions/k"
+        rename["/param/alpha"] = "/param/interactions/alpha"
+        dst["/param/interactions/type"] = "LongRange"
+    else:
+        rename["/param/k_neighbours"] = "/param/interactions/k"
+        dst["/param/interactions/type"] = "Laplace"
+
+    if "/param/potential/name" in src:
+        rename["/param/potential/name"] = "/param/potentials/type"
+    elif "potential" in src["param"]:
+        rename["/param/potential"] = "/param/potentials/type"
+    else:
+        dst["/param/potentials/type"] = "Cuspy"
+
+    if "kappa" in src["param"]:
+        rename["/param/kappa"] = "/param/potential/kappa"
+
+    m = f"/meta/{entry_points['cli_run']}"
+    if m in src:
+        if "dynamics" in src[m].attrs:
+            if src[m].attrs["dynamics"] == "nopassing":
+                remove.append("/param/m")
+
+    for path in remove:
+        paths.remove(path)
+
+    for path in reshape:
+        paths.remove(path)
+
+    new_paths = [rename[path] for path in paths]
+    g5.copy(src, dst, paths, new_paths, expand_soft=False)
+    if f"/meta/{entry_points['cli_run']}" in dst:
+        del dst[f"/meta/{entry_points['cli_run']}"].attrs["dynamics"]
+
+    if dst["/param/potentials/type"].asstr()[...] == "Cusp":
+        dst["/param/potentials/type"][...] = "Cuspy"
+
+    for path in reshape:
+        dst[rename[path]] = src[path][...].reshape(shape)
+
+
+def cli_updatedata(cli_args=None):
     """
-    Check the version of the data, and list the required changes.
-    Does not check all field of derived data (e.g. EnsembleInfo).
+    Update the data to the current version.
     """
 
     class MyFmt(
@@ -72,92 +244,44 @@ def cli_checkdata(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-
-    # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
+    parser.add_argument("--no-bak", action="store_true", help="Copy file for backup")
     parser.add_argument("-v", "--version", action="version", version=version)
-
-    # input file
-    parser.add_argument("file", type=str, help="Simulation file (read only)")
-
+    parser.add_argument("file", type=str, help="Data file (overwritten)")
+    parser.add_argument("fastload", type=str, nargs="?", help="Fastload (overwritten)")
     args = tools._parse(parser, cli_args)
-    assert os.path.isfile(args.file)
-    rename = {}
-    reshape = {}
-    remove = []
-    add = []
 
-    with h5py.File(args.file) as src:
-        if "data_version" not in src["param"]:
-            paths = g5.getdatapaths(src, fold=["/QuasiStatic/x"])
-            N = src["param"]["xyield"]["initstate"].size
-            is2d = "width" in src["param"]
-            width = None if not is2d else src["param"]["width"][...]
-            shape = [N] if not is2d else [int(N / width), width]
-            shape = "[" + ", ".join([str(s) for s in shape]) + "]"
-            add.append(f"/param/normalisation/shape = {shape}")
+    files = [args.file]
+    if args.fastload is not None:
+        files.append(args.fastload)
 
-            for path in paths:
-                # renaming
-                for r in [
-                    re.sub(r"(.*)(/)(xyield)(/)(.*)", r"\1\2potential\4\5", path),
-                    re.sub(r"(.*)(/)(x)([/|_|$])(.*)", r"\1\2u\4\5", path),
-                    re.sub(r"(.*)(/[[fk]_]?)(neighbours)(.*)", r"\1\2interactions\4", path),
-                ]:
-                    if path != r:
-                        rename[path] = r
-                # reshaping to 2d
-                if is2d:
-                    for r in [
-                        re.sub(r"(.*)(/)(x)([/])(.*)", r"\1\2u\4\5", path),
-                        re.sub(r"(.*)(/)(f[_]?\w*)([/])(.*)", r"\1\2\3\4\5", path),
-                    ]:
-                        if path != r:
-                            reshape[path] = shape
-                # removing nchunk
-                if re.match(r"(.*)(/)(nchunk)(.*)", path):
-                    remove.append(path)
+    assert all([os.path.isfile(f) for f in files])
+    if not args.no_bak:
+        assert not any([os.path.isfile(f + ".bak") for f in files])
+        for f in files:
+            shutil.copy2(f, f + ".bak")
 
-            if "k4" in src["param"]:
-                rename["/param/k4"] = ["/param/interactions/k2"]
-                rename["/param/k4"] = ["/param/interactions/k4"]
-                add.append('/param/interactions/type = "QuarticGradient"')
-            elif "a1" in src["param"]:
-                rename["/param/a1"] = ["/param/interactions/a1"]
-                rename["/param/a2"] = ["/param/interactions/a2"]
-                add.append('/param/interactions/type = "Quartic"')
-            elif "alpha" in src["param"]:
-                rename["/param/k_neighbours"] = ["/param/interactions/k"]
-                rename["/param/alpha"] = ["/param/interactions/alpha"]
-                add.append('/param/interactions/type = "LongRange"')
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir = pathlib.Path(temp_dir)
+
+        with h5py.File(args.file) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
+            if "data_version" not in src["param"]:
+                _updatedata_pre_0_0(src, dst)
+            elif src["/param/data_version"].asstr()[...] == "1.0":
+                _updatedata_1_0(src, dst)
             else:
-                rename["/param/k_neighbours"] = ["/param/interactions/k"]
-                add.append('/param/interactions/type = "Laplace"')
+                assert src["/param/data_version"].asstr()[...] == data_version
 
-            if "potential" in src["param"]:
-                rename["/param/potential"] = ["/param/potential/type"]
-            else:
-                add.append('/param/potential/type = "Cuspy"')
+        shutil.copy2(temp_dir / "my.h5", args.file)
 
-            if "kappa" in src["param"]:
-                rename["/param/kappa"] = "/param/potential/kappa"
+        if args.fastload is not None:
+            with h5py.File(args.file) as src:
+                shape = src["/param/shape"][...]
+                uid = src[f"/meta/{entry_points['cli_run']}"].attrs["uuid"]
+            with h5py.File(args.fastload) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
+                _updatedata_fastload(src, dst, shape, uid)
 
-            m = f"/meta/{entry_points['cli_run']}"
-            if m in src:
-                if "dynamics" in src[m].attrs:
-                    rename[f"{m}:dynamics"] = "/param/dynamics"
-
-    ret = []
-    for path in rename:
-        ret.append(f"Rename {path} -> {rename[path]}")
-    for path in reshape:
-        ret.append(f"Reshape {path} -> {reshape[path]}")
-    for path in remove:
-        ret.append(f"Remove {path}")
-    for path in add:
-        ret.append(f"Add {path}")
-
-    print("\n".join(sorted(ret)))
+        shutil.copy2(temp_dir / "my.h5", args.fastload)
 
 
 def dependencies() -> list[str]:
@@ -229,15 +353,18 @@ class Normalisation:
         self.mu = file["param"]["mu"][...]
         self.k_frame = file["param"]["k_frame"][...]
         self.eta = file["param"]["eta"][...]
-        self.m = file["param"]["m"][...]
-        self.N = file["param"]["normalisation"]["N"][...]
-        self.shape = file["param"]["normalisation"]["shape"][...]
+        if "m" in file["param"]:
+            self.m = file["param"]["m"][...]
+        else:
+            self.m = 0
+        self.shape = file["param"]["shape"][...]
+        self.N = np.prod(self.shape)
         self.dt = file["param"]["dt"][...]
         self.u = 1
         self.seed = None
         self.potential = str(file["/param/potentials/type"].asstr()[...])
         self.interactions = str(file["/param/interactions/type"].asstr()[...])
-        self.dynamics = str(file["/param/dynamics"].asstr()[...])
+        self.dynamics = "normal" if "m" in file["param"] else "overdamped"
 
         if self.interactions == "Laplace":
             self.k_interactions = file["param"]["interactions"]["k"][...]
@@ -277,7 +404,7 @@ class Normalisation:
             raise ValueError("Unknown shape")
 
         extra = []
-        if self.dynamics == "nopassing":
+        if self.dynamics == "overdamped":
             extra.append("Nopassing")
         self.system = "_".join([self.system, "System", self.potential, self.interactions] + extra)
 
@@ -325,11 +452,9 @@ def _common_param(file: h5py.File) -> dict:
     """
 
     file_yield = file["param"]["potentials"]
-    assert np.all(file_yield["initstate"][...].ravel() == np.arange(file_yield["initstate"].size))
-    assert np.all(file_yield["initseq"][...].ravel() == np.zeros(file_yield["initseq"].size))
 
     ret = {
-        "shape": file_yield["initstate"].shape,
+        "shape": file["param"]["shape"][...],
         "offset": file_yield["xoffset"][...],
         "seed": file["realisation"]["seed"][...],
     }
@@ -752,7 +877,7 @@ def generate(
     potential: dict = {"type": "Cuspy", "mu": 1.0},
     distribution: str = "weibull",
     interactions: dict = {"type": "Laplace", "k": 1.0},
-    nopassing: bool = False,
+    overdamped: bool = False,
 ):
     """
     Generate a simulation file.
@@ -766,10 +891,9 @@ def generate(
     :param potential: Select potential.
     :param distribution: Distribution of potentials.
     :param interactions: Select interactions.
-    :param nopassing: Run overdamped dynamics with no passing rule.
+    :param overdamped: Run overdamped dynamics (no passing rule if quasi-static).
     """
 
-    N = np.prod(shape)
     L = min(shape)
 
     if eta is None and dt is None:
@@ -798,15 +922,13 @@ def generate(
         raise ValueError(f"Unknown interactions: {interactions['type']}")
 
     file["/realisation/seed"] = seed
-    file["/param/m"] = 1.0
+    if not overdamped:
+        file["/param/m"] = 1.0
     file["/param/eta"] = eta
     file["/param/mu"] = potential["mu"]
     file["/param/k_frame"] = 1.0 / L**2
     file["/param/dt"] = dt
-    file["/param/dynamics"] = "normal"
     file["/param/potentials/type"] = potential["type"]
-    file["/param/potentials/initstate"] = np.arange(N).reshape(shape).astype(np.int64)
-    file["/param/potentials/initseq"] = np.zeros(shape, dtype=np.int64)
     file["/param/potentials/xoffset"] = -100
     file["/param/potentials/du"] = 1e-3
 
@@ -825,13 +947,9 @@ def generate(
     if k_frame is not None:
         file["/param/k_frame"][...] = k_frame
 
-    if nopassing:
-        file["/param/dynamics"][...] = "nopassing"
-
-    file["/param/normalisation/N"] = N
-    file["/param/normalisation/shape"] = shape
+    file["/param/shape"] = shape
     file["/param/normalisation/u"] = 1
-    file["/param/data_version"] = "1.0"
+    file["/param/data_version"] = data_version
 
 
 def _generate_cli_options(parser):
@@ -844,6 +962,7 @@ def _generate_cli_options(parser):
 
     parser.add_argument("--dt", type=float, help="Time-step")
     parser.add_argument("--eta", type=float, help="Damping coefficient")
+    parser.add_argument("--overdamped", action="store_true", help="Overdamped dynamics")
     parser.add_argument(
         "--nstep", default=20000, help="#load-steps to run", type=lambda arg: int(float(arg))
     )
@@ -934,10 +1053,7 @@ def cli_generate(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     _generate_cli_options(parser)
-    parser.add_argument("--nopassing", action="store_true", help="Overdamped dynamics")
-
     args = tools._parse(parser, cli_args)
-    assert args.nopassing or args.eta is not None
 
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -954,21 +1070,14 @@ def cli_generate(cli_args=None):
             generate(
                 file=file,
                 seed=seed,
-                nopassing=args.nopassing,
                 **opts,
             )
 
     executable = entry_points["cli_run"]
-
-    opts = []
-    if args.nopassing:
-        opts += ["--nopassing"]
-    opts = " ".join(opts)
-    if len(opts) > 0:
-        opts = " " + opts
-
-    commands = [f"{executable}{opts} --nstep {args.nstep:d} {file}" for file in files]
-    shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
+    commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
+    info = [f"{entry_points['cli_ensembleinfo']} id=[0-9]*.h5"]
+    shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
+    shelephant.yaml.dump(outdir / "commands_info.yaml", info, force=True)
 
 
 def cli_run(cli_args=None):
@@ -1010,9 +1119,7 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "a") as file, h5py.File(filename2fastload(args.file), "a") as fload:
         system = allocate_system(file)
-        meta = dict(dynamics="normal", loading="event-driven")
-        if isinstance(system, Line1d_System_Cuspy_Laplace_Nopassing):
-            meta["dynamics"] = "nopassing"
+        meta = dict(loading="event-driven")
 
         if args.fixed_step:
             meta["loading"] = "fixed-step"
@@ -1391,7 +1498,6 @@ def cli_ensembleinfo(cli_args=None):
     info = dict(
         filepath=[os.path.relpath(i, os.path.dirname(args.output)) for i in args.files],
         seed=[],
-        dynamics=[],
         uuid=[],
         version=[],
     )
@@ -1432,7 +1538,7 @@ def cli_ensembleinfo(cli_args=None):
                 info["seed"].append(seed)
 
                 meta = file[f"/meta/{entry_points['cli_run']}"]
-                for key in ["uuid", "version", "dynamics"]:
+                for key in ["uuid", "version"]:
                     info[key].append(meta.attrs[key])
 
                 if "step" not in out:
@@ -1504,7 +1610,6 @@ def cli_ensembleinfo(cli_args=None):
         output["/lookup/filepath"] = info["filepath"]
         output["/lookup/seed"] = info["seed"]
         output["/lookup/uuid"] = info["uuid"]
-        tools.h5py_save_unique(info["dynamics"], output, "/lookup/dynamics", asstr=True)
         tools.h5py_save_unique(info["version"], output, "/lookup/version", asstr=True)
         output["files"] = output["/lookup/filepath"]
 
@@ -2028,10 +2133,8 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
 
         for f in tqdm.tqdm(np.unique(file)):
             with h5py.File(os.path.join(basedir, paths[f])) as source:
-                system = allocate_system(source)
-
                 for s in tqdm.tqdm(np.sort(step[file == f])):
-                    u = source["QuasiStatic"]["u"][str(s)][...][system.organisation]
+                    u = source[f"/QuasiStatic/{s:d}"][...]
                     u -= u.mean()
 
                     if len(shape) == 2:

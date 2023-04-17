@@ -321,7 +321,7 @@ def cli_ensembleinfo(cli_args=None):
                     source.append(filename)
 
                 if i == 0:
-                    output["N"] = file["/param/potentials/initseq"].size
+                    output["N"] = np.prod(file["/param/shape"][...])
 
                 if len(ignore) > 0:
                     print(f"{filepath} ignoring: " + ", ".join(_to_str_ranges(ignore)))
