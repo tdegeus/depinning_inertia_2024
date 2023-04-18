@@ -4,7 +4,7 @@ dependencies:
 - autodocsumm
 - click
 - enstat >=0.8.0
-- goosehdf5 >=0.21.0
+- goosehdf5 >=0.22.0
 - goosempl
 - gooseslurm
 - h5py

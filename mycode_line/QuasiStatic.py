@@ -132,7 +132,7 @@ def _updatedata_1_0(src: h5py.File, dst: h5py.File):
         paths.remove(path)
 
     new_paths = [rename[path] for path in paths]
-    g5.copy(src, dst, paths, new_paths, expand_soft=False)
+    g5.copy(src, dst, paths, new_paths, shallow=True)
     dst["/param/data_version"] = data_version
 
 
@@ -236,7 +236,7 @@ def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
         paths.remove(path)
 
     new_paths = [rename[path] for path in paths]
-    g5.copy(src, dst, paths, new_paths, expand_soft=False)
+    g5.copy(src, dst, paths, new_paths, shallow=True)
     if f"/meta/{entry_points['cli_run']}" in dst:
         del dst[f"/meta/{entry_points['cli_run']}"].attrs["dynamics"]
 
