@@ -298,8 +298,7 @@ def cli_updatedata(cli_args=None):
                 uid = src[f"/meta/{entry_points['cli_run']}"].attrs["uuid"]
             with h5py.File(args.fastload) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
                 _updatedata_fastload(src, dst, shape, uid)
-
-        shutil.copy2(temp_dir / "my.h5", args.fastload)
+            shutil.copy2(temp_dir / "my.h5", args.fastload)
 
 
 def dependencies() -> list[str]:
