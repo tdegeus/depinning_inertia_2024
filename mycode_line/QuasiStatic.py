@@ -61,7 +61,15 @@ data_version = "2.0"
 
 
 def _updatedata_fastload(src: h5py.File, dst: h5py.File, shape: list[int], uid: str):
+    """
+    Update fastload files written by any version.
+
+    This may reduce the stored data as the current rule of thumb is to store only steps that
+    completely renew the stored chunk.
+    """
+
     dst["/param/data_version"] = data_version
+
     metapath = "/meta/" + entry_points["cli_run"]
     if metapath not in src:
         create_check_meta(dst, metapath, dev=True)
@@ -70,17 +78,10 @@ def _updatedata_fastload(src: h5py.File, dst: h5py.File, shape: list[int], uid: 
         assert src[metapath].attrs["uuid"] == uid
 
     root = "/QuasiStatic"
+    start = np.zeros(shape, dtype=np.int64)
     for s in sorted([int(i) for i in src["/QuasiStatic"]]):
-        if s == 0:
-            cp = True
-        elif f"{root}/{s - 1:d}/index" not in src:
-            cp = True
-        elif np.any(src[f"{root}/{s:d}/index"][...] == src[f"{root}/{s - 1:d}/index"])[...]:
-            cp = False
-        else:
-            cp = True
-
-        if cp:
+        if np.all(start == 0) or np.all(src[f"{root}/{s:d}/index"][...] > start):
+            start = src[f"{root}/{s:d}/index"][...]
             for key in ["state", "value", "index"]:
                 n = f"{root}/{s:d}/{key}"
                 dst[n] = src[f"{root}/{s:d}/{key}"][...].reshape(shape)
@@ -89,6 +90,12 @@ def _updatedata_fastload(src: h5py.File, dst: h5py.File, shape: list[int], uid: 
 
 
 def _updatedata_1_0(src: h5py.File, dst: h5py.File):
+    """
+    Update from data_version == 1.0
+
+    Remove initstate, initseq, dynamics (now distinguished by removing m).
+    """
+
     paths = g5.getdatapaths(src)
     rename = {path: path for path in paths}
     rename["/param/normalisation/shape"] = "/param/shape"
@@ -129,12 +136,23 @@ def _updatedata_1_0(src: h5py.File, dst: h5py.File):
     dst["/param/data_version"] = data_version
 
 
-def _updatedata_pre_0_0(src: h5py.File, dst: h5py.File):
+def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
+    """
+    Update from data_version < 1.0 (at which no data version was stored).
+
+    -   Rename x* -> u*, xyield -> potentials, *neighbours -> *interactions.
+    -   Rename parameters for interactions.
+    -   Reshape u to 2d if necessary.
+    -   Remove initstate, initseq, nchunk, dynamics (now distinguished by removing m).
+    """
+
     paths = g5.getdatapaths(src)
-    N = src["param"]["xyield"]["initstate"].size
+
+    size = src["param"]["xyield"]["initstate"].size
     is2d = "width" in src["param"]
     width = None if not is2d else src["param"]["width"][...]
-    shape = [N] if not is2d else [int(N / width), width]
+    shape = [size] if not is2d else [int(size / width), width]
+
     dst["/param/shape"] = shape
     dst["/param/data_version"] = data_version
 
@@ -231,7 +249,7 @@ def _updatedata_pre_0_0(src: h5py.File, dst: h5py.File):
 
 def cli_updatedata(cli_args=None):
     """
-    Update the data to the current version.
+    Update the data from any version to the current version.
     """
 
     class MyFmt(
@@ -266,7 +284,7 @@ def cli_updatedata(cli_args=None):
 
         with h5py.File(args.file) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
             if "data_version" not in src["param"]:
-                _updatedata_pre_0_0(src, dst)
+                _updatedata_pre_1_0(src, dst)
             elif src["/param/data_version"].asstr()[...] == "1.0":
                 _updatedata_1_0(src, dst)
             else:
@@ -482,9 +500,12 @@ def _common_param(file: h5py.File) -> dict:
 
 
 class SystemExtra:
-    """ """
+    """
+    Base class for extra system methods and parameters.
+    """
 
     def __init__(self, file: h5py.File):
+        assert file["/param/data_version"].asstr()[...] == data_version
         self.normalisation = Normalisation(file)
 
     def chunk_goto(
@@ -567,12 +588,7 @@ class SystemExtra:
 
 class Line1d_System_Cuspy_Laplace(model.System_Cuspy_Laplace, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Cuspy_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
@@ -587,12 +603,7 @@ class Line1d_System_Cuspy_Laplace(model.System_Cuspy_Laplace, SystemExtra):
 
 class Line1d_System_Cuspy_Laplace_Nopassing(model.System_Cuspy_Laplace_Nopassing, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Cuspy_Laplace_Nopassing.__init__(
             self,
             m=file["param"]["m"][...],
@@ -607,12 +618,7 @@ class Line1d_System_Cuspy_Laplace_Nopassing(model.System_Cuspy_Laplace_Nopassing
 
 class Line1d_System_SemiSmooth_Laplace(model.System_SemiSmooth_Laplace, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_SemiSmooth_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
@@ -628,12 +634,7 @@ class Line1d_System_SemiSmooth_Laplace(model.System_SemiSmooth_Laplace, SystemEx
 
 class Line1d_System_Smooth_Laplace(model.System_Smooth_Laplace, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Smooth_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
@@ -648,12 +649,7 @@ class Line1d_System_Smooth_Laplace(model.System_Smooth_Laplace, SystemExtra):
 
 class Line1d_System_Cuspy_LongRange(model.System_Cuspy_LongRange, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Cuspy_LongRange.__init__(
             self,
             m=file["param"]["m"][...],
@@ -669,12 +665,7 @@ class Line1d_System_Cuspy_LongRange(model.System_Cuspy_LongRange, SystemExtra):
 
 class Line1d_System_Cuspy_QuarticGradient(model.System_Cuspy_QuarticGradient, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Cuspy_QuarticGradient.__init__(
             self,
             m=file["param"]["m"][...],
@@ -690,12 +681,7 @@ class Line1d_System_Cuspy_QuarticGradient(model.System_Cuspy_QuarticGradient, Sy
 
 class Line1d_System_Cuspy_Quartic(model.System_Cuspy_Quartic, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Cuspy_Quartic.__init__(
             self,
             m=file["param"]["m"][...],
@@ -713,12 +699,7 @@ class Line1d_System_Cuspy_Laplace_RandomForcing(
     model.System_Cuspy_Laplace_RandomForcing, SystemExtra
 ):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         model.System_Cuspy_Laplace_RandomForcing.__init__(
             self,
             m=file["param"]["m"][...],
@@ -738,12 +719,7 @@ class Line1d_System_Cuspy_Laplace_RandomForcing(
 
 class Line2d_System_Cuspy_Laplace(fsb.Line2d.System_Cuspy_Laplace, SystemExtra):
     def __init__(self, file: h5py.File):
-        """
-        Initialise system.
-        """
-
         SystemExtra.__init__(self, file)
-
         fsb.Line2d.System_Cuspy_Laplace.__init__(
             self,
             m=file["param"]["m"][...],
@@ -758,7 +734,7 @@ class Line2d_System_Cuspy_Laplace(fsb.Line2d.System_Cuspy_Laplace, SystemExtra):
 
 def allocate_system(file: h5py.File):
     """
-    Allocate system.
+    Allocate the proper system based on the parameters in the file.
     """
 
     norm = Normalisation(file)
@@ -790,16 +766,6 @@ def allocate_system(file: h5py.File):
     raise ValueError(f"Unknown system: {norm.system}")
 
 
-def _compare_versions(ver, cmpver):
-    if tag.greater_equal(cmpver, "6.0"):
-        if tag.greater_equal(ver, cmpver):
-            return True
-    else:
-        return tag.equal(ver, cmpver)
-
-    return False
-
-
 def create_check_meta(
     file: h5py.File = None,
     path: str = None,
@@ -807,17 +773,13 @@ def create_check_meta(
     **kwargs,
 ) -> h5py.Group:
     """
-    Create or read/check metadata. This function asserts that:
+    Create, update, or read/check metadata. This function creates metadata as attributes to a group
+    ``path`` as follows::
 
-    -   There are no uncommitted changes.
-    -   There are no version changes.
-
-    It create metadata as attributes to a group ``path`` as follows::
-
-        "uuid": A unique identifier that can be used to distinguish simulations if needed.
-        "version": The current version of this code (see below).
-        "dependencies": The current version of all relevant dependencies (see below).
-        "compiler": Compiler information.
+        "uuid": A unique identifier that can be used to distinguish simulations.
+        "version": The current version of this code (updated).
+        "dependencies": The current version of all relevant dependencies (updated).
+        "compiler": Compiler information (updated).
 
     :param file: HDF5 archive.
     :param path: Path in ``file`` to store/read metadata.
@@ -856,7 +818,7 @@ def create_check_meta(
 
     meta = file[path]
     if file.mode in ["r+", "w", "a"]:
-        assert dev or _compare_versions(version, meta.attrs["version"])
+        assert dev or tag.greater_equal(version, meta.attrs["version"])
         assert dev or tag.all_greater_equal(deps, meta.attrs["dependencies"])
         meta.attrs["version"] = version
         meta.attrs["dependencies"] = deps
@@ -883,7 +845,7 @@ def generate(
     Generate a simulation file.
 
     :param file: HDF5 file opened for writing.
-    :param N: System size.
+    :param shape: Shape of the system.
     :param seed: Base seed.
     :param eta: Damping coefficient.
     :param dt: Time step.
@@ -1097,19 +1059,14 @@ def cli_run(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     progname = entry_points[funcname]
 
-    # development options
     parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-v", "--version", action="version", version=version)
-
-    # different loading
     parser.add_argument(
         "--fixed-step",
         action="store_true",
         help="Use a fixed loading-step instead for the event-driven protocol",
     )
-
-    # simulation parameters
     parser.add_argument("-n", "--nstep", type=int, default=5000, help="Total #load-steps to run")
     parser.add_argument("file", type=str, help="Input/output file")
 
@@ -1141,8 +1098,7 @@ def cli_run(cli_args=None):
             fload[metapath].attrs["uuid"] = file[metapath].attrs["uuid"]
 
         if "QuasiStatic" not in file:
-            ret = system.minimise()
-            assert ret == 0
+            system.minimise()
             system.inc = 0
 
             file.create_group("/QuasiStatic/u").create_dataset("0", data=system.u)
@@ -1182,9 +1138,7 @@ def cli_run(cli_args=None):
 
             if kick:
                 inc_n = system.inc
-                ret = system.minimise()
-                assert ret == 0
-
+                system.minimise()
                 niter = system.inc - inc_n
                 pbar.set_description(f"{basename}: step = {step:8d}, niter = {niter:8d}")
                 pbar.refresh()
@@ -1214,7 +1168,7 @@ def cli_run(cli_args=None):
 
 def cli_checkdynamics(cli_args=None):
     """
-    Check the detailed dynamics of a quasi-static step.
+    Write or check the detailed dynamics of a quasi-static step.
     """
 
     class MyFmt(
@@ -1616,7 +1570,16 @@ def cli_ensembleinfo(cli_args=None):
 
 def cli_list_systemspanning(cli_args=None):
     """
-    Write list of jobs to run to get an event map.
+    Write list of jobs to run on system-spanning events.
+    The jobs are written::
+
+        --executable --options --step STEP FILE -o BASENAME_step=STEP.h5
+
+    whereby the following is interpreted from the EnsembleInfo:
+
+    -   ``STEP`` is the step at which the system-spanning event occurred.
+    -   ``FILE`` is the simulation file (with all parameters, and the relevant slip).
+    -   ``BASENAME`` is the basename of the simulation file.
     """
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
@@ -1932,11 +1895,15 @@ def cli_plotstateaftersystemspanning(cli_args=None):
             icol += 1
 
     plt.show()
+    plt.close(fig)
 
 
 def cli_stateaftersystemspanning(cli_args=None):
     """
-    Extract the distribution of P(x), with x the distance to yielding.
+    Extract:
+
+    -   P(x), with x the distance to yielding.
+    -   The height-height correlation.
     """
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
@@ -2244,7 +2211,7 @@ def cli_plot(cli_args=None):
 
 def cli_paraview(cli_args=None):
     """
-    Write states to be viewed in Paraview.
+    Write all steps to be viewed in Paraview.
     """
 
     class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
