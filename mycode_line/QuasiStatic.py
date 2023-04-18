@@ -100,8 +100,6 @@ def _updatedata_1_0(src: h5py.File, dst: h5py.File):
     rename = {path: path for path in paths}
     rename["/param/normalisation/shape"] = "/param/shape"
     remove = [
-        "/param/potentials/initseq",
-        "/param/potentials/initstate",
         "/param/normalisation/N",
         "/param/dynamics",
         "/param/data_version",
