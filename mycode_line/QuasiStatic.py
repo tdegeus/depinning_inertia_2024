@@ -36,6 +36,7 @@ from ._version import version
 
 entry_points = dict(
     cli_updatedata="QuasiStatic_UpdateData",
+    cli_checkdata="QuasiStatic_CheckData",
     cli_ensembleinfo="QuasiStatic_EnsembleInfo",
     cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
@@ -297,6 +298,47 @@ def cli_updatedata(cli_args=None):
             with h5py.File(args.fastload) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
                 _updatedata_fastload(src, dst, shape, uid)
             shutil.copy2(temp_dir / "my.h5", args.fastload)
+
+
+def cli_checkdata(cli_args=None):
+    """
+    Check the data file for data version.
+    Prints the files that have failed. No output is written if all files are ok.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-o", "--output", type=str, help="List files that failed the check (yaml).")
+    parser.add_argument("files", nargs="*", type=str, help="Files (read only)")
+    args = tools._parse(parser, cli_args)
+
+    assert all([os.path.isfile(f) for f in args.files])
+
+    failed = []
+
+    for f in tqdm.tqdm(args.files):
+        with h5py.File(f) as file:
+            if "param" not in file:
+                failed.append(f)
+            elif "data_version" not in file["param"]:
+                failed.append(f)
+            elif file["/param/data_version"].asstr()[...] != data_version:
+                failed.append(f)
+
+    if args.output is not None:
+        shelephant.yaml.dump(args.output, failed)
+
+    if len(failed) > 0:
+        print("\n".join(failed))
 
 
 def dependencies() -> list[str]:
