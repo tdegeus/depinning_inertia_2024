@@ -405,7 +405,7 @@ def cli_generate(cli_args=None):
 
         # I.    Definition of the state
 
-        /Trigger/branches/{ibranch:d}/u/0         # particle positions [N]
+        /Trigger/branches/{ibranch:d}/u/0         # particle positions [shape]
         /Trigger/branches/{ibranch:d}/u_frame     # frame position per step (*)
         /Trigger/branches/{ibranch:d}/inc         # increment per step (*)
 
@@ -468,7 +468,7 @@ def cli_generate(cli_args=None):
 
         executable = entry_points["cli_run"]
         commands = [f"{executable} {file}" for file in files]
-        shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
+        shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
 
         for filename in tqdm.tqdm(files):
             with h5py.File(basedir / filename) as source, h5py.File(outdir / filename, "w") as dest:
@@ -665,6 +665,9 @@ def cli_merge(cli_args=None):
 def cli_merge_batch(cli_args=None):
     """
     Run :py:func:`cli_merge` on a batch of files.
+    The usage is::
+
+        :py:func:`cli_merge_batch` -o delta-f=x /path/to/old/delta-f=x/id*h5
     """
 
     class MyFmt(
