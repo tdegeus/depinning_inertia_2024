@@ -334,6 +334,8 @@ def cli_checkdata(cli_args=None):
             elif file["/param/data_version"].asstr()[...] != data_version:
                 failed.append(f)
 
+    failed = sorted(failed)
+
     if args.output is not None:
         shelephant.yaml.dump(args.output, failed)
 
