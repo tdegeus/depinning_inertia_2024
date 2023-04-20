@@ -166,6 +166,7 @@ def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
             re.sub(r"(.*)(/)(x)([/|_|$])(.*)", r"\1\2u\4\5", path),
             re.sub(r"(.*)(/[[fk]_]?)(neighbours)(.*)", r"\1\2interactions\4", path),
             re.sub(r"(/QuasiStatic/)(x/)([0-9]*)", r"\1u/\3", path),
+            re.sub(r"(.*/)(x)($)", r"\1u\3", path),
         ]:
             if path != r:
                 rename[path] = r
@@ -193,7 +194,6 @@ def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
         remove.append("/param/width")
 
     rename["/param/xyield/dx"] = "/param/potentials/du"
-    rename["/param/normalisation/x"] = "/param/normalisation/u"
     remove.append("/param/normalisation/N")
 
     if "k4" in src["param"]:
