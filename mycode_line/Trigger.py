@@ -321,6 +321,7 @@ def cli_ensembleinfo(cli_args=None):
                     source.append(filename)
 
                 if i == 0:
+                    output["shape"] = file["/param/shape"][...]
                     output["N"] = np.prod(file["/param/shape"][...])
 
                 if len(ignore) > 0:
