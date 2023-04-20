@@ -2217,11 +2217,9 @@ def cli_plot(cli_args=None):
         f_frame = out["f_frame"][...]
         ss = steadystate(u_frame, f_frame, kick, A, N)
 
-    opts = {"marker", "."}
-
     fig, axes = gplt.subplots(ncols=2)
 
-    axes[0].plot(u_frame, f_frame, label=r"$f_\text{frame}$", **opts)
+    axes[0].plot(u_frame, f_frame, label=r"$f_\text{frame}$", marker=".")
     axes[0].plot(u_frame[A == N], f_frame[A == N], ls="none", color="r", marker="o")
 
     if ss is not None:
@@ -2241,6 +2239,9 @@ def cli_plot(cli_args=None):
     bin_edges = gplt.histogram_bin_edges(data, bins=args.bins, mode="log")
     P, x = gplt.histogram(data, bins=bin_edges, density=True, return_edges=False)
     axes[1].plot(x, P)
+
+    axes[1].set_xlabel(r"$S$")
+    axes[1].set_ylabel(r"$P(S)$")
 
     if args.output is not None:
         fig.savefig(args.output)
