@@ -373,7 +373,6 @@ def cli_average_systemspanning(cli_args=None):
             if ifile == 0:
                 t_step = file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
                 norm = QuasiStatic.Normalisation(file).asdict()
-                norm.pop("seed")
                 N = norm["N"]
                 dt = norm["dt"]
 

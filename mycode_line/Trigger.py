@@ -321,8 +321,10 @@ def cli_ensembleinfo(cli_args=None):
                     source.append(filename)
 
                 if i == 0:
-                    output["shape"] = file["/param/shape"][...]
-                    output["N"] = np.prod(file["/param/shape"][...])
+                    GooseHDF5.copy(file, output, "/param")
+                    norm = QuasiStatic.Normalisation(file).asdict()
+                    for key, value in norm.items():
+                        output[f"/normalisation/{key}"] = value
 
                 if len(ignore) > 0:
                     print(f"{filepath} ignoring: " + ", ".join(_to_str_ranges(ignore)))

@@ -402,7 +402,6 @@ class Normalisation:
             eta: Damping (float).
             m: Mass (float).
             dynamics: Type of dynamics (str).
-            seed: Base seed (uint64) or uuid (str).
             N: Number of blocks (int).
             shape: Shape of the system (tuple of int).
             dt: Time step of time discretisation.
@@ -420,7 +419,6 @@ class Normalisation:
         self.N = np.prod(self.shape)
         self.dt = file["param"]["dt"][...]
         self.u = 1
-        self.seed = None
         self.potential = str(file["/param/potentials/type"].asstr()[...])
         self.interactions = str(file["/param/interactions/type"].asstr()[...])
         self.dynamics = "normal" if "m" in file["param"] else "overdamped"
@@ -438,9 +436,6 @@ class Normalisation:
             self.alpha = file["param"]["interactions"]["alpha"][...]
         else:
             raise ValueError(f"Unknown interactions: {self.interactions:s}")
-
-        if "realisation" in file:
-            self.seed = file["realisation"]["seed"][...]
 
         if "u" in file["param"]["normalisation"]:
             self.u = file["param"]["normalisation"]["u"][...]
@@ -473,17 +468,17 @@ class Normalisation:
         """
         ret = dict(
             dt=self.dt,
+            dynamics=self.dynamics,
             eta=self.eta,
             f=self.f,
+            interactions=self.interactions,
             k_frame=self.k_frame,
             m=self.m,
             mu=self.mu,
             N=self.N,
-            shape=self.shape,
             potential=self.potential,
-            seed=self.seed,
+            shape=self.shape,
             system=self.system,
-            dynamics=self.dynamics,
             u=self.u,
         )
 
@@ -1508,13 +1503,12 @@ def cli_ensembleinfo(cli_args=None):
 
             with h5py.File(filepath) as file:
                 if i == 0:
+                    g5.copy(file, output, "/param")
                     norm = Normalisation(file).asdict()
-                    seed = norm.pop("seed")
                 else:
                     test = Normalisation(file).asdict()
-                    seed = test.pop("seed")
                     for key in norm:
-                        if key in ["potential", "system", "dynamics"]:
+                        if key in ["interactions", "potential", "system", "dynamics"]:
                             assert str(norm[key]) == str(test[key])
                         elif key == "shape":
                             assert list(norm[key]) == list(test[key])
@@ -1530,7 +1524,7 @@ def cli_ensembleinfo(cli_args=None):
                     file_load = []
                     file_kick = []
 
-                info["seed"].append(seed)
+                info["seed"].append(file["/realisation/seed"][...])
 
                 meta = file[f"/meta/{entry_points['cli_run']}"]
                 for key in ["uuid", "version"]:
@@ -1838,6 +1832,7 @@ def cli_generatefastload(cli_args=None):
 def cli_plotstateaftersystemspanning(cli_args=None):
     """
     Plot state after system-spanning events.
+    Input files: :py:func:`cli_ensembleinfo`, or ?? (TODO)
     """
 
     import GooseMPL as gplt  # noqa: F401
