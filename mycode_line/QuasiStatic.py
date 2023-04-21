@@ -1623,6 +1623,7 @@ def cli_job_rerun(cli_args=None):
     parser.add_argument("--systemspanning", action="store_true", help="System spanning events")
     parser.add_argument("--eventmap", action="store_true", help="Produce event map")
     parser.add_argument("--relaxation", action="store_true", help="Measure relaxation")
+    parser.add_argument("--nsim", type=int, help="Select #simulations randomly")
     parser.add_argument("-e", "--executable", type=str, help="Executable")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -1672,6 +1673,11 @@ def cli_job_rerun(cli_args=None):
             f"{args.executable} --step {s:d} {r} -o {f}_step={s:d}.h5"
             for s, r, f in zip(step, rname, fname)
         ]
+
+    if args.nsim is not None:
+        sorter = np.arange(len(ret))
+        np.random.shuffle(sorter)
+        ret = [ret[i] for i in sorter[: args.nsim]]
 
     shelephant.yaml.dump(args.output, ret, force=True)
 
