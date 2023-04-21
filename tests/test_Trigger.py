@@ -83,6 +83,8 @@ class MyTests(unittest.TestCase):
 
         # run
         Trigger.cli_run(["--dev", tfile])
+        Trigger.cli_run(["--dev", tfile, "--check", 0])
+        Trigger.cli_updatedata(["--dev", tfile])
         Trigger.cli_ensembleinfo(["--dev", "-o", tinfo, tfile])
 
         with h5py.File(tfile, "a") as file:

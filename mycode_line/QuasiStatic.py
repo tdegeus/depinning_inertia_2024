@@ -299,7 +299,7 @@ def cli_updatedata(cli_args=None):
             shutil.copy2(temp_dir / "my.h5", args.fastload)
 
 
-def cli_checkdata(cli_args=None):
+def cli_checkdata(cli_args=None, my_data_version=data_version):
     """
     Check the data file for data version.
     Prints the files that have failed. No output is written if all files are ok.
@@ -330,7 +330,7 @@ def cli_checkdata(cli_args=None):
                 failed.append(f)
             elif "data_version" not in file["param"]:
                 failed.append(f)
-            elif file["/param/data_version"].asstr()[...] != data_version:
+            elif file["/param/data_version"].asstr()[...] != my_data_version:
                 failed.append(f)
 
     failed = sorted(failed)
@@ -540,7 +540,7 @@ class SystemExtra:
     """
 
     def __init__(self, file: h5py.File):
-        assert file["/param/data_version"].asstr()[...] == data_version
+        assert tag.greater_equal(str(file["/param/data_version"].asstr()[...]), data_version)
         self.normalisation = Normalisation(file)
 
     def chunk_goto(

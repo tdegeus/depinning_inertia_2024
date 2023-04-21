@@ -8,6 +8,8 @@ import inspect
 import itertools
 import os
 import pathlib
+import shutil
+import tempfile
 import textwrap
 
 import FrictionQPotSpringBlock  # noqa: F401
@@ -23,12 +25,15 @@ from . import Dynamics
 from . import EventMap
 from . import QuasiStatic
 from . import storage
+from . import tag
 from . import tools
 from ._version import version
 
 basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
+    cli_updatedata="Trigger_UpdateData",
+    cli_checkdata="Trigger_CheckData",
     cli_run="Trigger_Run",
     cli_filter_completed="Trigger_FilterCompleted",
     cli_merge="Trigger_Merge",
@@ -43,6 +48,9 @@ file_defaults = dict(
     cli_ensembleinfo="Trigger_EnsembleInfo.h5",
 )
 
+data_version = "2.1"
+assert tag.greater_equal(data_version, QuasiStatic.data_version)
+
 
 def replace_ep(doc: str) -> str:
     """
@@ -51,6 +59,86 @@ def replace_ep(doc: str) -> str:
     for ep in entry_points:
         doc = doc.replace(rf":py:func:`{ep:s}`", entry_points[ep])
     return doc
+
+
+def _get_data_version(file: h5py.File) -> str:
+    """
+    Get data version from file
+    """
+    if "/param/data_version" in file:
+        return str(file["/param/data_version"].asstr()[...])
+    return "0.0"
+
+
+def _update_data_version(file: h5py.File) -> None:
+    """
+    Update data version in file
+    """
+
+    ver = _get_data_version(file)
+
+    if ver == data_version:
+        return False
+
+    if "/param/data_version" not in file:
+        file["/param/data_version"] = data_version
+    else:
+        file["/param/data_version"][...] = data_version
+
+    if tag.less(ver, "2.1"):
+        if "/Trigger/branches" in file:
+            for ibranch in np.arange(file["/Trigger/step"].size):
+                root = file[f"/Trigger/branches/{ibranch:d}"]
+                data = [False] * root["completed"].size
+                root.create_dataset("truncated", data=data, maxshape=(None,), dtype=bool)
+
+    return True
+
+
+def cli_updatedata(cli_args=None):
+    """
+    Update the data from any version to the current version.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser.add_argument("--develop", action="store_true", help="Development mode")
+    parser.add_argument("--no-bak", action="store_true", help="Copy file for backup")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Data file (overwritten)")
+    args = tools._parse(parser, cli_args)
+
+    assert os.path.isfile(args.file)
+    with h5py.File(args.file) as file:
+        if _get_data_version(file) == data_version:
+            return
+
+    if not args.no_bak:
+        assert not os.path.isfile(args.file + ".bak")
+        shutil.copy2(args.file, args.file + ".bak")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir = pathlib.Path(temp_dir)
+        shutil.copy2(args.file, temp_dir / "my.h5")
+        with h5py.File(temp_dir / "my.h5", "a") as file:
+            _update_data_version(file)
+        shutil.copy2(temp_dir / "my.h5", args.file)
+
+
+def cli_checkdata(cli_args=None):
+    """
+    Check the data file for data version.
+    Prints the files that have failed. No output is written if all files are ok.
+    """
+    return QuasiStatic.cli_checkdata(cli_args, data_version)
 
 
 def cli_filter_completed(cli_args=None):
@@ -119,6 +207,9 @@ def cli_run(cli_args=None):
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("--check", type=int, action="append", help="Rerun and check branch(es)")
+    parser.add_argument(
+        "--truncate-system-spanning", action="store_true", help="Truncate as soon as A == N"
+    )
     parser.add_argument("file", type=str, help="Simulation file")
 
     args = tools._parse(parser, cli_args)
@@ -127,7 +218,7 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "a" if args.check is None else "r") as file:
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
-
+        _update_data_version(file)
         branches = np.arange(file["/Trigger/step"].size)
 
         if args.check is not None:
@@ -173,11 +264,10 @@ def cli_run(cli_args=None):
 
                 system.trigger(p=p, eps=du, direction=1)
 
-                while True:
+                if args.truncate_system_spanning:
+                    ret = system.minimise_truncate(i_n=i_n, A_truncate=system.size)
+                else:
                     ret = system.minimise(time_activity=True)
-                    if ret == 0:
-                        break
-                    system.chunk.align(system.u)
 
                 A = np.sum(system.chunk.index_at_align != i_n)
 
@@ -196,6 +286,7 @@ def cli_run(cli_args=None):
 
             if args.check is not None:
                 assert root["completed"][1]
+                assert root["truncated"][1] == (ret > 0)
                 assert root["S"][1] == S
                 assert root["A"][1] == A
                 assert root["T"][1] == T
@@ -208,6 +299,7 @@ def cli_run(cli_args=None):
                 storage.dset_extend1d(root, "inc", 1, system.inc)
                 storage.dset_extend1d(root, "u_frame", 1, system.u_frame)
                 storage.dset_extend1d(root, "completed", 1, True)
+                storage.dset_extend1d(root, "truncated", 1, ret > 0)
                 storage.dset_extend1d(root, "p", 1, p)
                 storage.dset_extend1d(root, "S", 1, S)
                 storage.dset_extend1d(root, "A", 1, A)
@@ -280,6 +372,7 @@ def cli_ensembleinfo(cli_args=None):
         S = []
         A = []
         T = []
+        truncated = []
         p = []
         f_frame = []
         f_frame_0 = []
@@ -292,6 +385,7 @@ def cli_ensembleinfo(cli_args=None):
             pbar.set_description(fmt.format(filename), refresh=True)
 
             with h5py.File(filepath) as file:
+                ver = _get_data_version(file)
                 ignore = []
 
                 for ibranch in np.arange(file["/Trigger/step"].size):
@@ -308,6 +402,11 @@ def cli_ensembleinfo(cli_args=None):
                     if not root["completed"][1]:
                         ignore.append(ibranch)
                         continue
+
+                    if tag.less(ver, "2.1"):
+                        truncated.append(root["truncated"][1])
+                    else:
+                        truncated.append(False)
 
                     S.append(root["S"][1])
                     A.append(root["A"][1])
@@ -335,6 +434,7 @@ def cli_ensembleinfo(cli_args=None):
         output["A"] = A
         output["T"] = T
         output["p"] = p
+        output["truncated"] = truncated
         output["f_frame"] = f_frame
         output["f_frame_0"] = f_frame_0
         output["step"] = step
@@ -346,6 +446,7 @@ def cli_ensembleinfo(cli_args=None):
         output["A"].attrs["desc"] = "Spatial extension: total number of yielded particles"
         output["T"].attrs["desc"] = "Duration: time between first and last event"
         output["p"].attrs["desc"] = "Index of the particle that was triggered"
+        output["truncated"].attrs["desc"] = "True if the trigger was truncated at A == N"
         output["f_frame"].attrs["desc"] = "Frame force (after event)"
         output["f_frame_0"].attrs["desc"] = "Frame force (before triggering)"
         output["step"].attrs["desc"] = "Step at triggering"
@@ -420,6 +521,7 @@ def cli_generate(cli_args=None):
         # IV.   Basic output that cannot be reconstructed
 
         /Trigger/branches/{ibranch:d}/completed   # check that the dynamics finished (*)
+        /Trigger/branches/{ibranch:d}/truncated   # if event was stopped at A == N (*)
         /Trigger/branches/{ibranch:d}/T           # duration of the event (*)
 
         # V.    Basic output that can be reconstructed from "u"/"u_frame"
@@ -481,6 +583,7 @@ def cli_generate(cli_args=None):
                     dfile.symlink_to(os.path.relpath(path, dfile.parent))
 
                 GooseHDF5.copy(source, dest, ["/param", "/meta", "/realisation"])
+                dest["/param/data_version"][...] = data_version
 
                 system = QuasiStatic.allocate_system(source)
 
@@ -502,6 +605,7 @@ def cli_generate(cli_args=None):
                 meta.attrs["S"] = "Total number of yielding events during event [ntrigger]"
                 meta.attrs["T"] = "Event duration [ntrigger]"
                 meta.attrs["completed"] = "True if trigger was successfully completed [ntrigger]"
+                meta.attrs["truncated"] = "True if trigger was truncated at A == N [ntrigger]"
                 meta.attrs["f_frame"] = "Frame force (after minimisation) [ntrigger]"
 
                 key = "/Trigger/step"
@@ -558,6 +662,7 @@ def cli_generate(cli_args=None):
                     root.create_dataset("try_p", data=[-1, 0], maxshape=(None,), dtype=np.int64)
                     root.create_dataset("p", data=[-1, -1], maxshape=(None,), dtype=np.int64)
                     root.create_dataset("completed", data=[True], maxshape=(None,), dtype=bool)
+                    root.create_dataset("truncated", data=[False], maxshape=(None,), dtype=bool)
 
                     root.create_dataset("f_frame", data=[f], maxshape=(None,), dtype=np.float64)
                     root.create_dataset("A", data=[0], maxshape=(None,), dtype=np.int64)
@@ -654,6 +759,7 @@ def cli_merge(cli_args=None):
             storage.dset_extend1d(droot, "inc", 1, sroot["inc"][1])
             storage.dset_extend1d(droot, "u_frame", 1, sroot["u_frame"][1])
             storage.dset_extend1d(droot, "completed", 1, sroot["completed"][1])
+            storage.dset_extend1d(droot, "truncated", 1, sroot["truncated"][1])
             storage.dset_extend1d(droot, "p", 1, sroot["p"][1])
             storage.dset_extend1d(droot, "S", 1, sroot["S"][1])
             storage.dset_extend1d(droot, "A", 1, sroot["A"][1])
