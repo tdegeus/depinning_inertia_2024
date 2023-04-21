@@ -45,8 +45,7 @@ entry_points = dict(
     cli_run="QuasiStatic_Run",
     cli_checkdynamics="QuasiStatic_CheckDynamics",
     cli_checkfastload="QuasiStatic_CheckFastLoad",
-    cli_list_systemspanning="QuasiStatic_ReRun_ListSystemSpanning",
-    cli_rerun_eventmap="QuasiStatic_ReRun_EventMap",
+    cli_job_rerun="QuasiStatic_JobRerun",
     cli_plotstateaftersystemspanning="QuasiStatic_PlotStateAfterSystemSpanning",
     cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
     cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning",
@@ -1603,70 +1602,9 @@ def cli_ensembleinfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
-def cli_list_systemspanning(cli_args=None):
+def cli_job_rerun(cli_args=None):
     """
-    Write list of jobs to run on system-spanning events.
-    The jobs are written::
-
-        --executable --options --step STEP FILE -o BASENAME_step=STEP.h5
-
-    whereby the following is interpreted from the EnsembleInfo:
-
-    -   ``STEP`` is the step at which the system-spanning event occurred.
-    -   ``FILE`` is the simulation file (with all parameters, and the relevant slip).
-    -   ``BASENAME`` is the basename of the simulation file.
-    """
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("--exec", type=str, required=True, help="Executable")
-    parser.add_argument("--options", type=str, default="", help="Options to pass")
-    parser.add_argument("info", type=str, help="EnsembleInfo")
-    parser.add_argument("output", type=str, help="Output file")
-
-    args = tools._parse(parser, cli_args)
-    assert os.path.isfile(args.info)
-
-    with h5py.File(args.info) as file:
-        step = file["/avalanche/step"][...]
-        A = file["/avalanche/A"][...]
-        N = file["/normalisation/N"][...]
-        fname = file["/lookup/filepath"].asstr()[...][file["/avalanche/file"][...]]
-
-    keep = A == N
-    step = step[keep]
-    fname = list(fname[keep])
-
-    root = pathlib.Path(os.path.relpath(args.info, pathlib.Path(args.output).parent)).parent
-    rname = [str(root / f) for f in fname]
-    fname = [os.path.normpath(f).split(".h5")[0] for f in fname]
-
-    ret = []
-
-    for i in range(len(step)):
-        ret.append(
-            f"{args.exec} {args.options} --step {step[i]:d} {rname[i]} -o {fname[i]}_step={step[i]:d}.h5"
-        )
-
-    shelephant.yaml.dump(args.output, ret, force=True)
-
-
-def cli_rerun_eventmap(cli_args=None):
-    """
-    Write list of jobs to run to get an event map.
+    Write list of jobs to rerun a quasi-static step.
     """
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
@@ -1683,13 +1621,18 @@ def cli_rerun_eventmap(cli_args=None):
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--systemspanning", action="store_true", help="System spanning events")
+    parser.add_argument("--eventmap", action="store_true", help="Produce event map")
+    parser.add_argument("--relaxation", action="store_true", help="Measure relaxation")
+    parser.add_argument("-e", "--executable", type=str, help="Executable")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("info", type=str, help="EnsembleInfo")
-    parser.add_argument("output", type=str, help="Output file")
+    parser.add_argument("output", type=str, help="Output file (yaml)")
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.info)
+
+    assert sum([args.executable is not None, args.eventmap, args.relaxation]) == 1
 
     with h5py.File(args.info) as file:
         step = file["/avalanche/step"][...]
@@ -1705,20 +1648,32 @@ def cli_rerun_eventmap(cli_args=None):
         S = S[keep]
         fname = list(fname[keep])
 
+    ret = []
     root = pathlib.Path(os.path.relpath(args.info, pathlib.Path(args.output).parent)).parent
     rname = [str(root / f) for f in fname]
     fname = [os.path.normpath(f).split(".h5")[0] for f in fname]
-    opts = ["-s"]
-    if is2d:
-        opts += ["-u"]
-    opts = " ".join(opts)
 
-    c = [
-        f"EventMap_run {opts} --step {s:d} --smax {smax:d} {r} -o {f}_step={s:d}.h5"
-        for s, smax, r, f in zip(step, S, rname, fname)
-    ]
+    if args.eventmap:
+        if is2d:
+            opts = "-s -u"
+        else:
+            opts = "-s"
+        ret = [
+            f"EventMap_run {opts} --step {s:d} --smax {smax:d} {r} -o {f}_step={s:d}.h5"
+            for s, smax, r, f in zip(step, S, rname, fname)
+        ]
+    elif args.relaxation is not None:
+        ret = [
+            f"Relaxation_Run --step {s:d} {r} -o {f}_step={s:d}.h5"
+            for s, r, f in zip(step, rname, fname)
+        ]
+    elif args.executable is not None:
+        ret = [
+            f"{args.executable} --step {s:d} {r} -o {f}_step={s:d}.h5"
+            for s, r, f in zip(step, rname, fname)
+        ]
 
-    shelephant.yaml.dump(args.output, c, force=True)
+    shelephant.yaml.dump(args.output, ret, force=True)
 
 
 def cli_checkfastload(cli_args=None):
