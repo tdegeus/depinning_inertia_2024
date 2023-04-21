@@ -219,8 +219,8 @@ class MyTests(unittest.TestCase):
             ["--dev", "-f", "-o", dirname / "AfterSystemSpanning.h5", infoname]
         )
 
-        QuasiStatic.cli_stateaftersystemspanning(
-            ["--dev", "-f", "-o", dirname / "RoughnessAfterSS.h5", infoname]
+        QuasiStatic.cli_structurefactor_aftersystemspanning(
+            ["--dev", "-f", "-o", dirname / "StructureFactor.h5", infoname]
         )
 
 

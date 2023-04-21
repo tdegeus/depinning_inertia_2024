@@ -2142,7 +2142,7 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
         for f in tqdm.tqdm(np.unique(file)):
             with h5py.File(os.path.join(basedir, paths[f])) as source:
                 for s in tqdm.tqdm(np.sort(step[file == f])):
-                    u = source[f"/QuasiStatic/{s:d}"][...]
+                    u = source[f"/QuasiStatic/u/{s:d}"][...]
                     u -= u.mean()
 
                     if len(shape) == 2:
