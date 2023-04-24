@@ -61,21 +61,12 @@ def replace_ep(doc: str) -> str:
     return doc
 
 
-def _get_data_version(file: h5py.File) -> str:
-    """
-    Get data version from file
-    """
-    if "/param/data_version" in file:
-        return str(file["/param/data_version"].asstr()[...])
-    return "0.0"
-
-
 def _update_data_version(file: h5py.File) -> None:
     """
     Update data version in file
     """
 
-    ver = _get_data_version(file)
+    ver = QuasiStatic._get_data_version(file)
 
     if ver == data_version:
         return False
@@ -113,24 +104,31 @@ def cli_updatedata(cli_args=None):
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("--no-bak", action="store_true", help="Copy file for backup")
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("file", type=str, help="Data file (overwritten)")
+    parser.add_argument("files", nargs="*", type=str, help="Simulation files")
     args = tools._parse(parser, cli_args)
 
-    assert os.path.isfile(args.file)
-    with h5py.File(args.file) as file:
-        if _get_data_version(file) == data_version:
-            return
+    assert all([os.path.isfile(f) for f in args.files])
+    files = []
+    for filename in tqdm.tqdm(args.files, desc="Reading version"):
+        with h5py.File(filename) as file:
+            if QuasiStatic._get_data_version(file) != data_version:
+                files.append(filename)
+
+    if len(files) == 0:
+        return
 
     if not args.no_bak:
-        assert not os.path.isfile(args.file + ".bak")
-        shutil.copy2(args.file, args.file + ".bak")
+        assert not any([os.path.isfile(f + ".bak") for f in files])
+        for filename in files:
+            shutil.copy2(filename, filename + ".bak")
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_dir = pathlib.Path(temp_dir)
-        shutil.copy2(args.file, temp_dir / "my.h5")
-        with h5py.File(temp_dir / "my.h5", "a") as file:
-            _update_data_version(file)
-        shutil.copy2(temp_dir / "my.h5", args.file)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        for filename in tqdm.tqdm(files, desc="Updating data"):
+            shutil.copy2(filename, tmp / "my.h5")
+            with h5py.File(tmp / "my.h5", "a") as file:
+                _update_data_version(file)
+            shutil.copy2(tmp / "my.h5", filename)
 
 
 def cli_checkdata(cli_args=None):
@@ -385,7 +383,7 @@ def cli_ensembleinfo(cli_args=None):
             pbar.set_description(fmt.format(filename), refresh=True)
 
             with h5py.File(filepath) as file:
-                ver = _get_data_version(file)
+                ver = QuasiStatic._get_data_version(file)
                 ignore = []
 
                 for ibranch in np.arange(file["/Trigger/step"].size):

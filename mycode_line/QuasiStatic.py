@@ -13,6 +13,7 @@ import tempfile
 import textwrap
 import uuid
 
+import click
 import enstat
 import FrictionQPotSpringBlock  # noqa: F401
 import FrictionQPotSpringBlock as fsb
@@ -37,6 +38,7 @@ from ._version import version
 entry_points = dict(
     cli_updatedata="QuasiStatic_UpdateData",
     cli_checkdata="QuasiStatic_CheckData",
+    cli_fastload_dataversion="QuasiStatic_UpdateDataVersionFastload",
     cli_ensembleinfo="QuasiStatic_EnsembleInfo",
     cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
@@ -245,6 +247,46 @@ def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
         dst[rename[path]] = src[path][...].reshape(shape)
 
 
+def _get_data_version(file: h5py.File) -> str:
+    """
+    Get data version from file
+    """
+    if "/param/data_version" in file:
+        return str(file["/param/data_version"].asstr()[...])
+    return "0.0"
+
+
+def cli_fastload_dataversion(cli_args=None):
+    """
+    Add current data version to fastload file.
+    """
+
+    class MyFmt(
+        argparse.RawDescriptionHelpFormatter,
+        argparse.ArgumentDefaultsHelpFormatter,
+        argparse.MetavarTypeHelpFormatter,
+    ):
+        pass
+
+    funcname = inspect.getframeinfo(inspect.currentframe()).function
+    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("files", nargs="*", type=str, help="Simulation files")
+    args = tools._parse(parser, cli_args)
+
+    assert all(os.path.isfile(f) for f in args.files)
+    assert not any(os.path.isfile(f + ".bak") for f in args.files)
+
+    for filename in tqdm(args.files):
+        shutil.copy2(filename, filename + ".bak")
+        with h5py.File(filename, "a") as file:
+            if "/param/data_version" in file:
+                file["/param/data_version"][...] = data_version
+            else:
+                file["/param/data_version"] = version
+
+
 def cli_updatedata(cli_args=None):
     """
     Update the data from any version to the current version.
@@ -262,41 +304,71 @@ def cli_updatedata(cli_args=None):
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("--no-bak", action="store_true", help="Copy file for backup")
+    parser.add_argument("--fastload", action="store_true", help="Update fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("file", type=str, help="Data file (overwritten)")
-    parser.add_argument("fastload", type=str, nargs="?", help="Fastload (overwritten)")
+    parser.add_argument("files", nargs="*", type=str, help="Simulation files")
     args = tools._parse(parser, cli_args)
 
-    files = [args.file]
-    if args.fastload is not None:
-        files.append(args.fastload)
+    assert all([os.path.isfile(f) for f in args.files])
+    files = []
+    fastload = {}
+    for filename in tqdm.tqdm(args.files, desc="Reading version"):
+        with h5py.File(filename) as file:
+            if _get_data_version(file) != data_version:
+                files.append(filename)
+        path = pathlib.Path(filename2fastload(filename))
+        if path.exists() and not path.is_symlink():
+            with h5py.File(path) as file:
+                if _get_data_version(file) != data_version:
+                    fastload[filename] = str(path)
+                    if files[-1] != filename:
+                        files.append(filename)
 
-    assert all([os.path.isfile(f) for f in files])
+    if len(files) == 0 and len(fastload) == 0:
+        return
+
+    if len(fastload) > 0 and not args.fastload:
+        if not click.confirm("Proceed without updating fastload files?"):
+            raise OSError("Cancelled")
+
     if not args.no_bak:
         assert not any([os.path.isfile(f + ".bak") for f in files])
-        for f in files:
-            shutil.copy2(f, f + ".bak")
+        assert not any([os.path.isfile(f + ".bak") for f in fastload.values()])
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_dir = pathlib.Path(temp_dir)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        for filename in tqdm.tqdm(files, desc="Updating data"):
+            # run
 
-        with h5py.File(args.file) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
-            if "data_version" not in src["param"]:
-                _updatedata_pre_1_0(src, dst)
-            elif src["/param/data_version"].asstr()[...] == "1.0":
-                _updatedata_1_0(src, dst)
-            else:
-                assert src["/param/data_version"].asstr()[...] == data_version
+            changed = True
 
-        shutil.copy2(temp_dir / "my.h5", args.file)
+            with h5py.File(filename) as src, h5py.File(tmp / "my.h5", "w") as dst:
+                if "data_version" not in src["param"]:
+                    _updatedata_pre_1_0(src, dst)
+                elif src["/param/data_version"].asstr()[...] == "1.0":
+                    _updatedata_1_0(src, dst)
+                else:
+                    assert src["/param/data_version"].asstr()[...] == data_version
+                    changed = False
 
-        if args.fastload is not None:
-            with h5py.File(args.file) as src:
-                shape = src["/param/shape"][...]
-                uid = src[f"/meta/{entry_points['cli_run']}"].attrs["uuid"]
-            with h5py.File(args.fastload) as src, h5py.File(temp_dir / "my.h5", "w") as dst:
-                _updatedata_fastload(src, dst, shape, uid)
-            shutil.copy2(temp_dir / "my.h5", args.fastload)
+            if changed:
+                if not args.no_bak:
+                    shutil.copy2(filename, filename + ".bak")
+                shutil.copy2(tmp / "my.h5", filename)
+
+            # fastload
+
+            if filename in fastload:
+                with h5py.File(filename) as src:
+                    shape = src["/param/shape"][...]
+                    uid = src[f"/meta/{entry_points['cli_run']}"].attrs["uuid"]
+
+                with h5py.File(fastload[filename]) as src, h5py.File(tmp / "my.h5", "w") as dst:
+                    _updatedata_fastload(src, dst, shape, uid)
+
+                if not args.no_bak:
+                    shutil.copy2(fastload[filename], fastload[filename] + ".bak")
+                shutil.copy2(tmp / "my.h5", fastload[filename])
 
 
 def cli_checkdata(cli_args=None, my_data_version=data_version):
@@ -1125,12 +1197,12 @@ def cli_run(cli_args=None):
         metapath = f"/meta/{progname}"
         create_check_meta(file, metapath, dev=args.develop, **meta)
 
-        # files <11.7 do not have metadata
-        if "QuasiStatic" in fload and metapath in fload:
+        if "QuasiStatic" in fload:
             assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
         else:
             create_check_meta(fload, metapath, dev=args.develop, **meta)
             fload[metapath].attrs["uuid"] = file[metapath].attrs["uuid"]
+            fload["/param/data_version"] = data_version
 
         if "QuasiStatic" not in file:
             system.minimise()
