@@ -279,6 +279,9 @@ def cli_fastload_dataversion(cli_args=None):
     assert not any(os.path.isfile(f + ".bak") for f in args.files)
 
     for filename in tqdm(args.files):
+        with h5py.File(filename) as file:
+            if _get_data_version(file) == data_version:
+                continue
         shutil.copy2(filename, filename + ".bak")
         with h5py.File(filename, "a") as file:
             if "/param/data_version" in file:
