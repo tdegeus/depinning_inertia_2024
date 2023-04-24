@@ -19,6 +19,7 @@ if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
 from mycode_line import Dynamics  # noqa: E402
 from mycode_line import Trigger  # noqa: E402
 from mycode_line import EventMap  # noqa: E402
+from mycode_line import Relaxation  # noqa: E402
 from mycode_line import QuasiStatic  # noqa: E402
 
 dirname = pathlib.Path(__file__).parent / "output"
@@ -189,6 +190,30 @@ class MyTests(unittest.TestCase):
 
         out = dirname / "EventMapInfo.h5"
         EventMap.cli_basic_output(["--dev", "-f", "-o", out, out_s, out_t])
+
+    def test_relaxation(self):
+        """
+        Measure relaxation.
+        """
+
+        with h5py.File(infoname) as file:
+            for fname in file["full"]:
+                path = os.path.join(os.path.dirname(infoname), fname)
+                step = file["full"][fname]["step"][...]
+                A = file["full"][fname]["A"][...]
+                N = file["normalisation"]["N"][...]
+                i = np.argwhere(A == N).ravel()
+                s = step[i[-2]]
+                t = step[i[-1]]
+                break
+
+        out_s = dirname / "Relaxation_s.h5"
+        out_t = dirname / "Relaxation_t.h5"
+        Relaxation.cli_run(["--dev", "-f", "-o", out_s, "--step", str(s), path])
+        Relaxation.cli_run(["--dev", "-f", "-o", out_t, "--step", str(t), path])
+
+        out = dirname / "RelaxationInfo.h5"
+        Relaxation.cli_ensembleinfo(["--dev", "-f", "-o", out, out_s, out_t])
 
     def test_measuredynamics(self):
         """

@@ -155,6 +155,8 @@ def cli_run(cli_args=None):
                         if args.avalanche:
                             break
 
+    return args.output
+
 
 def cli_paraview(cli_args=None):
     """
