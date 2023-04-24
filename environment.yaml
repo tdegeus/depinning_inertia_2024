@@ -7,6 +7,7 @@ dependencies:
 - goosehdf5 >=0.22.0
 - goosempl
 - gooseslurm
+- h5glance
 - h5py
 - numpy
 - parallel
