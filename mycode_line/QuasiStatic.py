@@ -278,7 +278,7 @@ def cli_fastload_dataversion(cli_args=None):
     assert all(os.path.isfile(f) for f in args.files)
     assert not any(os.path.isfile(f + ".bak") for f in args.files)
 
-    for filename in tqdm(args.files):
+    for filename in tqdm.tqdm(args.files):
         with h5py.File(filename) as file:
             if _get_data_version(file) == data_version:
                 continue
