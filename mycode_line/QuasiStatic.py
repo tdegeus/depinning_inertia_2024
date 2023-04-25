@@ -401,11 +401,7 @@ def cli_checkdata(cli_args=None, my_data_version=data_version):
 
     for f in tqdm.tqdm(args.files):
         with h5py.File(f) as file:
-            if "param" not in file:
-                failed.append(f)
-            elif "data_version" not in file["param"]:
-                failed.append(f)
-            elif file["/param/data_version"].asstr()[...] != my_data_version:
+            if _get_data_version(file) != my_data_version:
                 failed.append(f)
 
     failed = sorted(failed)
