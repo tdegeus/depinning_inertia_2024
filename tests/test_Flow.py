@@ -36,11 +36,13 @@ class MyTests(unittest.TestCase):
                 50,
                 "-n",
                 1,
-                "--gammadot",
+                "--v-frame",
                 1,
                 dirname,
                 "--kframe",
                 1 / 50,
+                "--nstep",
+                100,
             ]
         )
         Flow.cli_run(["--dev", filename])
