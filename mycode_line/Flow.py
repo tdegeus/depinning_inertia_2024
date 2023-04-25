@@ -211,36 +211,23 @@ def cli_generate(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
     QuasiStatic._generate_cli_options(parser)
 
     parser.add_argument(
         "--output",
-        type=lambda arg: int(float(arg)),
-        help="Number of time-steps between writing global output variables.",
+        type=lambda arg: float(arg),
+        default=50,
+        help="delta(u_frame) to leave between output steps",
     )
     parser.add_argument(
-        "--snapshot",
+        "--restart",
         type=lambda arg: int(float(arg)),
-        default=0,
-        help="Write snapshot every n output steps.",
+        default=200,
+        help="Snapshot for restart every n output steps.",
     )
-    parser.add_argument(
-        "--v-frame",
-        type=float,
-        required=True,
-        help="Driving rate.",
-    )
+    parser.add_argument("--v-frame", type=float, required=True, help="Driving rate.")
     args = tools._parse(parser, cli_args)
-
-    known_v = np.array([1e-2, 1e-1, 1e-0, 1e1])
-    known_output = np.array([1e3, 1e3, 1e3, 1e2])
-    known_nstep = np.array([1e4, 1e4, 1e4, 1e4])
-    if args.eta > 1e0:
-        known_nstep *= 1e5 * np.ones_line(known_nstep)
-    if args.output is None:
-        args.output = int(np.interp(args.v_frame, known_v, known_output))
-    if args.nstep is None:
-        args.nstep = int(np.interp(args.v_frame, known_v, known_nstep))
 
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -254,12 +241,14 @@ def cli_generate(cli_args=None):
 
         with h5py.File(outdir / files[-1], "w") as file:
             QuasiStatic.generate(file=file, seed=seed, **opts)
+            dt = file["/param/dt"][...]
+            output = int(args.output / (args.v_frame * dt))
             file["/Flow/param/v_frame"] = args.v_frame
-            file["/Flow/output/interval"] = args.output
-            file["/Flow/snapshot/interval"] = args.output * args.snapshot
+            file["/Flow/output/interval"] = output
+            file["/Flow/restart/interval"] = output * args.restart
 
-    executable = entry_points["cli_run"]
-    commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
+    executable = f'{entry_points["cli_run"]} --nstep {args.nstep:d}'
+    commands = [f"{executable} {file}" for file in files]
     shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
 
 
@@ -273,7 +262,6 @@ def run_create_extendible(file: h5py.File):
     storage.create_extendible(file, "/Flow/output/u", np.float64)
     storage.create_extendible(file, "/Flow/output/v", np.float64)
     storage.create_extendible(file, "/Flow/output/inc", np.uint32)
-    storage.create_extendible(file, "/Flow/snapshot/inc", np.uint32)
 
 
 def cli_run(cli_args=None):
@@ -304,25 +292,24 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file, "a") as file:
-        restart = "/Flow/snapshot/u" in file
-        snapshot = file["/Flow/snapshot/interval"][...]
+        restart = file["/Flow/restart/interval"][...]
         output = file["/Flow/output/interval"][...]
         v_frame = file["/Flow/param/v_frame"][...]
-        assert snapshot % output == 0
+        assert restart % output == 0
 
         system = QuasiStatic.allocate_system(file)
         system.inc = 0
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
-        if restart:
-            dt = file["/param/dt"][...]
-            inc = file["/Flow/snapshot/inc"][-1]
-            system.u = file[f"/Flow/snapshot/u/{inc:d}"][...]
-            system.v = file[f"/Flow/snapshot/v/{inc:d}"][...]
-            system.a = file[f"/Flow/snapshot/a/{inc:d}"][...]
-            system.u_frame = v_frame * dt * inc
+        if "/Flow/restart/u" in file:
+            inc = file["/Flow/restart/inc"][...]
+            system.u = file["/Flow/restart/u"][...]
+            system.v = file["/Flow/restart/v"][...]
+            system.a = file["/Flow/restart/a"][...]
+            system.u_frame = v_frame * float(file["/param/dt"][...]) * inc
             system.inc = inc
             i = int(inc / output)
+            print(f"Restarting at {system.u_frame:.1f}")
             assert np.isclose(file["/Flow/output/f_frame"][i], np.mean(system.f_frame))
             assert np.isclose(file["/Flow/output/f_potential"][i], np.mean(system.f_potential))
             assert np.isclose(file["/Flow/output/u"][i], np.mean(system.u))
@@ -341,17 +328,19 @@ def cli_run(cli_args=None):
         for _ in tqdm.tqdm(range(args.nstep), desc=args.file):
             system.flowSteps(output, v_frame)
 
-            if snapshot > 0:
-                if system.inc % snapshot == 0:
-                    if f"/Flow/snapshot/u/{system.inc:d}" not in file:
-                        i = file["/Flow/snapshot/inc"].size
-                        for key in ["/Flow/snapshot/inc"]:
-                            file[key].resize((i + 1,))
-                        file["/Flow/snapshot/inc"][i] = system.inc
-                        file[f"/Flow/snapshot/u/{inc:d}"] = system.u
-                        file[f"/Flow/snapshot/v/{inc:d}"] = system.v
-                        file[f"/Flow/snapshot/a/{inc:d}"] = system.a
-                        file.flush()
+            if restart > 0:
+                if system.inc % restart == 0:
+                    if "/Flow/restart/u" not in file:
+                        file["/Flow/restart/inc"] = system.inc
+                        file["/Flow/restart/u"] = system.u
+                        file["/Flow/restart/v"] = system.v
+                        file["/Flow/restart/a"] = system.a
+                    else:
+                        file["/Flow/restart/inc"][...] = system.inc
+                        file["/Flow/restart/u"][...] = system.u
+                        file["/Flow/restart/v"][...] = system.v
+                        file["/Flow/restart/a"][...] = system.a
+                    file.flush()
 
             if output > 0:
                 if system.inc % output == 0:
