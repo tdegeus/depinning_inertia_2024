@@ -1137,8 +1137,8 @@ def cli_generate(cli_args=None):
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     opts = _generate_parse(args)
-    n = args.size if args.shape is None else np.prod(args.shape)
 
+    n = args.size if args.shape is None else np.prod(args.shape)
     files = []
 
     for i in range(args.start, args.start + args.nsim):
