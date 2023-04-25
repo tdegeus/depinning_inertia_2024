@@ -38,7 +38,7 @@ from ._version import version
 entry_points = dict(
     cli_updatedata="QuasiStatic_UpdateData",
     cli_checkdata="QuasiStatic_CheckData",
-    cli_fastload_dataversion="QuasiStatic_UpdateDataVersionFastload",
+    cli_force_current_data_version="QuasiStatic_ForceCurrentDataVersion",
     cli_ensembleinfo="QuasiStatic_EnsembleInfo",
     cli_generatefastload="QuasiStatic_GenerateFastLoad",
     cli_generate="QuasiStatic_Generate",
@@ -256,9 +256,11 @@ def _get_data_version(file: h5py.File) -> str:
     return "0.0"
 
 
-def cli_fastload_dataversion(cli_args=None):
+def cli_force_current_data_version(cli_args=None):
     """
-    Add current data version to fastload file.
+    Add/overwrite "/param/data_version" to the current version.
+    Warning: use with caution.
+    There are no checks that the data is compatible with the current version.
     """
 
     class MyFmt(
@@ -270,24 +272,33 @@ def cli_fastload_dataversion(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
+
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+
+    parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("files", nargs="*", type=str, help="Simulation files")
+
     args = tools._parse(parser, cli_args)
 
     assert all(os.path.isfile(f) for f in args.files)
-    assert not any(os.path.isfile(f + ".bak") for f in args.files)
+
+    if not args.no_bak:
+        assert not any(os.path.isfile(f + ".bak") for f in args.files)
 
     for filename in tqdm.tqdm(args.files):
         with h5py.File(filename) as file:
             if _get_data_version(file) == data_version:
                 continue
-        shutil.copy2(filename, filename + ".bak")
+
+        if not args.no_bak:
+            shutil.copy2(filename, filename + ".bak")
+
         with h5py.File(filename, "a") as file:
             if "/param/data_version" in file:
                 file["/param/data_version"][...] = data_version
             else:
-                file["/param/data_version"] = version
+                file["/param/data_version"] = data_version
 
 
 def cli_updatedata(cli_args=None):
@@ -306,7 +317,7 @@ def cli_updatedata(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     parser.add_argument("--develop", action="store_true", help="Development mode")
-    parser.add_argument("--no-bak", action="store_true", help="Copy file for backup")
+    parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("--fastload", action="store_true", help="Update fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("files", nargs="*", type=str, help="Simulation files")

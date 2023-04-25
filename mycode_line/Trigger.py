@@ -102,7 +102,7 @@ def cli_updatedata(cli_args=None):
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
     parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
     parser.add_argument("--develop", action="store_true", help="Development mode")
-    parser.add_argument("--no-bak", action="store_true", help="Copy file for backup")
+    parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("files", nargs="*", type=str, help="Simulation files")
     args = tools._parse(parser, cli_args)
