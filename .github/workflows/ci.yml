@@ -28,28 +28,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
 
-    - name: Checkout prrng
-      uses: actions/checkout@v3
-      with:
-        repository: tdegeus/prrng
-        path: prrng
-
     - name: Set conda environment
       uses: mamba-org/provision-with-micromamba@main
       with:
         environment-file: environment.yaml
         environment-name: myenv
         cache-env: true
-        extra-specs: |
-          xtensor-python
-          boost
 
     - name: Set dummy version
       run: echo "SETUPTOOLS_SCM_PRETEND_VERSION=0.0" >> $GITHUB_ENV
-
-    - name: Build python-prrng locally
-      working-directory: prrng
-      run: python -m pip install . -v
 
     - name: Install plot style
       run: python -c "import GooseMPL; GooseMPL.copy_style()"
