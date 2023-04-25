@@ -9,6 +9,7 @@ dependencies:
 - gooseslurm
 - h5glance
 - h5py
+- mv_regex
 - numpy
 - parallel
 - pre-commit
