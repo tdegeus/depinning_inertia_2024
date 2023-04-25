@@ -60,7 +60,7 @@ def interpret_filename(filename: str) -> dict:
         info[key] = value
 
     for key in info:
-        if key in ["gammadot", "jump"]:
+        if key in ["v_frame", "jump"]:
             info[key] = float(info[key])
         else:
             info[key] = int(info[key])
@@ -76,31 +76,34 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
     :param interval: Average of the last ``interval`` output steps.
     """
 
-    f_frame = defaultdict(list)
-    f_potential = defaultdict(list)
+    average = {
+        "v": defaultdict(list),
+        "f_frame": defaultdict(list),
+        "f_potential": defaultdict(list),
+    }
 
-    f_frame_std = defaultdict(list)
-    f_potential_std = defaultdict(list)
+    std = {
+        "v": defaultdict(list),
+        "f_frame": defaultdict(list),
+        "f_potential": defaultdict(list),
+    }
 
-    eta = file["/param/eta"][...]
     root = file["/full"]
 
     for config in root:
-        gammadot = root[config]["gammadot"][...]
-        frame = root[config]["f_frame"][...]
-        potential = root[config]["f_potential"][...]
+        v_frame = float(root[config]["v_frame"][...])
+        v = root[config]["v"][...]
+        f_frame = root[config]["f_frame"][...]
+        f_potential = root[config]["f_potential"][...]
 
         b3 = -3 * interval
         b2 = -2 * interval
         b1 = -1 * interval
 
-        f = np.mean(frame[b1:])
-        df = np.std(frame[b1:])
-
-        p0 = np.mean(potential[b3:b2])
-        p1 = np.mean(potential[b2:b1])
-        p = np.mean(potential[b1:])
-        dp = np.std(potential[b1:])
+        p0 = np.mean(f_potential[b3:b2])
+        p1 = np.mean(f_potential[b2:b1])
+        p = np.mean(f_potential[b1:])
+        dp = np.std(f_potential[b1:])
 
         if p0 <= p - dp or p0 >= p + dp:
             continue
@@ -108,70 +111,38 @@ def ensemble_average(file: h5py.File | dict, interval: int = 100):
         if p1 <= p - dp or p1 >= p + dp:
             continue
 
-        f_frame[f"{gammadot:.1f}"].append(f)
-        f_potential[f"{gammadot:.1f}"].append(p)
+        average["v"][v_frame].append(np.mean(v[b1:]))
+        average["f_frame"][v_frame].append(np.mean(f_frame[b1:]))
+        average["f_potential"][v_frame].append(np.mean(f_potential[b1:]))
 
-        f_frame_std[f"{gammadot:.1f}"].append(df)
-        f_potential_std[f"{gammadot:.1f}"].append(dp)
+        std["v"][v_frame].append(np.std(v[b1:]))
+        std["f_frame"][v_frame].append(np.std(f_frame[b1:]))
+        std["f_potential"][v_frame].append(np.std(f_potential[b1:]))
 
-    n = max([len(v) for v in f_frame.values()])
+    n = max([len(val) for val in average["f_frame"].values()])
     rm = []
 
-    for key, value in f_frame.items():
+    for key, value in average["f_frame"].items():
         if len(value) < n:
             rm.append(key)
 
     for key in rm:
-        del f_frame[key]
-        del f_potential[key]
-        del f_frame_std[key]
-        del f_potential_std[key]
+        for name in average:
+            del average[name][key]
+            del std[name][key]
 
-    for key in f_frame:
-        f_frame[key] = np.array(f_frame[key])
-        f_potential[key] = np.array(f_potential[key])
-        f_frame_std[key] = np.array(f_frame_std[key])
-        f_potential_std[key] = np.array(f_potential_std[key])
+    for key in average["f_frame"]:
+        for name in average:
+            average[name][key] = np.mean(average[name][key])
+            std[name][key] = np.max(std[name][key])
 
-    for key in f_frame:
-        f_frame[key] = np.mean(f_frame[key])
-        f_potential[key] = np.mean(f_potential[key])
-        f_frame_std[key] = np.max(f_potential_std[key])
-        f_potential_std[key] = np.max(f_potential_std[key])
+    v_frame = sorted(average["f_frame"].keys())
 
-    x = []
-    yf = []
-    yp = []
-    ef = []
-    ep = []
+    for name in average:
+        average[name] = np.array([average[name][key] for key in v_frame])
+        std[name] = np.array([std[name][key] for key in v_frame])
 
-    for key in f_frame:
-        if -f_potential[key] - f_potential_std[key] < 0:
-            continue
-
-        if np.abs((-f_potential[key] + eta * float(key) - f_frame[key]) / f_frame[key]) > 1e-2:
-            continue
-
-        x.append(float(key))
-        yf.append(f_frame[key])
-        yp.append(-f_potential[key])
-        ef.append(f_frame_std[key])
-        ep.append(f_potential_std[key])
-
-    gammmadot = np.array(x)
-    f_frame = np.array(yf)
-    f_potential = np.array(yp)
-    f_frame_std = np.array(ef)
-    f_potential_std = np.array(ep)
-
-    sorter = np.argsort(gammmadot)
-    gammmadot = gammmadot[sorter]
-    f_frame = f_frame[sorter]
-    f_potential = f_potential[sorter]
-    f_frame_std = f_frame_std[sorter]
-    f_potential_std = f_potential_std[sorter]
-
-    return gammmadot, f_frame, f_potential, f_frame_std, f_potential_std
+    return v_frame, average, std
 
 
 def cli_ensembleinfo(cli_args=None):
@@ -212,23 +183,22 @@ def cli_ensembleinfo(cli_args=None):
             with h5py.File(filepath) as file:
                 output[f"/full/{fname}/f_frame"] = file["/Flow/output/f_frame"][...]
                 output[f"/full/{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
-                output[f"/full/{fname}/f_damping"] = file["/Flow/output/f_damping"][...]
-                output[f"/full/{fname}/gammadot"] = file["/Flow/gammadot"][...]
+                output[f"/full/{fname}/v"] = file["/Flow/output/v"][...]
+                output[f"/full/{fname}/v_frame"] = file["/Flow/param/v_frame"][...]
 
                 if i == 0:
                     g5.copy(file, output, "/param")
 
-        gammmadot, f_frame, f_potential, f_frame_std, f_potential_std = ensemble_average(output)
-        output["/average/gammadot"] = gammmadot
-        output["/average/mean/f_frame"] = f_frame
-        output["/average/mean/f_potential"] = f_potential
-        output["/average/std/f_frame"] = f_frame_std
-        output["/average/std/f_potential"] = f_potential_std
+        v_frame, average, std = ensemble_average(output)
+        output["/averages/v_frame"] = v_frame
+        for name in average:
+            output[f"/averages/mean/{name}"] = average[name]
+            output[f"/averages/std/{name}"] = std[name]
 
 
 def cli_generate(cli_args=None):
     """
-    Generate IO files (including job-scripts) to run simulations.
+    Generate IO files.
     """
 
     class MyFmt(
@@ -255,22 +225,22 @@ def cli_generate(cli_args=None):
         help="Write snapshot every n output steps.",
     )
     parser.add_argument(
-        "--gammadot",
+        "--v-frame",
         type=float,
         required=True,
         help="Driving rate.",
     )
     args = tools._parse(parser, cli_args)
 
-    known_gammadot = np.array([1e-2, 1e-1, 1e-0, 1e1])
+    known_v = np.array([1e-2, 1e-1, 1e-0, 1e1])
     known_output = np.array([1e3, 1e3, 1e3, 1e2])
     known_nstep = np.array([1e4, 1e4, 1e4, 1e4])
     if args.eta > 1e0:
         known_nstep *= 1e5 * np.ones_line(known_nstep)
     if args.output is None:
-        args.output = int(np.interp(args.gammadot, known_gammadot, known_output))
+        args.output = int(np.interp(args.v_frame, known_v, known_output))
     if args.nstep is None:
-        args.nstep = int(np.interp(args.gammadot, known_gammadot, known_nstep))
+        args.nstep = int(np.interp(args.v_frame, known_v, known_nstep))
 
     outdir = pathlib.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -283,18 +253,14 @@ def cli_generate(cli_args=None):
         seed = i * args.size
 
         with h5py.File(outdir / files[-1], "w") as file:
-            QuasiStatic.generate(
-                file=file,
-                seed=seed,
-                **opts,
-            )
-            file["/Flow/gammadot"] = args.gammadot
+            QuasiStatic.generate(file=file, seed=seed, **opts)
+            file["/Flow/param/v_frame"] = args.v_frame
             file["/Flow/output/interval"] = args.output
             file["/Flow/snapshot/interval"] = args.output * args.snapshot
 
     executable = entry_points["cli_run"]
     commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
-    shelephant.yaml.dump(outdir / "commands.yaml", commands, force=True)
+    shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
 
 
 def run_create_extendible(file: h5py.File):
@@ -304,8 +270,8 @@ def run_create_extendible(file: h5py.File):
 
     storage.create_extendible(file, "/Flow/output/f_frame", np.float64)
     storage.create_extendible(file, "/Flow/output/f_potential", np.float64)
-    storage.create_extendible(file, "/Flow/output/f_damping", np.float64)
     storage.create_extendible(file, "/Flow/output/u", np.float64)
+    storage.create_extendible(file, "/Flow/output/v", np.float64)
     storage.create_extendible(file, "/Flow/output/inc", np.uint32)
     storage.create_extendible(file, "/Flow/snapshot/inc", np.uint32)
 
@@ -331,34 +297,21 @@ def cli_run(cli_args=None):
     parser.add_argument(
         "-n", "--nstep", type=lambda arg: int(float(arg)), default=1000, help="#output steps to run"
     )
-    parser.add_argument(
-        "--snapshot",
-        type=lambda arg: int(float(arg)),
-        help="Write snapshot every n output steps.",
-    )
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
-    pbar = tqdm.tqdm(range(args.nstep), desc=args.file)
 
     with h5py.File(args.file, "a") as file:
-        restart = False
-
-        if "/Flow/snapshot/u" in file:
-            restart = True
-
-        inc = 0
+        restart = "/Flow/snapshot/u" in file
         snapshot = file["/Flow/snapshot/interval"][...]
         output = file["/Flow/output/interval"][...]
-        gammadot = file["/Flow/gammadot"][...]
+        v_frame = file["/Flow/param/v_frame"][...]
         assert snapshot % output == 0
 
-        if args.snapshot:
-            snapshot = output * args.snapshot
-
         system = QuasiStatic.allocate_system(file)
+        system.inc = 0
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
         if restart:
@@ -367,12 +320,13 @@ def cli_run(cli_args=None):
             system.u = file[f"/Flow/snapshot/u/{inc:d}"][...]
             system.v = file[f"/Flow/snapshot/v/{inc:d}"][...]
             system.a = file[f"/Flow/snapshot/a/{inc:d}"][...]
-            system.u_frame = gammadot * dt * inc
+            system.u_frame = v_frame * dt * inc
+            system.inc = inc
             i = int(inc / output)
             assert np.isclose(file["/Flow/output/f_frame"][i], np.mean(system.f_frame))
             assert np.isclose(file["/Flow/output/f_potential"][i], np.mean(system.f_potential))
-            assert np.isclose(file["/Flow/output/f_damping"][i], np.mean(system.f_damping))
             assert np.isclose(file["/Flow/output/u"][i], np.mean(system.u))
+            assert np.isclose(file["/Flow/output/v"][i], np.mean(system.v))
         else:
             run_create_extendible(file)
 
@@ -380,42 +334,36 @@ def cli_run(cli_args=None):
             "/Flow/output/inc",
             "/Flow/output/f_frame",
             "/Flow/output/f_potential",
-            "/Flow/output/f_damping",
             "/Flow/output/u",
+            "/Flow/output/v",
         ]
 
-        for istep in pbar:
-            ret = system.flowSteps(output, gammadot)
-            assert ret != 0
-            inc += output
+        for _ in tqdm.tqdm(range(args.nstep), desc=args.file):
+            system.flowSteps(output, v_frame)
 
             if snapshot > 0:
-                if inc % snapshot == 0:
-                    st = True
-                    if "/Flow/snapshot/u" in file:
-                        if str(inc) in file["/Flow/snapshot/u"]:
-                            st = False
-                    if st:
+                if system.inc % snapshot == 0:
+                    if f"/Flow/snapshot/u/{system.inc:d}" not in file:
                         i = file["/Flow/snapshot/inc"].size
                         for key in ["/Flow/snapshot/inc"]:
                             file[key].resize((i + 1,))
-                        file["/Flow/snapshot/inc"][i] = inc
+                        file["/Flow/snapshot/inc"][i] = system.inc
                         file[f"/Flow/snapshot/u/{inc:d}"] = system.u
                         file[f"/Flow/snapshot/v/{inc:d}"] = system.v
                         file[f"/Flow/snapshot/a/{inc:d}"] = system.a
                         file.flush()
 
             if output > 0:
-                if inc % output == 0:
-                    i = int(inc / output)
+                if system.inc % output == 0:
+                    i = int(system.inc / output)
                     for key in output_fields:
                         if file[key].size <= i:
                             file[key].resize((i + 1,))
-                    file["/Flow/output/inc"][i] = inc
+                    file["/Flow/output/inc"][i] = system.inc
                     file["/Flow/output/f_frame"][i] = np.mean(system.f_frame)
                     file["/Flow/output/f_potential"][i] = np.mean(system.f_potential)
-                    file["/Flow/output/f_damping"][i] = np.mean(system.f_damping)
                     file["/Flow/output/u"][i] = np.mean(system.u)
+                    file["/Flow/output/v"][i] = np.mean(system.v)
                     file.flush()
 
 
@@ -424,6 +372,7 @@ def cli_plot(cli_args=None):
     Basic plot
     """
 
+    import GooseMPL as gplt  # noqa: F401
     import matplotlib.pyplot as plt  # noqa: F401
 
     plt.style.use(["goose", "goose-latex", "goose-autolayout"])
@@ -447,20 +396,30 @@ def cli_plot(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file) as file:
-        u_frame = file["/Flow/gammadot"][...] * file["/param/dt"] * file["/Flow/output/inc"][...]
+        v_frame = file["/Flow/param/v_frame"][...]
+        u_frame = v_frame * file["/param/dt"] * file["/Flow/output/inc"][...]
         f_frame = file["/Flow/output/f_frame"][...]
         f_potential = file["/Flow/output/f_potential"][...]
+        v = file["/Flow/output/v"][...]
 
     opts = {}
     if args.marker is not None:
         opts["marker"] = args.marker
 
-    fig, ax = plt.subplots()
+    fig, axes = gplt.subplots(ncols=2)
+
+    ax = axes[0]
     ax.plot(u_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
     ax.plot(u_frame, -f_potential, label=r"$f_\text{potential}$", c="r", **opts)
-    ax.set_xlabel(r"$x_\text{frame}$")
+    ax.set_xlabel(r"$u_\text{frame}$")
     ax.set_ylabel(r"$f$")
     ax.legend()
+
+    ax = axes[1]
+    ax.plot(u_frame, v / v_frame, c="k", **opts)
+    ax.set_xlabel(r"$u_\text{frame}$")
+    ax.set_ylabel(r"$v / v_\text{frame}$")
+
     if args.output is not None:
         fig.savefig(args.output)
     else:
