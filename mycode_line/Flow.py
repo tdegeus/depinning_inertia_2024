@@ -68,7 +68,7 @@ def interpret_filename(filename: str) -> dict:
     return info
 
 
-def ensemble_average(file: h5py.File | dict, interval: int = 100):
+def ensemble_average(file: h5py.File | dict, interval: int = 1000):
     """
     Ensemble average from a file written by :py:func:`cli_enembleinfo`.
 
