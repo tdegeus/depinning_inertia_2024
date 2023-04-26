@@ -234,12 +234,13 @@ def cli_generate(cli_args=None):
     opts = QuasiStatic._generate_parse(args)
 
     n = args.size if args.shape is None else np.prod(args.shape)
+    assert not any(
+        [(outdir / f"id={i:04d}.h5").exists() for i in range(args.start, args.start + args.nsim)]
+    )
     files = []
-
     for i in range(args.start, args.start + args.nsim):
         files += [f"id={i:04d}.h5"]
         seed = i * n
-
         with h5py.File(outdir / files[-1], "w") as file:
             QuasiStatic.generate(file=file, seed=seed, **opts)
             dt = file["/param/dt"][...]
