@@ -20,6 +20,7 @@ import tqdm
 
 from . import QuasiStatic
 from . import storage
+from . import tag
 from . import tools
 from ._version import version
 
@@ -36,6 +37,9 @@ entry_points = dict(
 file_defaults = dict(
     cli_ensembleinfo="Flow_EnsembleInfo.h5",
 )
+
+data_version = "2.1"
+assert tag.greater_equal(data_version, QuasiStatic.data_version)
 
 
 def replace_ep(doc: str) -> str:
@@ -245,6 +249,7 @@ def cli_generate(cli_args=None):
         seed = i * n
         with h5py.File(outdir / files[-1], "w") as file:
             QuasiStatic.generate(file=file, seed=seed, **opts)
+            file["/param/data_version"][...] = data_version
             dt = file["/param/dt"][...]
             output = int(args.output / (args.v_frame * dt))
             file["/Flow/param/v_frame"] = args.v_frame
@@ -290,6 +295,7 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file, "a") as file:
+        assert QuasiStatic._get_data_version(file) == data_version
         root = file["/Flow/output"]
         res = file["/Flow/restart"]
         output = root["interval"][...]
