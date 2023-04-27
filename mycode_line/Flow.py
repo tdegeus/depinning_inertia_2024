@@ -346,7 +346,7 @@ def cli_run(cli_args=None):
                     storage.dump_overwrite(res, "a", system.a)
                     storage.dump_overwrite(res, "state", system.chunk.state_at(system.chunk.start))
                     storage.dump_overwrite(res, "index", system.chunk.start)
-                    storage.dump_overwrite(res, "value", system.chunk.data[:, 0])
+                    storage.dump_overwrite(res, "value", system.chunk.data[..., 0])
                     file.flush()
 
             if output > 0:

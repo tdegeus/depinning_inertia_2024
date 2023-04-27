@@ -204,7 +204,7 @@ def cli_run(cli_args=None):
         i = system.chunk.start
         file["/fastload/state"] = system.chunk.state_at(i)
         file["/fastload/index"] = i
-        file["/fastload/value"] = system.chunk.data[:, 0]
+        file["/fastload/value"] = system.chunk.data[..., 0]
 
         # storage preparation
 
