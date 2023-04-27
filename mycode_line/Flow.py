@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import textwrap
+import time
 from collections import defaultdict
 
 import FrictionQPotSpringBlock  # noqa: F401
@@ -218,12 +219,6 @@ def cli_generate(cli_args=None):
         default=50,
         help="delta(u_frame) to leave between output steps",
     )
-    parser.add_argument(
-        "--restart",
-        type=lambda arg: int(float(arg)),
-        default=200,
-        help="Snapshot for restart every n output steps.",
-    )
     parser.add_argument("--v-frame", type=float, required=True, help="Driving rate.")
     args = tools._parse(parser, cli_args)
 
@@ -246,7 +241,6 @@ def cli_generate(cli_args=None):
             output = int(args.output / (args.v_frame * dt))
             file["/Flow/param/v_frame"] = args.v_frame
             file["/Flow/output/interval"] = output
-            file["/Flow/restart/interval"] = output * args.restart
 
     executable = f'{entry_points["cli_run"]} --nstep {args.nstep:d}'
     commands = [f"{executable} {file}" for file in files]
@@ -271,6 +265,7 @@ def cli_run(cli_args=None):
     progname = entry_points[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--backup-interval", default=5, type=int, help="Backup interval in minutes")
     parser.add_argument(
         "--init-force",
         type=float,
@@ -288,12 +283,13 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "a") as file:
         assert QuasiStatic._get_data_version(file) == data_version
+        if "/Flow/restart" not in file:
+            res = file.create_group("/Flow/restart")
+        else:
+            res = file["/Flow/restart"]
         root = file["/Flow/output"]
-        res = file["/Flow/restart"]
         output = root["interval"][...]
-        restart = file["/Flow/restart/interval"][...]
         v_frame = file["/Flow/param/v_frame"][...]
-        assert restart % output == 0
 
         system = QuasiStatic.allocate_system(file)
         system.inc = 0
@@ -301,19 +297,19 @@ def cli_run(cli_args=None):
 
         if "u" in res:
             system.inc = res["inc"][...]
-            i = int(system.inc / output)
+            step = np.argwhere(root["inc"][...] == system.inc).ravel()[0]
             system.chunk.restore(
                 state=res["state"][...], value=res["value"][...], index=res["index"][...]
             )
-            system.u_frame = root["u_frame"][i]
+            system.u_frame = root["u_frame"][step]
             system.u = res["u"][...]
             system.v = res["v"][...]
             system.a = res["a"][...]
             print(f"Restarting at u_frame = {system.u_frame:.1f}")
-            assert np.isclose(root["f_frame"][i], np.mean(system.f_frame))
-            assert np.isclose(root["f_potential"][i], np.mean(system.f_potential))
-            assert np.isclose(root["u"][i], np.mean(system.u))
-            assert np.isclose(root["v"][i], np.mean(system.v))
+            assert np.isclose(root["f_frame"][step], np.mean(system.f_frame))
+            assert np.isclose(root["f_potential"][step], np.mean(system.f_potential))
+            assert np.isclose(root["u"][step], np.mean(system.u))
+            assert np.isclose(root["v"][step], np.mean(system.v))
         else:
             # start the system with a bit of advance
             system.u_frame = (args.init_force - np.mean(system.f_frame)) / system.k_frame
@@ -335,33 +331,32 @@ def cli_run(cli_args=None):
                 assert np.isclose(root["v"][0], np.mean(system.v))
                 assert root["inc"][0] == system.inc
 
-        for _ in tqdm.tqdm(range(args.nstep), desc=args.file):
+        tic = time.time()
+
+        for step in tqdm.tqdm(range(args.nstep), desc=args.file):
             system.flowSteps(output, v_frame)
 
-            if restart > 0:
-                if system.inc % restart == 0:
-                    storage.dump_overwrite(res, "inc", system.inc)
-                    storage.dump_overwrite(res, "u", system.u)
-                    storage.dump_overwrite(res, "v", system.v)
-                    storage.dump_overwrite(res, "a", system.a)
-                    storage.dump_overwrite(res, "state", system.chunk.state_at(system.chunk.start))
-                    storage.dump_overwrite(res, "index", system.chunk.start)
-                    storage.dump_overwrite(res, "value", system.chunk.data[..., 0])
-                    file.flush()
+            if step == args.nstep - 1 or time.time() - tic > args.backup_interval * 60:
+                tic = time.time()
+                storage.dump_overwrite(res, "inc", system.inc)
+                storage.dump_overwrite(res, "u", system.u)
+                storage.dump_overwrite(res, "v", system.v)
+                storage.dump_overwrite(res, "a", system.a)
+                storage.dump_overwrite(res, "state", system.chunk.state_at(system.chunk.start))
+                storage.dump_overwrite(res, "index", system.chunk.start)
+                storage.dump_overwrite(res, "value", system.chunk.data[..., 0])
+                file.flush()
 
-            if output > 0:
-                if system.inc % output == 0:
-                    i = int(system.inc / output)
-                    for key in ["inc", "u_frame", "f_frame", "f_potential", "u", "v"]:
-                        if root[key].size <= i:
-                            root[key].resize((i + 1,))
-                    root["inc"][i] = system.inc
-                    root["u_frame"][i] = system.u_frame
-                    root["f_frame"][i] = np.mean(system.f_frame)
-                    root["f_potential"][i] = np.mean(system.f_potential)
-                    root["u"][i] = np.mean(system.u)
-                    root["v"][i] = np.mean(system.v)
-                    file.flush()
+            for key in ["inc", "u_frame", "f_frame", "f_potential", "u", "v"]:
+                if root[key].size <= step:
+                    root[key].resize((step + 1,))
+            root["inc"][step] = system.inc
+            root["u_frame"][step] = system.u_frame
+            root["f_frame"][step] = np.mean(system.f_frame)
+            root["f_potential"][step] = np.mean(system.f_potential)
+            root["u"][step] = np.mean(system.u)
+            root["v"][step] = np.mean(system.v)
+            file.flush()
 
 
 def cli_plot(cli_args=None):
