@@ -151,7 +151,10 @@ def ensemble_average(file: h5py.File | dict, interval: int = 1000):
 
 def cli_ensembleinfo(cli_args=None):
     """
-    Extract basic output and combine into a single file.
+    Extract output all from a set of files run with :py:func:`cli_run` and do
+    some basic interpretation.
+    After this the run-files can be deleted
+    (this will only destroy the possibility to continue the run)
     """
 
     class MyFmt(
@@ -167,6 +170,9 @@ def cli_ensembleinfo(cli_args=None):
     progname = entry_points[funcname]
     output = file_defaults[funcname]
 
+    parser.add_argument(
+        "-i", "--inplace", type=str, default=output, help="Update output file inplace"
+    )
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -175,10 +181,20 @@ def cli_ensembleinfo(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
-    tools._check_overwrite_file(args.output, args.force)
+    if args.inplace:
+        assert os.path.isfile(args.inplace)
+        mode = "a"
+    else:
+        tools._check_overwrite_file(args.output, args.force)
+        mode = "w"
 
-    with h5py.File(args.output, "w") as output:
+    with h5py.File(args.output, mode) as output:
         QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+
+        for filepath in args.files:
+            fname = os.path.relpath(filepath, os.path.dirname(args.output))
+            fname = fname.replace("/", "_")
+            assert fname not in output["full"]
 
         for i, filepath in enumerate(tqdm.tqdm(args.files)):
             fname = os.path.relpath(filepath, os.path.dirname(args.output))
@@ -187,19 +203,34 @@ def cli_ensembleinfo(cli_args=None):
             with h5py.File(filepath) as file:
                 root = file["/Flow/output"]
                 out = output.create_group(f"/full/{fname}")
+                out["u_frame"] = root["u_frame"][...]
                 out["f_frame"] = root["f_frame"][...]
                 out["f_potential"] = root["f_potential"][...]
+                out["u"] = root["u"][...]
                 out["v"] = root["v"][...]
                 out["v_frame"] = file["/Flow/param/v_frame"][...]
-
                 if i == 0:
                     g5.copy(file, output, "/param")
 
-        v_frame, average, std = ensemble_average(output)
-        output["/averages/v_frame"] = v_frame
-        for name in average:
-            output[f"/averages/mean/{name}"] = average[name]
-            output[f"/averages/std/{name}"] = std[name]
+        v_frame, mean, std = ensemble_average(output)
+
+        if "/averages" not in output:
+            out = output.create_group("averages")
+            out.create_group("mean")
+            out.create_group("std")
+            out.create_dataset("v_frame", data=v_frame, maxshape=(None,))
+            for name in mean:
+                out["mean"].create_dataset(name, data=mean[name], maxshape=(None,))
+                out["std"].create_dataset(name, data=std[name], maxshape=(None,))
+            return
+
+        out = output["/averages"]
+        out["v_frame"].resize((v_frame.size,))
+        for name in mean:
+            out["mean"][name].resize((v_frame.size,))
+            out["std"][name].resize((v_frame.size,))
+            out["mean"][name][...] = mean[name]
+            out["std"][name][...] = std[name]
 
 
 def cli_generate(cli_args=None):
