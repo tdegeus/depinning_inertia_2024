@@ -19,6 +19,7 @@ import shelephant
 import tqdm
 
 from . import QuasiStatic
+from . import storage
 from . import tools
 from ._version import version
 
@@ -290,6 +291,7 @@ def cli_run(cli_args=None):
 
     with h5py.File(args.file, "a") as file:
         root = file["/Flow/output"]
+        res = file["/Flow/restart"]
         output = root["interval"][...]
         restart = file["/Flow/restart/interval"][...]
         v_frame = file["/Flow/param/v_frame"][...]
@@ -299,13 +301,16 @@ def cli_run(cli_args=None):
         system.inc = 0
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
-        if "/Flow/restart/u" in file:
-            system.inc = file["/Flow/restart/inc"][...]
+        if "u" in res:
+            system.inc = res["inc"][...]
             i = int(system.inc / output)
+            system.chunk.restore(
+                state=res["state"][...], value=res["value"][...], index=res["index"][...]
+            )
             system.u_frame = root["u_frame"][i]
-            system.u = file["/Flow/restart/u"][...]
-            system.v = file["/Flow/restart/v"][...]
-            system.a = file["/Flow/restart/a"][...]
+            system.u = res["u"][...]
+            system.v = res["v"][...]
+            system.a = res["a"][...]
             print(f"Restarting at u_frame = {system.u_frame:.1f}")
             assert np.isclose(root["f_frame"][i], np.mean(system.f_frame))
             assert np.isclose(root["f_potential"][i], np.mean(system.f_potential))
@@ -337,16 +342,13 @@ def cli_run(cli_args=None):
 
             if restart > 0:
                 if system.inc % restart == 0:
-                    if "/Flow/restart/u" not in file:
-                        file["/Flow/restart/inc"] = system.inc
-                        file["/Flow/restart/u"] = system.u
-                        file["/Flow/restart/v"] = system.v
-                        file["/Flow/restart/a"] = system.a
-                    else:
-                        file["/Flow/restart/inc"][...] = system.inc
-                        file["/Flow/restart/u"][...] = system.u
-                        file["/Flow/restart/v"][...] = system.v
-                        file["/Flow/restart/a"][...] = system.a
+                    storage.dump_overwrite(res, "inc", system.inc)
+                    storage.dump_overwrite(res, "u", system.u)
+                    storage.dump_overwrite(res, "v", system.v)
+                    storage.dump_overwrite(res, "a", system.a)
+                    storage.dump_overwrite(res, "state", system.chunk.state_at(system.chunk.start))
+                    storage.dump_overwrite(res, "index", system.chunk.start)
+                    storage.dump_overwrite(res, "value", system.chunk.data[:, 0])
                     file.flush()
 
             if output > 0:
