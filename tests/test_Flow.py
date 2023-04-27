@@ -46,8 +46,8 @@ class MyTests(unittest.TestCase):
             ]
         )
         Flow.cli_run(["--dev", filename])
-        Flow.cli_ensembleinfo(["--dev", "-o", infoname, filename])
-        Flow.cli_ensembleinfo(["--dev", "-o", infoname, "-i", filename])
+        Flow.cli_ensemblepack(["--dev", "-o", infoname, filename])
+        Flow.cli_ensemblepack(["--dev", "-o", infoname, "-i", filename])
 
     @classmethod
     def tearDownClass(self):

@@ -27,7 +27,7 @@ from ._version import version
 basename = os.path.splitext(os.path.basename(__file__))[0]
 
 entry_points = dict(
-    cli_ensembleinfo="Flow_EnsembleInfo",
+    cli_ensemblepack="Flow_EnsemblePack",
     cli_generate="Flow_Generate",
     cli_plot="Flow_Plot",
     cli_run="Flow_Run",
@@ -35,7 +35,7 @@ entry_points = dict(
 
 
 file_defaults = dict(
-    cli_ensembleinfo="Flow_EnsembleInfo.h5",
+    cli_ensemblepack="Flow_EnsemblePack.h5",
 )
 
 data_version = "2.1"
@@ -72,21 +72,15 @@ def interpret_filename(filename: str) -> dict:
     return info
 
 
-def ensemble_average(file: h5py.File | dict, interval: int = 1000):
+def ensemble_average(file: h5py.File | dict, skip: int = None):
     """
     Ensemble average from a file written by :py:func:`cli_enembleinfo`.
 
     :param file: Ensemble info (opened HDF5 archive).
-    :param interval: Average of the last ``interval`` output steps.
+    :param skip: Skip the first ``skip`` entries.
     """
 
-    average = {
-        "v": defaultdict(list),
-        "f_frame": defaultdict(list),
-        "f_potential": defaultdict(list),
-    }
-
-    std = {
+    data = {
         "v": defaultdict(list),
         "f_frame": defaultdict(list),
         "f_potential": defaultdict(list),
@@ -100,46 +94,30 @@ def ensemble_average(file: h5py.File | dict, interval: int = 1000):
         f_frame = root[name]["f_frame"][...]
         f_potential = root[name]["f_potential"][...]
 
-        average["v"][v_frame].append(np.mean(v[-interval:]))
-        average["f_frame"][v_frame].append(np.mean(f_frame[-interval:]))
-        average["f_potential"][v_frame].append(np.mean(f_potential[-interval:]))
+        if skip is None:
+            s = int(v.size / 2)
+        else:
+            s = skip
 
-        std["v"][v_frame].append(np.std(v[-interval:]))
-        std["f_frame"][v_frame].append(np.std(f_frame[-interval:]))
-        std["f_potential"][v_frame].append(np.std(f_potential[-interval:]))
+        data["v"][v_frame] += list(v[s:])
+        data["f_frame"][v_frame] += list(f_frame[s:])
+        data["f_potential"][v_frame] += list(f_potential[s:])
 
-    n = max([len(val) for val in average["f_frame"].values()])
-    rm = []
+    mean = {}
+    std = {}
+    v_frame = np.array(sorted(data["v"].keys()))
 
-    for key, value in average["f_frame"].items():
-        if len(value) < n:
-            rm.append(key)
+    for field in data:
+        mean[field] = np.array([np.mean(data[field][v]) for v in v_frame])
+        std[field] = np.array([np.std(data[field][v]) for v in v_frame])
 
-    for key in rm:
-        for name in average:
-            del average[name][key]
-            del std[name][key]
-
-    for key in average["f_frame"]:
-        for name in average:
-            average[name][key] = np.mean(average[name][key])
-            std[name][key] = np.max(std[name][key])
-
-    v_frame = sorted(average["f_frame"].keys())
-
-    for name in average:
-        average[name] = np.array([average[name][key] for key in v_frame])
-        std[name] = np.array([std[name][key] for key in v_frame])
-
-    return v_frame, average, std
+    return v_frame, mean, std, data
 
 
-def cli_ensembleinfo(cli_args=None):
+def cli_ensemblepack(cli_args=None):
     """
-    Extract output all from a set of files run with :py:func:`cli_run` and do
-    some basic interpretation.
-    After this the run-files can be deleted
-    (this will only destroy the possibility to continue the run)
+    Extract output all from a set of files run with :py:func:`cli_run`.
+    After this the run-files can be deleted (only destroys the possibility to continue the run).
     """
 
     class MyFmt(
@@ -214,27 +192,6 @@ def cli_ensembleinfo(cli_args=None):
                     out["v"] = root["v"][...]
                     out["v_frame"] = file["/Flow/param/v_frame"][...]
                     g5.copy(file, output, "/realisation", root=f"/full/{fname}")
-
-        v_frame, mean, std = ensemble_average(output)
-
-        if "/averages" not in output:
-            out = output.create_group("averages")
-            out.create_group("mean")
-            out.create_group("std")
-            out.create_dataset("v_frame", data=v_frame, maxshape=(None,))
-            for name in mean:
-                out["mean"].create_dataset(name, data=mean[name], maxshape=(None,))
-                out["std"].create_dataset(name, data=std[name], maxshape=(None,))
-            return
-
-        out = output["/averages"]
-        out["v_frame"].resize((len(v_frame),))
-        out["v_frame"][...] = v_frame
-        for name in mean:
-            out["mean"][name].resize((len(v_frame),))
-            out["std"][name].resize((len(v_frame),))
-            out["mean"][name][...] = mean[name]
-            out["std"][name][...] = std[name]
 
 
 def cli_generate(cli_args=None):
@@ -438,18 +395,19 @@ def cli_plot(cli_args=None):
 
     with h5py.File(args.file) as file:
         if "full" in file:
+            v_frame, mean, std, _ = ensemble_average(file)
+            ensemble = {
+                "x": v_frame[...],
+                "y": mean["f_frame"][...],
+                "xerr": std["v"][...],
+                "yerr": std["f_frame"][...],
+            }
             root = file["full"][args.path]
             v_frame = root["v_frame"][...]
-            ensemble = {
-                "x": file["averages"]["v_frame"][...],
-                "y": file["averages"]["mean"]["f_frame"][...],
-                "xerr": file["averages"]["std"]["v"][...],
-                "yerr": file["averages"]["std"]["f_frame"][...],
-            }
         else:
+            ensemble = None
             root = file["/Flow/output"]
             v_frame = file["/Flow/param/v_frame"][...]
-            ensemble = None
 
         u_frame = root["u_frame"][...]
         f_frame = root["f_frame"][...]
