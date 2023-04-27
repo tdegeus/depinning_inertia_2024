@@ -1606,14 +1606,7 @@ def cli_ensembleinfo(cli_args=None):
                     g5.copy(file, output, "/param")
                     norm = Normalisation(file).asdict()
                 else:
-                    test = Normalisation(file).asdict()
-                    for key in norm:
-                        if key in ["interactions", "potential", "system", "dynamics"]:
-                            assert str(norm[key]) == str(test[key])
-                        elif key == "shape":
-                            assert list(norm[key]) == list(test[key])
-                        else:
-                            assert np.isclose(norm[key], test[key])
+                    _check_normalisation(norm, Normalisation(file).asdict())
 
                 out = basic_output(file)
 
