@@ -1535,6 +1535,24 @@ def basic_output(file: h5py.File) -> dict:
     return ret
 
 
+def _check_normalisation(norm: dict, test: dict):
+    """
+    Check if normalisations are the same.
+
+    :param a: First dictionary.
+    :param b: Second dictionary.
+    :return: True if normalisation is the same.
+    """
+
+    for key in norm:
+        if key in ["interactions", "potential", "system", "dynamics"]:
+            assert str(norm[key]) == str(test[key])
+        elif key == "shape":
+            assert list(norm[key]) == list(test[key])
+        else:
+            assert np.isclose(norm[key], test[key])
+
+
 def cli_ensembleinfo(cli_args=None):
     """
     Read information (avalanche size, force) of an ensemble,

@@ -94,34 +94,19 @@ def ensemble_average(file: h5py.File | dict, interval: int = 1000):
 
     root = file["/full"]
 
-    for config in root:
-        v_frame = float(root[config]["v_frame"][...])
-        v = root[config]["v"][...]
-        f_frame = root[config]["f_frame"][...]
-        f_potential = root[config]["f_potential"][...]
+    for name in root:
+        v_frame = float(root[name]["v_frame"][...])
+        v = root[name]["v"][...]
+        f_frame = root[name]["f_frame"][...]
+        f_potential = root[name]["f_potential"][...]
 
-        b3 = -3 * interval
-        b2 = -2 * interval
-        b1 = -1 * interval
+        average["v"][v_frame].append(np.mean(v[-interval:]))
+        average["f_frame"][v_frame].append(np.mean(f_frame[-interval:]))
+        average["f_potential"][v_frame].append(np.mean(f_potential[-interval:]))
 
-        p0 = np.mean(f_potential[b3:b2])
-        p1 = np.mean(f_potential[b2:b1])
-        p = np.mean(f_potential[b1:])
-        dp = np.std(f_potential[b1:])
-
-        if p0 <= p - dp or p0 >= p + dp:
-            continue
-
-        if p1 <= p - dp or p1 >= p + dp:
-            continue
-
-        average["v"][v_frame].append(np.mean(v[b1:]))
-        average["f_frame"][v_frame].append(np.mean(f_frame[b1:]))
-        average["f_potential"][v_frame].append(np.mean(f_potential[b1:]))
-
-        std["v"][v_frame].append(np.std(v[b1:]))
-        std["f_frame"][v_frame].append(np.std(f_frame[b1:]))
-        std["f_potential"][v_frame].append(np.std(f_potential[b1:]))
+        std["v"][v_frame].append(np.std(v[-interval:]))
+        std["f_frame"][v_frame].append(np.std(f_frame[-interval:]))
+        std["f_potential"][v_frame].append(np.std(f_potential[-interval:]))
 
     n = max([len(val) for val in average["f_frame"].values()])
     rm = []
@@ -170,19 +155,16 @@ def cli_ensembleinfo(cli_args=None):
     progname = entry_points[funcname]
     output = file_defaults[funcname]
 
-    parser.add_argument(
-        "-i", "--inplace", type=str, default=output, help="Update output file inplace"
-    )
+    parser.add_argument("-i", "--inplace", action="store_true", help="Update output file inplace")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("files", nargs="*", type=str, help="Input files")
 
     args = tools._parse(parser, cli_args)
-    assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
     if args.inplace:
-        assert os.path.isfile(args.inplace)
+        assert os.path.isfile(args.output)
         mode = "a"
     else:
         tools._check_overwrite_file(args.output, args.force)
@@ -190,27 +172,48 @@ def cli_ensembleinfo(cli_args=None):
 
     with h5py.File(args.output, mode) as output:
         QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+        if "full" not in output:
+            output.create_group("full")
+        if "param" in output:
+            assert QuasiStatic._get_data_version(output) == data_version
 
         for filepath in args.files:
             fname = os.path.relpath(filepath, os.path.dirname(args.output))
             fname = fname.replace("/", "_")
-            assert fname not in output["full"]
 
         for i, filepath in enumerate(tqdm.tqdm(args.files)):
             fname = os.path.relpath(filepath, os.path.dirname(args.output))
             fname = fname.replace("/", "_")
-
             with h5py.File(filepath) as file:
-                root = file["/Flow/output"]
-                out = output.create_group(f"/full/{fname}")
-                out["u_frame"] = root["u_frame"][...]
-                out["f_frame"] = root["f_frame"][...]
-                out["f_potential"] = root["f_potential"][...]
-                out["u"] = root["u"][...]
-                out["v"] = root["v"][...]
-                out["v_frame"] = file["/Flow/param/v_frame"][...]
-                if i == 0:
+                if i == 0 and "param" not in output:
                     g5.copy(file, output, "/param")
+
+                if i == 0:
+                    norm = QuasiStatic.Normalisation(file).asdict()
+                else:
+                    QuasiStatic._check_normalisation(norm, QuasiStatic.Normalisation(file).asdict())
+
+                assert QuasiStatic._get_data_version(file) == data_version
+
+                root = file["/Flow/output"]
+                if fname in output["full"]:
+                    out = output[f"/full/{fname}"]
+                    assert np.allclose(out["u_frame"], root["u_frame"][...])
+                    assert np.allclose(out["f_frame"], root["f_frame"][...])
+                    assert np.allclose(out["f_potential"], root["f_potential"][...])
+                    assert np.allclose(out["u"], root["u"][...])
+                    assert np.allclose(out["v"], root["v"][...])
+                    assert np.allclose(out["v_frame"], file["/Flow/param/v_frame"][...])
+                    assert out["realisation"]["seed"][...] == file["realisation"]["seed"][...]
+                else:
+                    out = output.create_group(f"/full/{fname}")
+                    out["u_frame"] = root["u_frame"][...]
+                    out["f_frame"] = root["f_frame"][...]
+                    out["f_potential"] = root["f_potential"][...]
+                    out["u"] = root["u"][...]
+                    out["v"] = root["v"][...]
+                    out["v_frame"] = file["/Flow/param/v_frame"][...]
+                    g5.copy(file, output, "/realisation", root=f"/full/{fname}")
 
         v_frame, mean, std = ensemble_average(output)
 
@@ -225,10 +228,11 @@ def cli_ensembleinfo(cli_args=None):
             return
 
         out = output["/averages"]
-        out["v_frame"].resize((v_frame.size,))
+        out["v_frame"].resize((len(v_frame),))
+        out["v_frame"][...] = v_frame
         for name in mean:
-            out["mean"][name].resize((v_frame.size,))
-            out["std"][name].resize((v_frame.size,))
+            out["mean"][name].resize((len(v_frame),))
+            out["std"][name].resize((len(v_frame),))
             out["mean"][name][...] = mean[name]
             out["std"][name][...] = std[name]
 
@@ -426,14 +430,27 @@ def cli_plot(cli_args=None):
 
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
-    parser.add_argument("file", type=str, help="Simulation file")
+    parser.add_argument("-p", "--path", type=str, help="'/full/{path}' (EnsembleInfo).")
+    parser.add_argument("file", type=str, help="Simulation file / EnsembleInfo")
 
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file) as file:
-        root = file["/Flow/output"]
-        v_frame = file["/Flow/param/v_frame"][...]
+        if "full" in file:
+            root = file["full"][args.path]
+            v_frame = root["v_frame"][...]
+            ensemble = {
+                "x": file["averages"]["v_frame"][...],
+                "y": file["averages"]["mean"]["f_frame"][...],
+                "xerr": file["averages"]["std"]["v"][...],
+                "yerr": file["averages"]["std"]["f_frame"][...],
+            }
+        else:
+            root = file["/Flow/output"]
+            v_frame = file["/Flow/param/v_frame"][...]
+            ensemble = None
+
         u_frame = root["u_frame"][...]
         f_frame = root["f_frame"][...]
         f_potential = root["f_potential"][...]
@@ -443,7 +460,7 @@ def cli_plot(cli_args=None):
     if args.marker is not None:
         opts["marker"] = args.marker
 
-    fig, axes = gplt.subplots(ncols=2)
+    fig, axes = gplt.subplots(ncols=2 if ensemble is None else 3)
 
     ax = axes[0]
     ax.plot(u_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
@@ -456,6 +473,12 @@ def cli_plot(cli_args=None):
     ax.plot(u_frame, v / v_frame, c="k", **opts)
     ax.set_xlabel(r"$u_\text{frame}$")
     ax.set_ylabel(r"$v / v_\text{frame}$")
+
+    if ensemble is not None:
+        ax = axes[2]
+        ax.errorbar(**ensemble, c="k", ls="none", marker="o", lw=1)
+        ax.set_xlabel(r"$v_\text{frame}$")
+        ax.set_ylabel(r"$f_\text{frame}$")
 
     if args.output is not None:
         fig.savefig(args.output)
