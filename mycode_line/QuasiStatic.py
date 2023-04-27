@@ -1774,7 +1774,9 @@ def cli_job_rerun(cli_args=None):
         ret = [ret[i] for i in sorter[: args.nsim]]
 
     shelephant.yaml.dump(args.output, ret, force=True)
-    return ret
+
+    if cli_args is not None:
+        return ret
 
 
 def cli_checkfastload(cli_args=None):
