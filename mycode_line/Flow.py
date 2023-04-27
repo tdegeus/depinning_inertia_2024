@@ -19,7 +19,6 @@ import shelephant
 import tqdm
 
 from . import QuasiStatic
-from . import storage
 from . import tools
 from ._version import version
 
@@ -181,10 +180,12 @@ def cli_ensembleinfo(cli_args=None):
             fname = fname.replace("/", "_")
 
             with h5py.File(filepath) as file:
-                output[f"/full/{fname}/f_frame"] = file["/Flow/output/f_frame"][...]
-                output[f"/full/{fname}/f_potential"] = file["/Flow/output/f_potential"][...]
-                output[f"/full/{fname}/v"] = file["/Flow/output/v"][...]
-                output[f"/full/{fname}/v_frame"] = file["/Flow/param/v_frame"][...]
+                root = file["/Flow/output"]
+                out = output.create_group(f"/full/{fname}")
+                out["f_frame"] = root["f_frame"][...]
+                out["f_potential"] = root["f_potential"][...]
+                out["v"] = root["v"][...]
+                out["v_frame"] = file["/Flow/param/v_frame"][...]
 
                 if i == 0:
                     g5.copy(file, output, "/param")
@@ -254,18 +255,6 @@ def cli_generate(cli_args=None):
     shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
 
 
-def run_create_extendible(file: h5py.File):
-    """
-    Create extendible datasets used in :py:func:`cli_run`.
-    """
-
-    storage.create_extendible(file, "/Flow/output/f_frame", np.float64)
-    storage.create_extendible(file, "/Flow/output/f_potential", np.float64)
-    storage.create_extendible(file, "/Flow/output/u", np.float64)
-    storage.create_extendible(file, "/Flow/output/v", np.float64)
-    storage.create_extendible(file, "/Flow/output/inc", np.uint32)
-
-
 def cli_run(cli_args=None):
     """
     Run simulation.
@@ -285,6 +274,12 @@ def cli_run(cli_args=None):
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument(
+        "--init-force",
+        type=float,
+        default=0.5,
+        help="At initialisation: move the load frame at once to this force.",
+    )
+    parser.add_argument(
         "-n", "--nstep", type=lambda arg: int(float(arg)), default=1000, help="#output steps to run"
     )
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -294,8 +289,9 @@ def cli_run(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file, "a") as file:
+        root = file["/Flow/output"]
+        output = root["interval"][...]
         restart = file["/Flow/restart/interval"][...]
-        output = file["/Flow/output/interval"][...]
         v_frame = file["/Flow/param/v_frame"][...]
         assert restart % output == 0
 
@@ -304,28 +300,37 @@ def cli_run(cli_args=None):
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
         if "/Flow/restart/u" in file:
-            inc = file["/Flow/restart/inc"][...]
+            system.inc = file["/Flow/restart/inc"][...]
+            i = int(system.inc / output)
+            system.u_frame = root["u_frame"][i]
             system.u = file["/Flow/restart/u"][...]
             system.v = file["/Flow/restart/v"][...]
             system.a = file["/Flow/restart/a"][...]
-            system.u_frame = v_frame * float(file["/param/dt"][...]) * inc
-            system.inc = inc
-            i = int(inc / output)
-            print(f"Restarting at {system.u_frame:.1f}")
-            assert np.isclose(file["/Flow/output/f_frame"][i], np.mean(system.f_frame))
-            assert np.isclose(file["/Flow/output/f_potential"][i], np.mean(system.f_potential))
-            assert np.isclose(file["/Flow/output/u"][i], np.mean(system.u))
-            assert np.isclose(file["/Flow/output/v"][i], np.mean(system.v))
+            print(f"Restarting at u_frame = {system.u_frame:.1f}")
+            assert np.isclose(root["f_frame"][i], np.mean(system.f_frame))
+            assert np.isclose(root["f_potential"][i], np.mean(system.f_potential))
+            assert np.isclose(root["u"][i], np.mean(system.u))
+            assert np.isclose(root["v"][i], np.mean(system.v))
         else:
-            run_create_extendible(file)
-
-        output_fields = [
-            "/Flow/output/inc",
-            "/Flow/output/f_frame",
-            "/Flow/output/f_potential",
-            "/Flow/output/u",
-            "/Flow/output/v",
-        ]
+            # start the system with a bit of advance
+            system.u_frame = (args.init_force - np.mean(system.f_frame)) / system.k_frame
+            system.v = v_frame * np.ones_like(system.v)
+            # create/check output
+            if "f_frame" not in root:
+                fpot = np.mean(system.f_potential)
+                root.create_dataset("u_frame", data=[system.u_frame], maxshape=(None,))
+                root.create_dataset("f_frame", data=[np.mean(system.f_frame)], maxshape=(None,))
+                root.create_dataset("f_potential", data=[fpot], maxshape=(None,))
+                root.create_dataset("u", data=[np.mean(system.u)], maxshape=(None,))
+                root.create_dataset("v", data=[np.mean(system.v)], maxshape=(None,))
+                root.create_dataset("inc", data=[system.inc], maxshape=(None,))
+            else:
+                assert np.isclose(root["u_frame"][0], np.mean(system.u_frame))
+                assert np.isclose(root["f_frame"][0], np.mean(system.f_frame))
+                assert np.isclose(root["f_potential"][0], np.mean(system.f_potential))
+                assert np.isclose(root["u"][0], np.mean(system.u))
+                assert np.isclose(root["v"][0], np.mean(system.v))
+                assert root["inc"][0] == system.inc
 
         for _ in tqdm.tqdm(range(args.nstep), desc=args.file):
             system.flowSteps(output, v_frame)
@@ -347,14 +352,15 @@ def cli_run(cli_args=None):
             if output > 0:
                 if system.inc % output == 0:
                     i = int(system.inc / output)
-                    for key in output_fields:
-                        if file[key].size <= i:
-                            file[key].resize((i + 1,))
-                    file["/Flow/output/inc"][i] = system.inc
-                    file["/Flow/output/f_frame"][i] = np.mean(system.f_frame)
-                    file["/Flow/output/f_potential"][i] = np.mean(system.f_potential)
-                    file["/Flow/output/u"][i] = np.mean(system.u)
-                    file["/Flow/output/v"][i] = np.mean(system.v)
+                    for key in ["inc", "u_frame", "f_frame", "f_potential", "u", "v"]:
+                        if root[key].size <= i:
+                            root[key].resize((i + 1,))
+                    root["inc"][i] = system.inc
+                    root["u_frame"][i] = system.u_frame
+                    root["f_frame"][i] = np.mean(system.f_frame)
+                    root["f_potential"][i] = np.mean(system.f_potential)
+                    root["u"][i] = np.mean(system.u)
+                    root["v"][i] = np.mean(system.v)
                     file.flush()
 
 
@@ -387,11 +393,12 @@ def cli_plot(cli_args=None):
     assert os.path.isfile(args.file)
 
     with h5py.File(args.file) as file:
+        root = file["/Flow/output"]
         v_frame = file["/Flow/param/v_frame"][...]
-        u_frame = v_frame * file["/param/dt"] * file["/Flow/output/inc"][...]
-        f_frame = file["/Flow/output/f_frame"][...]
-        f_potential = file["/Flow/output/f_potential"][...]
-        v = file["/Flow/output/v"][...]
+        u_frame = root["u_frame"][...]
+        f_frame = root["f_frame"][...]
+        f_potential = root["f_potential"][...]
+        v = root["v"][...]
 
     opts = {}
     if args.marker is not None:
