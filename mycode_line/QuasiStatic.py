@@ -2064,31 +2064,37 @@ def cli_stateaftersystemspanning(cli_args=None):
 
     with h5py.File(args.output, "w") as output:
         for name, hist in zip(["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]):
-            root = output.create_group(f"/yield_distance/{name}/log")
+            root = output.create_group(f"/yield_distance/{name}/log_binning")
             for key, value in hist:
                 root[key] = value
 
         for name, hist in zip(["any", "left", "right"], [hist_x_lin, hist_xl_lin, hist_xr_lin]):
-            root = output.create_group(f"/yield_distance/{name}/lin")
+            root = output.create_group(f"/yield_distance/{name}/lin_binning")
             for key, value in hist:
                 root[key] = value
 
+        storage.create_extendible(output, "/yield_distance/any/min", dtype=np.float64)
+        storage.create_extendible(output, "/yield_distance/left/min", dtype=np.float64)
+        storage.create_extendible(output, "/yield_distance/right/min", dtype=np.float64)
+
         root = output.create_group("heightheight")
         if is2d:
-            Ax = ensemble.distance(0).astype(int)
-            Ay = ensemble.distance(1).astype(int)
-            keep = np.logical_and(Ax >= 0, Ay >= 0)
-            root["Ax"] = Ax[keep].reshape(reshape)
-            root["Ay"] = Ay[keep].reshape(reshape)
+            x = ensemble.distance(0).astype(int)
+            y = ensemble.distance(1).astype(int)
+            keep = np.logical_and(x >= 0, y >= 0)
+            root["x"] = x[keep].reshape(reshape)
+            root["y"] = y[keep].reshape(reshape)
         else:
-            A = ensemble.distance(0).astype(int)
-            keep = A >= 0
-            root["A"] = A[keep]
+            x = ensemble.distance(0).astype(int)
+            keep = x >= 0
+            root["x"] = x[keep]
 
-        root["R"] = ensemble.result()[keep].reshape(reshape)
+        root["mean"] = ensemble.result()[keep].reshape(reshape)
         root["error"] = np.sqrt(np.zeros_like(ensemble.result())[keep]).reshape(reshape)
 
         output.flush()
+
+        istore = 0
 
         for f in tqdm.tqdm(np.unique(file)):
             with h5py.File(os.path.join(basedir, paths[f])) as source:
@@ -2109,24 +2115,29 @@ def cli_stateaftersystemspanning(cli_args=None):
                     hist_xl_lin += xl
                     hist_x_lin += x
 
+                    storage.dset_extend1d(output, "/yield_distance/any/min", istore, np.min(x))
+                    storage.dset_extend1d(output, "/yield_distance/right/min", istore, np.min(xr))
+                    storage.dset_extend1d(output, "/yield_distance/left/min", istore, np.min(xl))
+                    istore += 1
+
                     ensemble.heightheight(system.u)
 
                 for name, hist in zip(
                     ["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]
                 ):
-                    root = output[f"/yield_distance/{name}/log"]
+                    root = output[f"/yield_distance/{name}/log_binning"]
                     for key, value in hist:
                         root[key][...] = value
 
                 for name, hist in zip(
                     ["any", "left", "right"], [hist_x_lin, hist_xl_lin, hist_xr_lin]
                 ):
-                    root = output[f"/yield_distance/{name}/lin"]
+                    root = output[f"/yield_distance/{name}/lin_binning"]
                     for key, value in hist:
                         root[key][...] = value
 
                 root = output["heightheight"]
-                root["R"][...] = ensemble.result()[keep].reshape(reshape)
+                root["mean"][...] = ensemble.result()[keep].reshape(reshape)
                 root["error"][...] = np.sqrt(ensemble.variance()[keep]).reshape(reshape)
 
                 output.flush()

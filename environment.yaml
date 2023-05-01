@@ -12,6 +12,7 @@ dependencies:
 - mv_regex
 - numpy
 - parallel
+- pdfcombine
 - pre-commit
 - prettytable
 - pybind11
