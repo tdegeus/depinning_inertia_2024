@@ -2034,6 +2034,7 @@ def cli_stateaftersystemspanning(cli_args=None):
         A = info["/avalanche/A"][...]
         N = info["/normalisation/N"][...]
         shape = info["/normalisation/shape"][...]
+        dim = shape.size
         L = min(shape)
 
         keep = A == N
@@ -2107,7 +2108,10 @@ def cli_stateaftersystemspanning(cli_args=None):
                     storage.dset_extend1d(output, "/yield_distance/left/min", istore, np.min(xl))
                     istore += 1
 
-                    ensemble.heightheight(system.u[0, :])
+                    if dim == 1:
+                        ensemble.heightheight(system.u)
+                    else:
+                        ensemble.heightheight(system.u[0, :])
 
                 for name, hist in zip(
                     ["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]
