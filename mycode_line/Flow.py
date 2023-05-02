@@ -284,9 +284,9 @@ def cli_run(cli_args=None):
     with h5py.File(args.file, "a") as file:
         assert QuasiStatic._get_data_version(file) == data_version
         if "/Flow/restart" not in file:
-            res = file.create_group("/Flow/restart")
+            restart = file.create_group("/Flow/restart")
         else:
-            res = file["/Flow/restart"]
+            restart = file["/Flow/restart"]
         root = file["/Flow/output"]
         output = root["interval"][...]
         v_frame = file["/Flow/param/v_frame"][...]
@@ -295,16 +295,18 @@ def cli_run(cli_args=None):
         system.inc = 0
         QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
 
-        if "u" in res:
-            system.inc = res["inc"][...]
+        if "u" in restart:
+            system.inc = restart["inc"][...]
             step = np.argwhere(root["inc"][...] == system.inc).ravel()[0]
             system.chunk.restore(
-                state=res["state"][...], value=res["value"][...], index=res["index"][...]
+                state=restart["state"][...],
+                value=restart["value"][...],
+                index=restart["index"][...],
             )
             system.u_frame = root["u_frame"][step]
-            system.u = res["u"][...]
-            system.v = res["v"][...]
-            system.a = res["a"][...]
+            system.u = restart["u"][...]
+            system.v = restart["v"][...]
+            system.a = restart["a"][...]
             print(f"Restarting at u_frame = {system.u_frame:.1f}")
             assert np.isclose(root["f_frame"][step], np.mean(system.f_frame))
             assert np.isclose(root["f_potential"][step], np.mean(system.f_potential))
@@ -314,6 +316,7 @@ def cli_run(cli_args=None):
             # start the system with a bit of advance
             system.u_frame = (args.init_force - np.mean(system.f_frame)) / system.k_frame
             system.v = v_frame * np.ones_like(system.v)
+            step = 0
             # create/check output
             if "f_frame" not in root:
                 fpot = np.mean(system.f_potential)
@@ -332,19 +335,20 @@ def cli_run(cli_args=None):
                 assert root["inc"][0] == system.inc
 
         tic = time.time()
+        end = step + args.nstep - 1
 
-        for step in tqdm.tqdm(range(args.nstep), desc=args.file):
+        for step in tqdm.tqdm(range(step, end + 1), desc=args.file):
             system.flowSteps(output, v_frame)
 
-            if step == args.nstep - 1 or time.time() - tic > args.backup_interval * 60:
+            if step == end or time.time() - tic > args.backup_interval * 60:
                 tic = time.time()
-                storage.dump_overwrite(res, "inc", system.inc)
-                storage.dump_overwrite(res, "u", system.u)
-                storage.dump_overwrite(res, "v", system.v)
-                storage.dump_overwrite(res, "a", system.a)
-                storage.dump_overwrite(res, "state", system.chunk.state_at(system.chunk.start))
-                storage.dump_overwrite(res, "index", system.chunk.start)
-                storage.dump_overwrite(res, "value", system.chunk.data[..., 0])
+                storage.dump_overwrite(restart, "inc", system.inc)
+                storage.dump_overwrite(restart, "u", system.u)
+                storage.dump_overwrite(restart, "v", system.v)
+                storage.dump_overwrite(restart, "a", system.a)
+                storage.dump_overwrite(restart, "state", system.chunk.state_at(system.chunk.start))
+                storage.dump_overwrite(restart, "index", system.chunk.start)
+                storage.dump_overwrite(restart, "value", system.chunk.data[..., 0])
                 file.flush()
 
             for key in ["inc", "u_frame", "f_frame", "f_potential", "u", "v"]:
