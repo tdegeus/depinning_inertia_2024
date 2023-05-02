@@ -2035,7 +2035,6 @@ def cli_stateaftersystemspanning(cli_args=None):
         N = info["/normalisation/N"][...]
         shape = info["/normalisation/shape"][...]
         L = min(shape)
-        is2d = shape.size == 2
 
         keep = A == N
         file = file[keep]
@@ -2048,13 +2047,8 @@ def cli_stateaftersystemspanning(cli_args=None):
     hist_xr_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
     hist_xl_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
 
-    roi = int((L - L % 2) / 2)
-    roi = int(roi - roi % 2 + 1)
-    w = int((roi - roi % 2) / 2 + 1)
-    reshape = [w for _ in shape]
-    roi = [roi for _ in shape]
-
-    ensemble = eye.Ensemble(roi, variance=True, periodic=True)
+    w = int((L - L % 2) / 2)
+    ensemble = eye.Ensemble([int(w - w % 2 + 1)], variance=True, periodic=True)
 
     if args.select is not None:
         if args.select < step.size:
@@ -2078,19 +2072,12 @@ def cli_stateaftersystemspanning(cli_args=None):
         storage.create_extendible(output, "/yield_distance/right/min", dtype=np.float64)
 
         root = output.create_group("heightheight")
-        if is2d:
-            x = ensemble.distance(0).astype(int)
-            y = ensemble.distance(1).astype(int)
-            keep = np.logical_and(x >= 0, y >= 0)
-            root["x"] = x[keep].reshape(reshape)
-            root["y"] = y[keep].reshape(reshape)
-        else:
-            x = ensemble.distance(0).astype(int)
-            keep = x >= 0
-            root["x"] = x[keep]
+        x = ensemble.distance(0).astype(int)
+        keep = x >= 0
+        root["x"] = x[keep]
 
-        root["mean"] = ensemble.result()[keep].reshape(reshape)
-        root["error"] = np.sqrt(np.zeros_like(ensemble.result())[keep]).reshape(reshape)
+        root["mean"] = ensemble.result()[keep]
+        root["error"] = np.sqrt(np.zeros_like(ensemble.result())[keep])
 
         output.flush()
 
@@ -2120,7 +2107,7 @@ def cli_stateaftersystemspanning(cli_args=None):
                     storage.dset_extend1d(output, "/yield_distance/left/min", istore, np.min(xl))
                     istore += 1
 
-                    ensemble.heightheight(system.u)
+                    ensemble.heightheight(system.u[0, :])
 
                 for name, hist in zip(
                     ["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]
@@ -2137,8 +2124,8 @@ def cli_stateaftersystemspanning(cli_args=None):
                         root[key][...] = value
 
                 root = output["heightheight"]
-                root["mean"][...] = ensemble.result()[keep].reshape(reshape)
-                root["error"][...] = np.sqrt(ensemble.variance()[keep]).reshape(reshape)
+                root["mean"][...] = ensemble.result()[keep]
+                root["error"][...] = np.sqrt(ensemble.variance()[keep])
 
                 output.flush()
 
