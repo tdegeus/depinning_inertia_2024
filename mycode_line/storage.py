@@ -83,17 +83,20 @@ def dump_with_atttrs(file: h5py.File, key: str, data: TypeVar("T"), **kwargs):
         file[key].attrs[attr] = kwargs[attr]
 
 
-def dump_overwrite(file: h5py.File, key: str, data: TypeVar("T")):
+def dump_overwrite(file: h5py.File, key: str, data: TypeVar("T"), **kwargs):
     """
     Dump or overwrite data.
 
     :param file: Opened HDF5 file.
     :param key: Path to the dataset.
     :param data: Data to write.
+    :param kwargs: An optional dictionary with attributes.
     """
 
     if key in file:
         file[key][...] = data
-        return
+    else:
+        file[key] = data
 
-    file[key] = data
+    for attr in kwargs:
+        file[key].attrs[attr] = kwargs[attr]
