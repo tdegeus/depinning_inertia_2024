@@ -2023,10 +2023,11 @@ def cli_stateaftersystemspanning(cli_args=None):
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
-    basedir = os.path.dirname(args.ensembleinfo)
+    basedir = pathlib.Path(args.ensembleinfo).parent
 
     with h5py.File(args.ensembleinfo) as info:
-        assert np.all([os.path.exists(os.path.join(basedir, file)) for file in info["full"]])
+        if not args.develop:
+            assert np.all([os.path.exists(basedir / file) for file in info["full"]])
 
         paths = info["/lookup/filepath"].asstr()[...]
         file = info["/avalanche/file"][...]
@@ -2040,6 +2041,11 @@ def cli_stateaftersystemspanning(cli_args=None):
         keep = A == N
         file = file[keep]
         step = step[keep]
+
+        if args.develop:
+            keep = np.array([os.path.exists(basedir / paths[i]) for i in file])
+            file = file[keep]
+            step = step[keep]
 
     hist_x_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001), bound_error="norm")
     hist_xr_log = enstat.histogram(bin_edges=np.logspace(-4, 1, 20001), bound_error="norm")
@@ -2085,7 +2091,7 @@ def cli_stateaftersystemspanning(cli_args=None):
         istore = 0
 
         for f in tqdm.tqdm(np.unique(file)):
-            with h5py.File(os.path.join(basedir, paths[f])) as source:
+            with h5py.File(basedir / paths[f]) as source:
                 system = allocate_system(source)
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
