@@ -73,13 +73,39 @@ def interpret_filename(filename: str) -> dict:
     return info
 
 
-def ensemble_average(file: h5py.File | dict, skip: int = None):
+def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     """
     Ensemble average from a file written by :py:func:`cli_enembleinfo`.
 
     :param file: Ensemble info (opened HDF5 archive).
-    :param skip: Skip the first ``skip`` entries.
+    :param steadystate:
+        Dictionary with ``u_frame`` from which the steady state is reached. E.g.::
+
+            steadystate = {
+                "v_frame=0,4_id=0000.h5": None,
+                "v_frame=0,5_id=0000.h5": 0.5,
+            }
+
+        If the input is file, it should be a YAML file with the same structure::
+
+            v_frame=0,4_id=0000.h5: null
+            v_frame=0,5_id=0000.h5: 0.5
+
+    :return:
+
+        - ``v_frame``: array with the applied velocities.
+        - ``mean``: dictionary with the steady-state means.
+        - ``std``: dictionary with the steady-state standard deviations.
+        - ``steadystate``: dictionary with the steady-state values.
     """
+
+    if not isinstance(steadystate, dict):
+        steadystate = shelephant.yaml.read(steadystate)
+        for path in steadystate:
+            if isinstance(steadystate[path], str):
+                steadystate[path] = float(steadystate[path])
+            else:
+                steadystate[path] = None
 
     data = {
         "v": defaultdict(list),
@@ -88,18 +114,24 @@ def ensemble_average(file: h5py.File | dict, skip: int = None):
     }
 
     root = file["/full"]
+    keep = []
 
     for name in root:
         v_frame = float(root[name]["v_frame"][...])
+        u_frame = root[name]["u_frame"][...]
         v = root[name]["v"][...]
         f_frame = root[name]["f_frame"][...]
         f_potential = root[name]["f_potential"][...]
 
-        if skip is None:
-            s = int(v.size / 2)
-        else:
-            s = skip
+        if name not in steadystate:
+            continue
 
+        if isinstance(steadystate[name], float):
+            s = np.argmax(u_frame > steadystate[name])
+        else:
+            continue
+
+        keep.append(name)
         data["v"][v_frame] += list(v[s:])
         data["f_frame"][v_frame] += list(f_frame[s:])
         data["f_potential"][v_frame] += list(f_potential[s:])
@@ -112,7 +144,7 @@ def ensemble_average(file: h5py.File | dict, skip: int = None):
         mean[field] = np.array([np.mean(data[field][v]) for v in v_frame])
         std[field] = np.array([np.std(data[field][v]) for v in v_frame])
 
-    return v_frame, mean, std, data
+    return v_frame, mean, std, {k: steadystate[k] for k in keep}
 
 
 def cli_ensemblepack(cli_args=None):
@@ -387,14 +419,21 @@ def cli_plot(cli_args=None):
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("-p", "--path", type=str, help="'/full/{path}' (EnsembleInfo).")
-    parser.add_argument("file", type=str, help="Simulation file / EnsembleInfo")
+    parser.add_argument(
+        "-s",
+        "--steadystate",
+        type=pathlib.Path,
+        default={},
+        help="Steady-state per realisation, see :py:func:`ensemble_average`.",
+    )
+    parser.add_argument("file", type=pathlib.Path, help="Simulation file / EnsembleInfo")
 
     args = tools._parse(parser, cli_args)
-    assert os.path.isfile(args.file)
+    assert args.file.exists()
 
     with h5py.File(args.file) as file:
         if "full" in file:
-            v_frame, mean, std, _ = ensemble_average(file)
+            v_frame, mean, std, steadystate = ensemble_average(file, args.steadystate)
             ensemble = {
                 "x": v_frame[...],
                 "y": mean["f_frame"][...],
@@ -403,10 +442,15 @@ def cli_plot(cli_args=None):
             }
             root = file["full"][args.path]
             v_frame = root["v_frame"][...]
+            if args.path in steadystate:
+                steadystate = steadystate[args.path]
+            else:
+                steadystate = None
         else:
             ensemble = None
             root = file["/Flow/output"]
             v_frame = file["/Flow/param/v_frame"][...]
+            steadystate = None
 
         u_frame = root["u_frame"][...]
         f_frame = root["f_frame"][...]
@@ -420,10 +464,16 @@ def cli_plot(cli_args=None):
     fig, axes = gplt.subplots(ncols=2 if ensemble is None else 3)
 
     ax = axes[0]
+
     ax.plot(u_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
     ax.plot(u_frame, -f_potential, label=r"$f_\text{potential}$", c="r", **opts)
+
+    if steadystate is not None:
+        ax.axvspan(u_frame.min(), steadystate, color="k", alpha=0.2, lw=0, zorder=100)
+
     ax.set_xlabel(r"$u_\text{frame}$")
     ax.set_ylabel(r"$f$")
+
     ax.legend()
 
     ax = axes[1]
