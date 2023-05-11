@@ -230,6 +230,11 @@ def cli_ensemblepack(cli_args=None):
 def cli_generate(cli_args=None):
     """
     Generate IO files.
+    A useful command to create jobs is:
+
+    .. code-block:: bash
+
+        shelephant_dump --fmt "Flow_Run --nstep 100000 {}" */id*h5 -o commands_run.yaml
     """
 
     class MyFmt(
