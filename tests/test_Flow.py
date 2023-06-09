@@ -1,7 +1,11 @@
 import os
+import pathlib
 import shutil
 import sys
+import tempfile
 import unittest
+
+from shelephant.search import cwd
 
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
@@ -20,13 +24,17 @@ class MyTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        for file in [filename, infoname]:
-            if os.path.isfile(file):
-                os.remove(file)
+        self.origin = pathlib.Path().absolute()
+        self.tempdir = tempfile.mkdtemp()
+        os.chdir(self.tempdir)
 
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
+    @classmethod
+    def tearDownClass(self):
+        os.chdir(self.origin)
+        shutil.rmtree(self.tempdir)
 
+    def test_basic(self):
+        outdir = "athermal"
         Flow.cli_generate(
             [
                 "--dev",
@@ -38,27 +46,44 @@ class MyTests(unittest.TestCase):
                 1,
                 "--v-frame",
                 1,
-                dirname,
+                outdir,
                 "--kframe",
                 1 / 50,
                 "--nstep",
                 100,
             ]
         )
-        Flow.cli_run(["--dev", filename])
-        Flow.cli_ensemblepack(["--dev", "-o", infoname, filename])
-        Flow.cli_ensemblepack(["--dev", "-o", infoname, "-i", filename])
 
-    @classmethod
-    def tearDownClass(self):
-        shutil.rmtree(dirname)
+        with cwd(outdir):
+            Flow.cli_run(["--dev", "id=0000.h5"])
+            Flow.cli_ensemblepack(["--dev", "-o", "info.h5", "id=0000.h5"])
+            Flow.cli_ensemblepack(["--dev", "-o", "info.h5", "-i", "id=0000.h5"])
 
-    def test_read(self):
-        """
-        Read output.
-        """
+    def test_thermal(self):
+        outdir = "thermal"
+        Flow.cli_generate(
+            [
+                "--dev",
+                "--eta",
+                1e0,
+                "--size",
+                50,
+                "-n",
+                1,
+                "--v-frame",
+                1,
+                outdir,
+                "--kframe",
+                1 / 50,
+                "--nstep",
+                100,
+                "--temperature",
+                0.1,
+            ]
+        )
 
-        self.assertTrue(True)
+        with cwd(outdir):
+            Flow.cli_run(["--dev", "id=0000.h5"])
 
 
 if __name__ == "__main__":

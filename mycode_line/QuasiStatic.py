@@ -531,6 +531,11 @@ class Normalisation:
         else:
             raise ValueError(f"Unknown potential: {self.potential:s}")
 
+        if "temperature" in file["param"]:
+            self.temperature = file["param"]["temperature"]["value"][...]
+        else:
+            self.temperature = 0
+
         if len(self.shape) == 1:
             self.system = "Line1d"
         elif len(self.shape) == 2:
@@ -541,6 +546,8 @@ class Normalisation:
         extra = []
         if self.dynamics == "overdamped":
             extra.append("Nopassing")
+        if self.temperature > 0:
+            extra.append("RandomForcing")
         self.system = "_".join([self.system, "System", self.potential, self.interactions] + extra)
 
     def asdict(self):
@@ -817,6 +824,7 @@ class Line1d_System_Cuspy_Laplace_RandomForcing(
 ):
     def __init__(self, file: h5py.File):
         SystemExtra.__init__(self, file)
+        unity = np.ones(file["param"]["shape"][...], dtype=int)
         model.System_Cuspy_Laplace_RandomForcing.__init__(
             self,
             m=file["param"]["m"][...],
@@ -825,11 +833,11 @@ class Line1d_System_Cuspy_Laplace_RandomForcing(
             k_interactions=file["param"]["interactions"]["k"][...],
             k_frame=file["param"]["k_frame"][...],
             dt=file["param"]["dt"][...],
-            mean=file["param"]["thermal"]["mean"][...],
-            stddev=file["param"]["thermal"]["stddev"][...],
-            seed_forcing=file["param"]["thermal"]["seed"][...],
-            dinc_init=file["param"]["thermal"]["dinc_init"][...],
-            dinc=file["param"]["thermal"]["dinc"][...],
+            mean=file["param"]["temperature"]["mean"][...],
+            stddev=file["param"]["temperature"]["stddev"][...],
+            seed_forcing=file["realisation"]["seed"][...],
+            dinc_init=np.zeros(file["param"]["shape"][...], dtype=int),
+            dinc=file["param"]["temperature"]["dinc"][...] * unity,
             **_common_param(file),
         )
 
@@ -957,6 +965,7 @@ def generate(
     distribution: str = "weibull",
     interactions: dict = {"type": "Laplace", "k": 1.0},
     overdamped: bool = False,
+    temperature: float = None,
 ):
     """
     Generate a simulation file.
@@ -971,6 +980,7 @@ def generate(
     :param distribution: Distribution of potentials.
     :param interactions: Select interactions.
     :param overdamped: Run overdamped dynamics (no passing rule if quasi-static).
+    :param temperature: Temperature (in units of the yield force = 1).
     """
 
     L = min(shape)
@@ -1026,6 +1036,12 @@ def generate(
     if k_frame is not None:
         file["/param/k_frame"][...] = k_frame
 
+    if temperature is not None:
+        file["/param/temperature/value"] = temperature
+        file["/param/temperature/dinc"] = int(1)
+        file["/param/temperature/stddev"] = np.sqrt(temperature * 2 * eta)
+        file["/param/temperature/mean"] = float(0)
+
     file["/param/shape"] = shape
     file["/param/normalisation/u"] = 1
     file["/param/data_version"] = data_version
@@ -1042,6 +1058,7 @@ def _generate_cli_options(parser):
     parser.add_argument("--dt", type=float, help="Time-step")
     parser.add_argument("--eta", type=float, help="Damping coefficient")
     parser.add_argument("--overdamped", action="store_true", help="Overdamped dynamics")
+    parser.add_argument("--temperature", type=float, help="Finite temperature (units f_yield)")
     parser.add_argument(
         "--nstep", default=20000, help="#load-steps to run", type=lambda arg: int(float(arg))
     )
@@ -1112,6 +1129,9 @@ def _generate_parse(args):
     ret["potential"] = potential
     ret["distribution"] = args.distribution
     ret["interactions"] = interactions
+
+    if args.temperature is not None:
+        ret["temperature"] = args.temperature
 
     return ret
 
