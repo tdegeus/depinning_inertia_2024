@@ -18,7 +18,7 @@ dependencies:
 - pybind11
 - python
 - python-cppcolormap
-- python-frictionqpotspringblock >=0.22.6
+- python-frictionqpotspringblock >=0.22.7
 - python-gooseeye
 - python-goosefem >=1.1.0
 - python-prrng >=1.11.0

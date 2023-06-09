@@ -819,6 +819,30 @@ class Line1d_System_Cuspy_Quartic(model.System_Cuspy_Quartic, SystemExtra):
         )
 
 
+class Line1d_System_Cuspy_Quartic_RandomForcing(
+    model.System_Cuspy_Quartic_RandomForcing, SystemExtra
+):
+    def __init__(self, file: h5py.File):
+        SystemExtra.__init__(self, file)
+        unity = np.ones(file["param"]["shape"][...], dtype=int)
+        model.System_Cuspy_Quartic_RandomForcing.__init__(
+            self,
+            m=file["param"]["m"][...],
+            eta=file["param"]["eta"][...],
+            mu=file["param"]["mu"][...],
+            a1=file["param"]["interactions"]["a1"][...],
+            a2=file["param"]["interactions"]["a2"][...],
+            k_frame=file["param"]["k_frame"][...],
+            dt=file["param"]["dt"][...],
+            mean=file["param"]["temperature"]["mean"][...],
+            stddev=file["param"]["temperature"]["stddev"][...],
+            seed_forcing=file["realisation"]["seed"][...],
+            dinc_init=np.zeros(file["param"]["shape"][...], dtype=int),
+            dinc=file["param"]["temperature"]["dinc"][...] * unity,
+            **_common_param(file),
+        )
+
+
 class Line1d_System_Cuspy_Laplace_RandomForcing(
     model.System_Cuspy_Laplace_RandomForcing, SystemExtra
 ):
@@ -878,6 +902,9 @@ def allocate_system(file: h5py.File):
 
     if norm.system == "Line1d_System_Cuspy_QuarticGradient":
         return Line1d_System_Cuspy_QuarticGradient(file)
+
+    if norm.system == "Line1d_System_Cuspy_Quartic_RandomForcing":
+        return Line1d_System_Cuspy_Quartic_RandomForcing(file)
 
     if norm.system == "Line1d_System_Cuspy_Laplace_RandomForcing":
         return Line1d_System_Cuspy_Laplace_RandomForcing(file)
@@ -982,7 +1009,6 @@ def generate(
     :param overdamped: Run overdamped dynamics (no passing rule if quasi-static).
     :param temperature: Temperature (in units of the yield force = 1).
     """
-
     L = min(shape)
 
     if eta is None and dt is None:
