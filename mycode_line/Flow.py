@@ -103,7 +103,12 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
         steadystate = shelephant.yaml.read(steadystate)
         for path in steadystate:
             if isinstance(steadystate[path], str):
-                steadystate[path] = float(steadystate[path])
+                steadystate[path] = [[float(steadystate[path]), np.inf]]
+            elif isinstance(steadystate[path], list):
+                if isinstance(steadystate[path][0], str):
+                    steadystate[path] = [[float(steadystate[path][0]), float(steadystate[path][1])]]
+                else:
+                    steadystate[path] = [[float(i[0]), float(i[1])] for i in steadystate[path]]
             else:
                 steadystate[path] = None
 
@@ -126,15 +131,21 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
         if name not in steadystate:
             continue
 
-        if isinstance(steadystate[name], float):
-            s = np.argmax(u_frame > steadystate[name])
-        else:
+        if steadystate[name] is None:
             continue
 
         keep.append(name)
-        data["v"][v_frame] += list(v[s:])
-        data["f_frame"][v_frame] += list(f_frame[s:])
-        data["f_potential"][v_frame] += list(f_potential[s:])
+
+        for a, b in steadystate[name]:
+            s = np.argmax(u_frame > a)
+            if np.isinf(b):
+                e = len(u_frame)
+            else:
+                e = np.argmax(u_frame > b)
+
+            data["v"][v_frame] += list(v[s:e])
+            data["f_frame"][v_frame] += list(f_frame[s:e])
+            data["f_potential"][v_frame] += list(f_potential[s:e])
 
     mean = {}
     std = {}
@@ -469,20 +480,24 @@ def cli_plot(cli_args=None):
     fig, axes = gplt.subplots(ncols=2 if ensemble is None else 3)
 
     ax = axes[0]
-
     ax.plot(u_frame, f_frame, label=r"$f_\text{frame}$", c="k", **opts)
     ax.plot(u_frame, -f_potential, label=r"$f_\text{potential}$", c="r", **opts)
-
-    if steadystate is not None:
-        ax.axvspan(u_frame.min(), steadystate, color="k", alpha=0.2, lw=0, zorder=100)
-
     ax.set_xlabel(r"$u_\text{frame}$")
     ax.set_ylabel(r"$f$")
-
     ax.legend()
+
+    if steadystate is not None:
+        for a, b in steadystate:
+            for ax in axes[:2]:
+                if np.isinf(b):
+                    ax.axvspan(a, np.max(u_frame), color="g", alpha=0.2, lw=0, zorder=100)
+                else:
+                    ax.axvspan(a, b, color="g", alpha=0.2, lw=0, zorder=100)
 
     ax = axes[1]
     ax.plot(u_frame, v / v_frame, c="k", **opts)
+    ax.axhline(1, c="b", ls="-")
+    ax.set_ylim([0, 2])
     ax.set_xlabel(r"$u_\text{frame}$")
     ax.set_ylabel(r"$v / v_\text{frame}$")
 
