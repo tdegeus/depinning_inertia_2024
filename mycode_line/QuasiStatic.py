@@ -2083,6 +2083,7 @@ def cli_stateaftersystemspanning(cli_args=None):
         shape = info["/normalisation/shape"][...]
         dim = shape.size
         L = min(shape)
+        mu = info["param"]["mu"][...]
 
         keep = A == N
         file = file[keep]
@@ -2101,7 +2102,8 @@ def cli_stateaftersystemspanning(cli_args=None):
     hist_xl_lin = enstat.histogram(bin_edges=np.linspace(1e-2, 1e0, 20001), bound_error="norm")
 
     w = int((L - L % 2) / 2)
-    ensemble = eye.Ensemble([int(w - w % 2 + 1)], variance=True, periodic=True)
+    heightheight = eye.Ensemble([int(w - w % 2 + 1)], variance=True, periodic=True)
+    structure = {"u": eye.Structure(shape=shape), "u_p": eye.Structure(shape=shape)}
 
     if args.select is not None:
         if args.select < step.size:
@@ -2125,12 +2127,20 @@ def cli_stateaftersystemspanning(cli_args=None):
         storage.create_extendible(output, "/yield_distance/right/min", dtype=np.float64)
 
         root = output.create_group("heightheight")
-        x = ensemble.distance(0).astype(int)
+        x = heightheight.distance(0).astype(int)
         keep = x >= 0
         root["x"] = x[keep]
+        root["mean"] = heightheight.result()[keep]
+        root["error"] = np.sqrt(np.zeros_like(heightheight.result())[keep])
 
-        root["mean"] = ensemble.result()[keep]
-        root["error"] = np.sqrt(np.zeros_like(ensemble.result())[keep])
+        root = output.create_group("structure")
+        for measure in structure:
+            group = root.create_group(measure)
+            for key, value in structure[measure]:
+                if dim == 1:
+                    group[key] = value
+                else:
+                    group[key] = value[:, 0]
 
         output.flush()
 
@@ -2160,10 +2170,13 @@ def cli_stateaftersystemspanning(cli_args=None):
                     storage.dset_extend1d(output, "/yield_distance/left/min", istore, np.min(xl))
                     istore += 1
 
+                    structure["u"] += system.u
+                    structure["u_p"] += system.u - system.f_potential / mu  # todo: from system
+
                     if dim == 1:
-                        ensemble.heightheight(system.u)
+                        heightheight.heightheight(system.u)
                     else:
-                        ensemble.heightheight(system.u[0, :])
+                        heightheight.heightheight(system.u[0, :])
 
                 for name, hist in zip(
                     ["any", "left", "right"], [hist_x_log, hist_xl_log, hist_xr_log]
@@ -2180,8 +2193,17 @@ def cli_stateaftersystemspanning(cli_args=None):
                         root[key][...] = value
 
                 root = output["heightheight"]
-                root["mean"][...] = ensemble.result()[keep]
-                root["error"][...] = np.sqrt(ensemble.variance()[keep])
+                root["mean"][...] = heightheight.result()[keep]
+                root["error"][...] = np.sqrt(heightheight.variance()[keep])
+
+                root = output["structure"]
+                for measure in structure:
+                    group = root[measure]
+                    for key, value in structure[measure]:
+                        if dim == 1:
+                            group[key][...] = value
+                        else:
+                            group[key][...] = value[:, 0]
 
                 output.flush()
 

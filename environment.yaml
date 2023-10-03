@@ -19,7 +19,7 @@ dependencies:
 - python
 - python-cppcolormap
 - python-frictionqpotspringblock >=0.22.7
-- python-gooseeye
+- python-gooseeye >=0.7.1
 - python-goosefem >=1.1.0
 - python-prrng >=1.11.0
 - scikit-build
