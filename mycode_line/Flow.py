@@ -97,6 +97,7 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
         - ``mean``: dictionary with the steady-state means.
         - ``std``: dictionary with the steady-state standard deviations.
         - ``steadystate``: dictionary with the steady-state values.
+        - ``data``: dictionary with the steady-state data.
     """
 
     if not isinstance(steadystate, dict):
@@ -152,10 +153,14 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     v_frame = np.array(sorted(data["v"].keys()))
 
     for field in data:
+        for v in v_frame:
+            data[field][v] = np.array(data[field][v])
+
+    for field in data:
         mean[field] = np.array([np.mean(data[field][v]) for v in v_frame])
         std[field] = np.array([np.std(data[field][v]) for v in v_frame])
 
-    return v_frame, mean, std, {k: steadystate[k] for k in keep}
+    return v_frame, mean, std, {k: steadystate[k] for k in keep}, data
 
 
 def cli_ensemblepack(cli_args=None):
@@ -449,7 +454,7 @@ def cli_plot(cli_args=None):
 
     with h5py.File(args.file) as file:
         if "full" in file:
-            v_frame, mean, std, steadystate = ensemble_average(file, args.steadystate)
+            v_frame, mean, std, steadystate, _ = ensemble_average(file, args.steadystate)
             ensemble = {
                 "x": v_frame[...],
                 "y": mean["f_frame"][...],
