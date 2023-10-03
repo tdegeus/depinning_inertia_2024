@@ -696,7 +696,7 @@ class SystemExtra:
 
         u = root["u"][str(step)][...]
 
-        if type(fastload) == tuple or type(fastload) == list:
+        if isinstance(fastload, tuple) or isinstance(fastload, list):
             pass
         elif fastload:
             fastload = (filename2fastload(root.file.filename), f"/QuasiStatic/{step:d}")

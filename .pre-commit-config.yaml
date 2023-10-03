@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/psf/black
-  rev: 23.3.0
+  rev: 23.9.1
   hooks:
   - id: black
     args: [--safe, --quiet, --line-length=100]
@@ -12,7 +12,7 @@ repos:
   - id: check-yaml
   - id: debug-statements
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.8.0
+  rev: v2.10.0
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2', --preserve-quotes]
@@ -22,21 +22,21 @@ repos:
   - id: autoflake
     args: [--in-place, --remove-unused-variable]
 - repo: https://github.com/asottile/reorder_python_imports
-  rev: v3.9.0
+  rev: v3.12.0
   hooks:
   - id: reorder-python-imports
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.3.1
+  rev: v3.14.0
   hooks:
   - id: pyupgrade
     args: [--py36-plus]
 - repo: https://github.com/PyCQA/flake8
-  rev: 6.0.0
+  rev: 6.1.0
   hooks:
   - id: flake8
     args: ["--ignore=E722,W503,E203", --max-line-length=110, "--per-file-ignores=*/__init__.py:F401"]
 - repo: https://github.com/asottile/setup-cfg-fmt
-  rev: v2.2.0
+  rev: v2.5.0
   hooks:
   - id: setup-cfg-fmt
 - repo: https://github.com/tdegeus/conda_envfile
