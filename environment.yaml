@@ -24,7 +24,7 @@ dependencies:
 - python-prrng >=1.11.0
 - scikit-build
 - setuptools_scm
-- shelephant >=0.21.7
+- shelephant >=0.23.0
 - sphinx_rtd_theme
 - tqdm
 - xdmfwrite_h5py >=0.2.0

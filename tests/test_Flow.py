@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 
-from shelephant.search import cwd
+from shelephant.path import cwd
 
 root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
