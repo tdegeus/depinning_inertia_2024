@@ -2152,6 +2152,9 @@ def cli_stateaftersystemspanning(cli_args=None):
 
                 for s in tqdm.tqdm(np.sort(step[file == f])):
                     system.restore_quasistatic_step(source["QuasiStatic"], s)
+                    ur = system.chunk.right_of_align
+                    ul = system.chunk.left_of_align
+                    umin = 0.5 * (ur + ul)
 
                     xr = system.chunk.right_of_align - system.u
                     xl = system.u - system.chunk.left_of_align
@@ -2171,7 +2174,7 @@ def cli_stateaftersystemspanning(cli_args=None):
                     istore += 1
 
                     structure["u"] += system.u
-                    structure["u_p"] += system.u - system.f_potential / mu  # todo: from system
+                    structure["u_p"] += umin
 
                     if dim == 1:
                         heightheight.heightheight(system.u)
