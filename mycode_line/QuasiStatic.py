@@ -2259,33 +2259,37 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
         idx = int(L / 2)
         output["q"] = q[1:idx]
         assert np.all(q[1:idx] + np.flip(q[idx + 1 :]) == 0)
-        qshape = [idx - 1 for _ in shape]
-        structure = enstat.static(shape=qshape)
+        structure_position = eye.Structure(shape=shape)
+        structure_minimum = eye.Structure(shape=shape)
 
-        output["first"] = structure.first
-        output["second"] = structure.second
-        output["norm"] = structure.norm
+        output["/position/first"] = structure_position.first
+        output["/position/second"] = structure_position.second
+        output["/position/norm"] = structure_position.norm
+
+        output["/minimum/first"] = structure_minimum.first
+        output["/minimum/second"] = structure_minimum.second
+        output["/minimum/norm"] = structure_minimum.norm
 
         output.flush()
 
         for f in tqdm.tqdm(np.unique(file)):
             with h5py.File(os.path.join(basedir, paths[f])) as source:
+                system = allocate_system(source)
                 for s in tqdm.tqdm(np.sort(step[file == f])):
-                    u = source[f"/QuasiStatic/u/{s:d}"][...]
-                    u -= u.mean()
+                    structure_position += source[f"/QuasiStatic/u/{s:d}"][...]
 
-                    if len(shape) == 2:
-                        uhat = np.fft.fft2(u)
-                        structure += np.real(
-                            uhat[1:idx, 1:idx] * np.flip(uhat[idx + 1 :, idx + 1 :])
-                        )
-                    else:
-                        uhat = np.fft.fft(u)
-                        structure += np.real(uhat[1:idx] * np.flip(uhat[idx + 1 :]))
+                    system.restore_quasistatic_step(source["QuasiStatic"], s)
+                    ul = system.chunk.left_of_align
+                    ur = system.chunk.right_of_align
+                    structure_minimum += 0.5 * (ul + ur)
 
-            output["first"][...] = structure.first
-            output["second"][...] = structure.second
-            output["norm"][...] = structure.norm
+            output["/position/first"][...] = structure_position.first
+            output["/position/second"][...] = structure_position.second
+            output["/position/norm"][...] = structure_position.norm
+
+            output["/minimum/first"][...] = structure_minimum.first
+            output["/minimum/second"][...] = structure_minimum.second
+            output["/minimum/norm"][...] = structure_minimum.norm
 
             output.flush()
 
