@@ -1,6 +1,7 @@
 """
 Rerun step (quasi-static step, or trigger) to extract the dynamic evolution of fields.
 """
+
 from __future__ import annotations
 
 import argparse

@@ -1,6 +1,7 @@
 """
 Rerun step (quasi-static step, or trigger) to extract event map.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,7 +21,6 @@ import XDMFWrite_h5py as xh
 from . import QuasiStatic
 from . import tools
 from ._version import version
-
 
 file_defaults = dict(
     Run="EventMap.h5",
