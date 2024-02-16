@@ -8,12 +8,12 @@ import h5py
 import numpy as np
 
 root = os.path.join(os.path.dirname(__file__), "..")
-if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
+if os.path.exists(os.path.join(root, "depinning_inertia_2024", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
-from mycode_line import Dynamics  # noqa: E402
-from mycode_line import QuasiStatic  # noqa: E402
-from mycode_line import Trigger  # noqa: E402
+from depinning_inertia_2024 import Dynamics  # noqa: E402
+from depinning_inertia_2024 import QuasiStatic  # noqa: E402
+from depinning_inertia_2024 import Trigger  # noqa: E402
 
 dirname = os.path.join(os.path.dirname(__file__), "output")
 clonedir = os.path.join(dirname, "clone")

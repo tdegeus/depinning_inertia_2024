@@ -10,7 +10,7 @@ root = os.path.join(os.path.dirname(__file__), "..")
 if os.path.exists(os.path.join(root, "mycode_front", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
-from mycode_line import storage  # noqa: E402
+from depinning_inertia_2024 import storage  # noqa: E402
 
 
 class MyTests(unittest.TestCase):

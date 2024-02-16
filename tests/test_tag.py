@@ -3,10 +3,10 @@ import sys
 import unittest
 
 root = os.path.join(os.path.dirname(__file__), "..")
-if os.path.exists(os.path.join(root, "mycode_line", "_version.py")):
+if os.path.exists(os.path.join(root, "depinning_inertia_2024", "_version.py")):
     sys.path.insert(0, os.path.abspath(root))
 
-from mycode_line import tag  # noqa: E402
+from depinning_inertia_2024 import tag  # noqa: E402
 
 
 class MyTests(unittest.TestCase):
