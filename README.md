@@ -1,2 +1,3 @@
-# line_code
-Code to simulate the elastic line
+# depinning_inertia_2024
+
+Interface between data and [FrictionQPotSpringBlock](https://github.com/tdegeus/FrictionQPotSpringBlock).
