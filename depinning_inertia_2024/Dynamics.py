@@ -107,17 +107,21 @@ def _Run_parser():
 def Run(cli_args=None):
     """
     Rerun an event and store output at different increments that are selected at:
+
     *   Given event sizes "A" unit the event is system spanning (``--A-step`` controls interval).
     *   Given time-steps if no longer checking at "A" (interval controlled by ``--t-step``).
 
     Customisation:
+
     *   ``--t-step=0``: Break simulation when ``A = N``.
     *   ``--A-step=0``: Store at fixed time intervals from the beginning.
 
     Storage:
+
     *   An exact copy of the input file.
     *   The position of all particles ("/Dynamics/u/{iiter:d}").
     *   Metadata:
+
         - "/Dynamics/inc": Increment number (-> time).
         - "/Dynamics/A": Actual number of blocks that yielded at least once.
         - "/Dynamics/stored": The stored "iiter".
