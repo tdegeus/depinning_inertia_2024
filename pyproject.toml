@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+
+[project]
+authors = [{name = "Tom de Geus", email = "tom@geus.me"}]
+classifiers = ["License :: OSI Approved :: MIT License"]
+dependencies = [
+  "click",
+  "enstat >= 0.9.1",
+  "FrictionQPotSpringBlock >= 0.22.7",
+  "GooseEYE >= 0.7.1",
+  "GooseFEM >= 1.1.0",
+  "GooseHDF5 >= 0.22.0",
+  "h5py",
+  "numpy",
+  "prettytable",
+  "prrng >= 1.11.0",
+  "shelephant >= 0.23.0",
+  "tqdm",
+  "XDMFWrite_h5py >= 0.2.0",
+  "yaml"
+]
+description = "Shell between data and FrictionQPotSpringBlock"
+dynamic = ["version"]
+name = "data_inertia_2024"
+readme = "README.md"
+requires-python = ">=3.6"
+
+[project.scripts]
+Dynamics_AverageSystemSpanning = "Dynamics.AverageSystemSpanning"
+Dynamics_Run = "Dynamics.Run"
+EventMap_Info = "EventMap.Info"
+EventMap_Paraview = "EventMap.Paraview"
+EventMap_Plot = "EventMap.Plot"
+EventMap_Run = "EventMap.Run"
+Flow_EnsemblePack = "Flow.EnsemblePack"
+Flow_Generate = "Flow.Generate"
+Flow_Plot = "Flow.Plot"
+Flow_Run = "Flow.Run"
+QuasiStatic_CheckData = "QuasiStatic.CheckData"
+QuasiStatic_CheckDynamics = "QuasiStatic.CheckDynamics"
+QuasiStatic_CheckFastLoad = "QuasiStatic.CheckFastLoad"
+QuasiStatic_EnsembleInfo = "QuasiStatic.EnsembleInfo"
+QuasiStatic_ForceCurrentDataVersion = "QuasiStatic.ForceCurrentDataVersion"
+QuasiStatic_Generate = "QuasiStatic.Generate"
+QuasiStatic_GenerateFastLoad = "QuasiStatic.GenerateFastLoad"
+QuasiStatic_JobRerun = "QuasiStatic.JobRerun"
+QuasiStatic_Paraview = "QuasiStatic.Paraview"
+QuasiStatic_Plot = "QuasiStatic.Plot"
+QuasiStatic_PlotStateAfterSystemSpanning = "QuasiStatic.PlotStateAfterSystemSpanning"
+QuasiStatic_Run = "QuasiStatic.Run"
+QuasiStatic_StateAfterSystemSpanning = "QuasiStatic.StateAfterSystemSpanning"
+QuasiStatic_StructureAfterSystemSpanning = "QuasiStatic.StructureAfterSystemSpanning"
+QuasiStatic_UpdateData = "QuasiStatic.UpdateData"
+Relaxation_EnsembleInfo = "Relaxation.EnsembleInfo"
+Relaxation_Run = "Relaxation.Run"
+Trigger_CheckData = "Trigger.CheckData"
+Trigger_EnsembleInfo = "Trigger.EnsembleInfo"
+Trigger_FilterCompleted = "Trigger.FilterCompleted"
+Trigger_Generate = "Trigger.Generate"
+Trigger_JobRerun = "Trigger.JobRerun"
+Trigger_Merge = "Trigger.Merge"
+Trigger_MergeBatch = "Trigger.MergeBatch"
+Trigger_Paraview = "Trigger.Paraview"
+Trigger_Run = "Trigger.Run"
+Trigger_UpdateData = "Trigger.UpdateData"
+
+[project.urls]
+Source = "https://github.com/tdegeus/depinning_inertia_2024"
+
+[tool.setuptools_scm]
+write_to = "depinning_inertia_2024/_version.py"
