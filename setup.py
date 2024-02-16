@@ -3,7 +3,7 @@ import re
 from setuptools import find_packages
 from setuptools import setup
 
-library = "mycode_line"
+library = "depinning_inertia_2024"
 
 
 def read_entry_points(module):
