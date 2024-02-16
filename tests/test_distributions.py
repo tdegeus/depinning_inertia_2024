@@ -10,7 +10,7 @@ def test_simple(tmp_path):
         filename = dname / "id=0000.h5"
         infoname = dname / "EnsembleInfo.h5"
 
-        QuasiStatic.cli_generate(
+        QuasiStatic.Generate(
             [
                 "--dev",
                 "--eta",
@@ -26,8 +26,8 @@ def test_simple(tmp_path):
                 1 / 50,
             ]
         )
-        QuasiStatic.cli_run(["--dev", "-n", 1000, filename])
-        QuasiStatic.cli_ensembleinfo(["--dev", "-o", infoname, filename])
+        QuasiStatic.Run(["--dev", "-n", 1000, filename])
+        QuasiStatic.EnsembleInfo(["--dev", "-o", infoname, filename])
 
         with h5py.File(infoname) as file:
             A = file["/loading/A"][...]

@@ -20,23 +20,9 @@ from . import storage
 from . import tools
 from ._version import version
 
-entry_points = dict(
-    cli_average_systemspanning="Dynamics_AverageSystemSpanning",
-    cli_run="Dynamics_Run",
-)
-
 file_defaults = dict(
-    cli_average_systemspanning="Dynamics_AverageSystemSpanning.h5",
+    AverageSystemSpanning="Dynamics_AverageSystemSpanning.h5",
 )
-
-
-def replace_ep(doc: str) -> str:
-    """
-    Replace ``:py:func:`...``` with the relevant entry_point name
-    """
-    for ep in entry_points:
-        doc = doc.replace(rf":py:func:`{ep:s}`", entry_points[ep])
-    return doc
 
 
 def restore_system(filepath: str, step: int = None, branch: int = None, apply_trigger: bool = True):
@@ -89,7 +75,7 @@ def restore_system(filepath: str, step: int = None, branch: int = None, apply_tr
     return system, info
 
 
-def cli_run(cli_args=None):
+def Run(cli_args=None):
     """
     Rerun an event and store output at different increments that are selected at:
     *   Given event sizes "A" unit the event is system spanning (``--A-step`` controls interval).
@@ -119,8 +105,7 @@ def cli_run(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-    progname = entry_points[funcname]
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -162,7 +147,9 @@ def cli_run(cli_args=None):
             root = file.create_group("Dynamics")
             root.create_group("u")
 
-            meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+            meta = QuasiStatic.create_check_meta(
+                file, f"/meta/Dynamics_{funcname}", dev=args.develop
+            )
             meta.attrs["file"] = os.path.basename(args.file)
             meta.attrs["A-step"] = args.A_step
             meta.attrs["t-step"] = args.t_step
@@ -295,7 +282,7 @@ def cli_run(cli_args=None):
 
 class AlignedAverage(enstat.static):
     """
-    Support class for :py:func:`cli_average_systemspanning`.
+    Support class for :py:func:`AverageSystemSpanning`.
     This class writes on item at a time using :py:func:`BasicAverage.subsample`.
     """
 
@@ -327,9 +314,9 @@ class AlignedAverage(enstat.static):
             self.norm[index, incl] += 1
 
 
-def cli_average_systemspanning(cli_args=None):
+def AverageSystemSpanning(cli_args=None):
     """
-    Compute averages from output of :py:func:`cli_run`:
+    Compute averages from output of :py:func:`Run`:
 
     -   'Simple' averages (macroscopic, on moving particles):
 
@@ -348,14 +335,13 @@ def cli_average_systemspanning(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-    progname = entry_points[funcname]
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     output = file_defaults[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("files", nargs="*", type=str, help="See " + entry_points["cli_run"])
+    parser.add_argument("files", nargs="*", type=str, help="See :py:func:`Run`")
 
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0
@@ -371,13 +357,13 @@ def cli_average_systemspanning(cli_args=None):
     for ifile, filepath in enumerate(args.files):
         with h5py.File(filepath, "r") as file:
             if ifile == 0:
-                t_step = file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
+                t_step = file["/meta/Dynamics_Run"].attrs["t-step"]
                 norm = QuasiStatic.Normalisation(file).asdict()
                 N = norm["N"]
                 dt = norm["dt"]
 
             else:
-                assert t_step == file[f"/meta/{entry_points['cli_run']}"].attrs["t-step"]
+                assert t_step == file["/meta/Dynamics_Run"].attrs["t-step"]
                 n = QuasiStatic.Normalisation(file).asdict()
                 for key in norm:
                     assert norm[key] == n[key]
@@ -527,7 +513,7 @@ def cli_average_systemspanning(cli_args=None):
                     d["du"].subsample(j, system.u - u_n, roll, broken)
 
     with h5py.File(args.output, "w") as file:
-        QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+        QuasiStatic.create_check_meta(file, f"/meta/Dynamics_{funcname}", dev=args.develop)
 
         file["files"] = [os.path.relpath(i, os.path.dirname(args.output)) for i in args.files]
 

@@ -18,11 +18,11 @@ def data_1d():
     tmp_dir = pathlib.Path(tmpDir.name)
     paths = {"info": tmp_dir / "info.h5", "filename": tmp_dir / "id=0000.h5", "dirname": tmp_dir}
 
-    QuasiStatic.cli_generate(
+    QuasiStatic.Generate(
         ["--dev", "--eta", 1e0, "--size", 50, "-n", 1, paths["dirname"], "--kframe", 1 / 50]
     )
-    QuasiStatic.cli_run(["--dev", "-n", 1000, paths["filename"]])
-    QuasiStatic.cli_ensembleinfo(["--dev", "-o", paths["info"], paths["filename"]])
+    QuasiStatic.Run(["--dev", "-n", 1000, paths["filename"]])
+    QuasiStatic.EnsembleInfo(["--dev", "-o", paths["info"], paths["filename"]])
 
     yield paths
 

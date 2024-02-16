@@ -35,28 +35,10 @@ from . import tag
 from . import tools
 from ._version import version
 
-entry_points = dict(
-    cli_updatedata="QuasiStatic_UpdateData",
-    cli_checkdata="QuasiStatic_CheckData",
-    cli_force_current_data_version="QuasiStatic_ForceCurrentDataVersion",
-    cli_ensembleinfo="QuasiStatic_EnsembleInfo",
-    cli_generatefastload="QuasiStatic_GenerateFastLoad",
-    cli_generate="QuasiStatic_Generate",
-    cli_plot="QuasiStatic_Plot",
-    cli_paraview="QuasiStatic_Paraview",
-    cli_run="QuasiStatic_Run",
-    cli_checkdynamics="QuasiStatic_CheckDynamics",
-    cli_checkfastload="QuasiStatic_CheckFastLoad",
-    cli_job_rerun="QuasiStatic_JobRerun",
-    cli_plotstateaftersystemspanning="QuasiStatic_PlotStateAfterSystemSpanning",
-    cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning",
-    cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning",
-)
-
 file_defaults = dict(
-    cli_ensembleinfo="QuasiStatic_EnsembleInfo.h5",
-    cli_stateaftersystemspanning="QuasiStatic_StateAfterSystemSpanning.h5",
-    cli_structurefactor_aftersystemspanning="QuasiStatic_StructureAfterSystemSpanning.h5",
+    EnsembleInfo="QuasiStatic_EnsembleInfo.h5",
+    StateAfterSystemSpanning="QuasiStatic_StateAfterSystemSpanning.h5",
+    StructureAfterSystemSpanning="QuasiStatic_StructureAfterSystemSpanning.h5",
 )
 
 data_version = "2.0"
@@ -72,7 +54,7 @@ def _updatedata_fastload(src: h5py.File, dst: h5py.File, shape: list[int], uid: 
 
     dst["/param/data_version"] = data_version
 
-    metapath = "/meta/" + entry_points["cli_run"]
+    metapath = "/meta/QuasiStatic_Run"
     if metapath not in src:
         create_check_meta(dst, metapath, dev=True)
         dst[metapath].attrs["uuid"] = uid
@@ -223,7 +205,7 @@ def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
     if "kappa" in src["param"]:
         rename["/param/kappa"] = "/param/potential/kappa"
 
-    m = f"/meta/{entry_points['cli_run']}"
+    m = "/meta/QuasiStatic_Run"
     if m in src:
         if "dynamics" in src[m].attrs:
             if src[m].attrs["dynamics"] == "nopassing":
@@ -237,8 +219,8 @@ def _updatedata_pre_1_0(src: h5py.File, dst: h5py.File):
 
     new_paths = [rename[path] for path in paths]
     g5.copy(src, dst, paths, new_paths, shallow=True)
-    if f"/meta/{entry_points['cli_run']}" in dst:
-        del dst[f"/meta/{entry_points['cli_run']}"].attrs["dynamics"]
+    if "/meta/QuasiStatic_Run" in dst:
+        del dst["/meta/QuasiStatic_Run"].attrs["dynamics"]
 
     if dst["/param/potentials/type"].asstr()[...] == "Cusp":
         dst["/param/potentials/type"][...] = "Cuspy"
@@ -256,7 +238,7 @@ def _get_data_version(file: h5py.File) -> str:
     return "0.0"
 
 
-def cli_force_current_data_version(cli_args=None):
+def ForceCurrentDataVersion(cli_args=None):
     """
     Add/overwrite "/param/data_version" to the current version.
     Warning: use with caution.
@@ -273,7 +255,7 @@ def cli_force_current_data_version(cli_args=None):
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -301,7 +283,7 @@ def cli_force_current_data_version(cli_args=None):
                 file["/param/data_version"] = data_version
 
 
-def cli_updatedata(cli_args=None):
+def UpdateData(cli_args=None):
     """
     Update the data from any version to the current version.
     """
@@ -315,7 +297,7 @@ def cli_updatedata(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("--fastload", action="store_true", help="Update fastload file")
@@ -375,7 +357,7 @@ def cli_updatedata(cli_args=None):
             if filename in fastload:
                 with h5py.File(filename) as src:
                     shape = src["/param/shape"][...]
-                    uid = src[f"/meta/{entry_points['cli_run']}"].attrs["uuid"]
+                    uid = src["/meta/QuasiStatic_Run"].attrs["uuid"]
 
                 with h5py.File(fastload[filename]) as src, h5py.File(tmp / "my.h5", "w") as dst:
                     _updatedata_fastload(src, dst, shape, uid)
@@ -385,7 +367,7 @@ def cli_updatedata(cli_args=None):
                 shutil.copy2(tmp / "my.h5", fastload[filename])
 
 
-def cli_checkdata(cli_args=None, my_data_version=data_version):
+def CheckData(cli_args=None, my_data_version=data_version):
     """
     Check the data file for data version.
     Prints the files that have failed. No output is written if all files are ok.
@@ -400,7 +382,7 @@ def cli_checkdata(cli_args=None, my_data_version=data_version):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-o", "--output", type=str, help="List files that failed the check (yaml).")
     parser.add_argument("files", nargs="*", type=str, help="Files (read only)")
@@ -430,15 +412,6 @@ def dependencies() -> list[str]:
     Compared to model.System.version_dependencies() this adds the version of prrng.
     """
     return sorted(list(model.version_dependencies()) + ["prrng=" + prrng.version()])
-
-
-def replace_ep(doc: str) -> str:
-    """
-    Replace ``:py:func:`...``` with the relevant entry_point name
-    """
-    for ep in entry_points:
-        doc = doc.replace(rf":py:func:`{ep:s}`", entry_points[ep])
-    return doc
 
 
 def interpret_filename(filename: str) -> dict:
@@ -691,7 +664,7 @@ class SystemExtra:
 
         :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
-        :param fastload: Use fastload file (if detected), see :py:func:`cli_generatefastload`.
+        :param fastload: Use fastload file (if detected), see :py:func:`GenerateFastLoad`.
         """
 
         u = root["u"][str(step)][...]
@@ -1162,7 +1135,7 @@ def _generate_parse(args):
     return ret
 
 
-def cli_generate(cli_args=None):
+def Generate(cli_args=None):
     """
     Generate IO files (including job-scripts) to run simulations.
     """
@@ -1176,7 +1149,7 @@ def cli_generate(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     _generate_cli_options(parser)
     args = tools._parse(parser, cli_args)
 
@@ -1199,14 +1172,14 @@ def cli_generate(cli_args=None):
                 **opts,
             )
 
-    executable = entry_points["cli_run"]
+    executable = "QuasiStatic_Run"
     commands = [f"{executable} --nstep {args.nstep:d} {file}" for file in files]
-    info = [f"{entry_points['cli_ensembleinfo']} id=[0-9]*.h5"]
+    info = ["QuasiStatic_EnsembleInfo id=[0-9]*.h5"]
     shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
     shelephant.yaml.dump(outdir / "commands_info.yaml", info, force=True)
 
 
-def cli_run(cli_args=None):
+def Run(cli_args=None):
     """
     Run simulation.
     """
@@ -1220,8 +1193,7 @@ def cli_run(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-    progname = entry_points[funcname]
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -1251,7 +1223,7 @@ def cli_run(cli_args=None):
                 / system.normalisation.k_frame
             )
 
-        metapath = f"/meta/{progname}"
+        metapath = f"/meta/QuasiStatic_{funcname}"
         create_check_meta(file, metapath, dev=args.develop, **meta)
 
         if "QuasiStatic" in fload:
@@ -1330,7 +1302,7 @@ def cli_run(cli_args=None):
             fload.flush()
 
 
-def cli_checkdynamics(cli_args=None):
+def CheckDynamics(cli_args=None):
     """
     Write or check the detailed dynamics of a quasi-static step.
     """
@@ -1344,7 +1316,7 @@ def cli_checkdynamics(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--step", type=int, required=True, help="Step to rerun")
     parser.add_argument("--write", type=str, help="Write details to file")
@@ -1599,7 +1571,7 @@ def _check_normalisation(norm: dict, test: dict):
             assert np.isclose(norm[key], test[key])
 
 
-def cli_ensembleinfo(cli_args=None):
+def EnsembleInfo(cli_args=None):
     """
     Read information (avalanche size, force) of an ensemble,
     see :py:func:`basic_output`.
@@ -1608,7 +1580,6 @@ def cli_ensembleinfo(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    progname = entry_points[funcname]
     output = file_defaults[funcname]
 
     class MyFmt(
@@ -1618,7 +1589,7 @@ def cli_ensembleinfo(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -1642,7 +1613,7 @@ def cli_ensembleinfo(cli_args=None):
     pbar = tqdm.tqdm(info["filepath"], desc=fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
-        create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+        create_check_meta(output, f"/meta/QuasiStatic_{funcname}", dev=args.develop)
 
         for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
             pbar.set_description(fmt.format(filename), refresh=True)
@@ -1665,7 +1636,7 @@ def cli_ensembleinfo(cli_args=None):
 
                 info["seed"].append(file["/realisation/seed"][...])
 
-                meta = file[f"/meta/{entry_points['cli_run']}"]
+                meta = file["/meta/QuasiStatic_Run"]
                 for key in ["uuid", "version"]:
                     info[key].append(meta.attrs[key])
 
@@ -1742,7 +1713,7 @@ def cli_ensembleinfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
-def cli_job_rerun(cli_args=None):
+def JobRerun(cli_args=None):
     """
     Write list of jobs to rerun a quasi-static step.
     """
@@ -1757,7 +1728,7 @@ def cli_job_rerun(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--systemspanning", action="store_true", help="System spanning events")
@@ -1825,7 +1796,7 @@ def cli_job_rerun(cli_args=None):
         return ret
 
 
-def cli_checkfastload(cli_args=None):
+def CheckFastLoad(cli_args=None):
     """
     Check the integrity of the fast load file.
     """
@@ -1840,7 +1811,7 @@ def cli_checkfastload(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file (read only)")
     args = tools._parse(parser, cli_args)
@@ -1854,7 +1825,7 @@ def cli_checkfastload(cli_args=None):
 
         if "meta" in fload:
             # files <11.7 do not have metadata
-            metapath = f"/meta/{entry_points['cli_run']}"
+            metapath = "/meta/QuasiStatic_Run"
             assert fload[metapath].attrs["uuid"] == file[metapath].attrs["uuid"]
 
         for step in tqdm.tqdm(sorted([int(i) for i in fload["QuasiStatic"]])):
@@ -1866,7 +1837,7 @@ def cli_checkfastload(cli_args=None):
             assert np.all(system.chunk.state_at(index) == state)
 
 
-def cli_generatefastload(cli_args=None):
+def GenerateFastLoad(cli_args=None):
     """
     Save the state of the random generators for fast loading of the simulation.
     The data created by this function is just to speed-up processing,
@@ -1883,15 +1854,14 @@ def cli_generatefastload(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--append", action="store_true", help="Append existing file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("file", type=str, help="Simulation file")
     args = tools._parse(parser, cli_args)
-    progname = entry_points["cli_run"]
-    metapath = f"/meta/{progname}"
+    metapath = "/meta/QuasiStatic_Run"
 
     output = filename2fastload(args.file)
     if args.append:
@@ -1933,10 +1903,10 @@ def cli_generatefastload(cli_args=None):
             fload.flush()
 
 
-def cli_plotstateaftersystemspanning(cli_args=None):
+def PlotStateAfterSystemSpanning(cli_args=None):
     """
     Plot state after system-spanning events.
-    Input files: :py:func:`cli_ensembleinfo`, or ?? (TODO)
+    Input files: :py:func:`EnsembleInfo`, or ?? (TODO)
     """
 
     import GooseMPL as gplt  # noqa: F401
@@ -1954,7 +1924,7 @@ def cli_plotstateaftersystemspanning(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("files", nargs="*", type=str, help="Input files")
@@ -2038,7 +2008,7 @@ def cli_plotstateaftersystemspanning(cli_args=None):
     plt.close(fig)
 
 
-def cli_stateaftersystemspanning(cli_args=None):
+def StateAfterSystemSpanning(cli_args=None):
     """
     Extract:
 
@@ -2057,7 +2027,7 @@ def cli_stateaftersystemspanning(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -2211,7 +2181,7 @@ def cli_stateaftersystemspanning(cli_args=None):
                 output.flush()
 
 
-def cli_structurefactor_aftersystemspanning(cli_args=None):
+def StructureAfterSystemSpanning(cli_args=None):
     """
     Extract the structure factor after a system spanning events.
     See: https://doi.org/10.1103/PhysRevLett.118.147208
@@ -2228,7 +2198,7 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
     ):
         pass
 
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -2297,7 +2267,7 @@ def cli_structurefactor_aftersystemspanning(cli_args=None):
             output.flush()
 
 
-def cli_plot(cli_args=None):
+def Plot(cli_args=None):
     """
     Basic plot
     """
@@ -2316,7 +2286,7 @@ def cli_plot(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--bins", type=int, default=30, help="Number of bins.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
@@ -2387,7 +2357,7 @@ def cli_plot(cli_args=None):
     plt.close(fig)
 
 
-def cli_paraview(cli_args=None):
+def Paraview(cli_args=None):
     """
     Write all steps to be viewed in Paraview.
     """
@@ -2397,7 +2367,7 @@ def cli_paraview(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")

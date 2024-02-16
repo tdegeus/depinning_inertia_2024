@@ -23,11 +23,11 @@ def mydata():
     tmp_dir = pathlib.Path(tmpDir.name)
     paths = {"info": tmp_dir / "info.h5", "filename": tmp_dir / "id=0000.h5", "dirname": tmp_dir}
 
-    QuasiStatic.cli_generate(
+    QuasiStatic.Generate(
         ["--dev", "--eta", 1, "--size", 50, "-n", 1, paths["dirname"], "--kframe", 1 / 50]
     )
-    QuasiStatic.cli_run(["--dev", "-n", 1000, paths["filename"]])
-    QuasiStatic.cli_ensembleinfo(["--dev", "-o", paths["info"], paths["filename"]])
+    QuasiStatic.Run(["--dev", "-n", 1000, paths["filename"]])
+    QuasiStatic.EnsembleInfo(["--dev", "-o", paths["info"], paths["filename"]])
 
     yield paths
 
@@ -106,7 +106,7 @@ def test_fastload(mydata):
         yright = system.chunk.right_of_align
         fpot = system.f_potential
 
-    QuasiStatic.cli_generatefastload(["--dev", mydata["filename"], "--force"])
+    QuasiStatic.GenerateFastLoad(["--dev", mydata["filename"], "--force"])
 
     with h5py.File(mydata["filename"]) as file:
         system = QuasiStatic.allocate_system(file)
@@ -115,7 +115,7 @@ def test_fastload(mydata):
         assert np.allclose(yright, system.chunk.right_of_align)
         assert np.allclose(fpot, system.f_potential)
 
-    QuasiStatic.cli_checkfastload([mydata["filename"]])
+    QuasiStatic.CheckFastLoad([mydata["filename"]])
 
     # just a call
     with h5py.File(mydata["filename"]) as file:
@@ -128,13 +128,13 @@ def test_chunk(mydata):
     """
     Rerun using huge chunk.
     """
-    QuasiStatic.cli_run(["--dev", "--check", 950, mydata["filename"]])
-    QuasiStatic.cli_run(["--dev", "--check", 951, mydata["filename"]])
-    QuasiStatic.cli_run(["--dev", "--check", 952, mydata["filename"]])
-    QuasiStatic.cli_run(["--dev", "--check", 953, mydata["filename"]])
+    QuasiStatic.Run(["--dev", "--check", 950, mydata["filename"]])
+    QuasiStatic.Run(["--dev", "--check", 951, mydata["filename"]])
+    QuasiStatic.Run(["--dev", "--check", 952, mydata["filename"]])
+    QuasiStatic.Run(["--dev", "--check", 953, mydata["filename"]])
 
     tmp = mydata["dirname"] / "info_duplicate.h5"
-    QuasiStatic.cli_ensembleinfo(["--dev", "-f", "-o", tmp, mydata["filename"]])
+    QuasiStatic.EnsembleInfo(["--dev", "-f", "-o", tmp, mydata["filename"]])
 
     with h5py.File(mydata["info"]) as src, h5py.File(tmp) as dest:
         dset = list(g5.getdatasets(src))
@@ -164,11 +164,11 @@ def test_eventmap(mydata):
 
         out_s = mydata["dirname"] / "EventMap_s.h5"
         out_t = mydata["dirname"] / "EventMap_t.h5"
-        EventMap.cli_run(["--dev", "-f", "-s", "-o", out_s, "--step", str(s), path])
-        EventMap.cli_run(["--dev", "-f", "-s", "-o", out_t, "--step", str(t), path])
+        EventMap.Run(["--dev", "-f", "-s", "-o", out_s, "--step", str(s), path])
+        EventMap.Run(["--dev", "-f", "-s", "-o", out_t, "--step", str(t), path])
 
         out = mydata["dirname"] / "EventMapInfo.h5"
-        EventMap.cli_basic_output(["--dev", "-f", "-o", out, out_s, out_t])
+        EventMap.Info(["--dev", "-f", "-o", out, out_s, out_t])
 
 
 def test_relaxation(mydata):
@@ -189,11 +189,11 @@ def test_relaxation(mydata):
 
     out_s = mydata["dirname"] / "Relaxation_s.h5"
     out_t = mydata["dirname"] / "Relaxation_t.h5"
-    Relaxation.cli_run(["--dev", "-f", "-o", out_s, "--step", str(s), path])
-    Relaxation.cli_run(["--dev", "-f", "-o", out_t, "--step", str(t), path])
+    Relaxation.Run(["--dev", "-f", "-o", out_s, "--step", str(s), path])
+    Relaxation.Run(["--dev", "-f", "-o", out_t, "--step", str(t), path])
 
     out = mydata["dirname"] / "RelaxationInfo.h5"
-    Relaxation.cli_ensembleinfo(["--dev", "-f", "-o", out, out_s, out_t])
+    Relaxation.EnsembleInfo(["--dev", "-f", "-o", out, out_s, out_t])
 
 
 def test_measuredynamics(mydata):
@@ -213,8 +213,8 @@ def test_measuredynamics(mydata):
 
     out = mydata["dirname"] / "MeasureDynamics_s.h5"
     ens = mydata["dirname"] / "MeasureDynamics_average.h5"
-    Dynamics.cli_run(["--dev", "-f", "--step", s, "-o", out, path])
-    Dynamics.cli_average_systemspanning(["-f", "--dev", "-o", ens, out])
+    Dynamics.Run(["--dev", "-f", "--step", s, "-o", out, path])
+    Dynamics.AverageSystemSpanning(["-f", "--dev", "-o", ens, out])
 
 
 def test_read(mydata):
@@ -222,11 +222,11 @@ def test_read(mydata):
     Read output.
     """
 
-    QuasiStatic.cli_stateaftersystemspanning(
+    QuasiStatic.StateAfterSystemSpanning(
         ["--dev", "-f", "-o", mydata["dirname"] / "AfterSystemSpanning.h5", mydata["info"]]
     )
 
-    QuasiStatic.cli_structurefactor_aftersystemspanning(
+    QuasiStatic.StructureAfterSystemSpanning(
         ["--dev", "-f", "-o", mydata["dirname"] / "StructureFactor.h5", mydata["info"]]
     )
 
@@ -241,11 +241,11 @@ def data_2d():
     tmp_dir = pathlib.Path(tmpDir.name)
     paths = {"info": tmp_dir / "info.h5", "filename": tmp_dir / "id=0000.h5", "dirname": tmp_dir}
 
-    QuasiStatic.cli_generate(
+    QuasiStatic.Generate(
         ["--dev", "--eta", 1, "--shape", 10, 10, "-n", 1, paths["dirname"], "--kframe", 1 / 100]
     )
-    QuasiStatic.cli_run(["--dev", "-n", 600, paths["filename"]])
-    QuasiStatic.cli_ensembleinfo(["--dev", "-o", paths["info"], paths["filename"]])
+    QuasiStatic.Run(["--dev", "-n", 600, paths["filename"]])
+    QuasiStatic.EnsembleInfo(["--dev", "-o", paths["info"], paths["filename"]])
 
     yield paths
 
@@ -265,14 +265,14 @@ def test_basic_trigger(opts, tmp_path):
     Basic function calls.
     """
     qdir = tmp_path / "QuasiStatic"
-    QuasiStatic.cli_generate(["--dev", "--eta", 1, "-n", 2, qdir, "--kframe", 1 / 50] + opts)
-    QuasiStatic.cli_run(["--dev", "-n", 300, qdir / "id=0000.h5"])
-    QuasiStatic.cli_run(["--dev", "-n", 300, qdir / "id=0000.h5"])
-    QuasiStatic.cli_run(["--dev", "-n", 600, qdir / "id=0001.h5"])
-    QuasiStatic.cli_ensembleinfo(
+    QuasiStatic.Generate(["--dev", "--eta", 1, "-n", 2, qdir, "--kframe", 1 / 50] + opts)
+    QuasiStatic.Run(["--dev", "-n", 300, qdir / "id=0000.h5"])
+    QuasiStatic.Run(["--dev", "-n", 300, qdir / "id=0000.h5"])
+    QuasiStatic.Run(["--dev", "-n", 600, qdir / "id=0001.h5"])
+    QuasiStatic.EnsembleInfo(
         ["--dev", "-o", qdir / "info.h5", qdir / "id=0000.h5", qdir / "id=0001.h5"]
     )
 
     tdir = tmp_path / "Trigger"
-    Trigger.cli_generate(["--dev", "-o", tdir, qdir / "info.h5"])
-    Trigger.cli_run(["--dev", tdir / "id=0000.h5"])
+    Trigger.Generate(["--dev", "-o", tdir, qdir / "info.h5"])
+    Trigger.Run(["--dev", tdir / "id=0000.h5"])

@@ -27,29 +27,13 @@ from ._version import version
 
 basename = os.path.splitext(os.path.basename(__file__))[0]
 
-entry_points = dict(
-    cli_ensemblepack="Flow_EnsemblePack",
-    cli_generate="Flow_Generate",
-    cli_plot="Flow_Plot",
-    cli_run="Flow_Run",
-)
-
 
 file_defaults = dict(
-    cli_ensemblepack="Flow_EnsemblePack.h5",
+    EnsemblePack="Flow_EnsemblePack.h5",
 )
 
 data_version = "2.1"
 assert tag.greater_equal(data_version, QuasiStatic.data_version)
-
-
-def replace_ep(doc: str) -> str:
-    """
-    Replace ``:py:func:`...``` with the relevant entry_point name
-    """
-    for ep in entry_points:
-        doc = doc.replace(rf":py:func:`{ep:s}`", entry_points[ep])
-    return doc
 
 
 def interpret_filename(filename: str) -> dict:
@@ -163,9 +147,9 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     return v_frame, mean, std, {k: steadystate[k] for k in keep}, data
 
 
-def cli_ensemblepack(cli_args=None):
+def EnsemblePack(cli_args=None):
     """
-    Extract output all from a set of files run with :py:func:`cli_run`.
+    Extract output all from a set of files run with :py:func:`Run`.
     After this the run-files can be deleted (only destroys the possibility to continue the run).
     """
 
@@ -178,8 +162,7 @@ def cli_ensemblepack(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-    progname = entry_points[funcname]
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     output = file_defaults[funcname]
 
     parser.add_argument("-i", "--inplace", action="store_true", help="Update output file inplace")
@@ -198,7 +181,7 @@ def cli_ensemblepack(cli_args=None):
         mode = "w"
 
     with h5py.File(args.output, mode) as output:
-        QuasiStatic.create_check_meta(output, f"/meta/{progname}", dev=args.develop)
+        QuasiStatic.create_check_meta(output, f"/meta/Flow_{funcname}", dev=args.develop)
         if "full" not in output:
             output.create_group("full")
         if "param" in output:
@@ -243,7 +226,7 @@ def cli_ensemblepack(cli_args=None):
                     g5.copy(file, output, "/realisation", root=f"/full/{fname}")
 
 
-def cli_generate(cli_args=None):
+def Generate(cli_args=None):
     """
     Generate IO files.
     A useful command to create jobs is:
@@ -262,7 +245,7 @@ def cli_generate(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     QuasiStatic._generate_cli_options(parser)
 
@@ -295,12 +278,12 @@ def cli_generate(cli_args=None):
             file["/Flow/param/v_frame"] = args.v_frame
             file["/Flow/output/interval"] = output
 
-    executable = f'{entry_points["cli_run"]} --nstep {args.nstep:d}'
+    executable = f"Flow_Run --nstep {args.nstep:d}"
     commands = [f"{executable} {file}" for file in files]
     shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
 
 
-def cli_run(cli_args=None):
+def Run(cli_args=None):
     """
     Run simulation.
     """
@@ -314,8 +297,7 @@ def cli_run(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-    progname = entry_points[funcname]
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--backup-interval", default=5, type=int, help="Backup interval in minutes")
@@ -346,7 +328,7 @@ def cli_run(cli_args=None):
 
         system = QuasiStatic.allocate_system(file)
         system.inc = 0
-        QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+        QuasiStatic.create_check_meta(file, f"/meta/Flow_{funcname}", dev=args.develop)
 
         if "u" in restart:
             system.inc = restart["inc"][...]
@@ -416,7 +398,7 @@ def cli_run(cli_args=None):
             file.flush()
 
 
-def cli_plot(cli_args=None):
+def Plot(cli_args=None):
     """
     Basic plot
     """
@@ -435,7 +417,7 @@ def cli_plot(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
