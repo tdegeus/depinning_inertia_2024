@@ -5,13 +5,12 @@ QuasiStatic simulations, and tools to run those simulators.
 from __future__ import annotations
 
 import argparse
-import inspect
 import os
 import pathlib
 import re
 import shutil
+import sys
 import tempfile
-import textwrap
 import uuid
 
 import click
@@ -43,6 +42,14 @@ file_defaults = dict(
 )
 
 data_version = "2.0"
+
+
+class MyFmt(
+    argparse.RawDescriptionHelpFormatter,
+    argparse.ArgumentDefaultsHelpFormatter,
+    argparse.MetavarTypeHelpFormatter,
+):
+    pass
 
 
 def _updatedata_fastload(src: h5py.File, dst: h5py.File, shape: list[int], uid: str):
@@ -239,29 +246,27 @@ def _get_data_version(file: h5py.File) -> str:
     return "0.0"
 
 
+def _ForceCurrentDataVersion_cli():
+    ForceCurrentDataVersion(sys.argv[1:])
+
+
+def _ForceCurrentDataVersion_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=ForceCurrentDataVersion.__doc__
+    )
+    parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("files", nargs="*", type=str, help="Simulation files")
+    return parser
+
+
 def ForceCurrentDataVersion(cli_args=None):
     """
     Add/overwrite "/param/data_version" to the current version.
     Warning: use with caution.
     There are no checks that the data is compatible with the current version.
     """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("files", nargs="*", type=str, help="Simulation files")
-
+    parser = _ForceCurrentDataVersion_parser()
     args = tools._parse(parser, cli_args)
 
     assert all(os.path.isfile(f) for f in args.files)
@@ -284,26 +289,25 @@ def ForceCurrentDataVersion(cli_args=None):
                 file["/param/data_version"] = data_version
 
 
-def UpdateData(cli_args=None):
-    """
-    Update the data from any version to the current version.
-    """
+def _UpdateData_cli():
+    UpdateData(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
+def _UpdateData_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=UpdateData.__doc__)
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("--fastload", action="store_true", help="Update fastload file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("files", nargs="*", type=str, help="Simulation files")
+    return parser
+
+
+def UpdateData(cli_args=None):
+    """
+    Update the data from any version to the current version.
+    """
+    parser = _UpdateData_parser()
     args = tools._parse(parser, cli_args)
 
     assert all([os.path.isfile(f) for f in args.files])
@@ -368,25 +372,24 @@ def UpdateData(cli_args=None):
                 shutil.copy2(tmp / "my.h5", fastload[filename])
 
 
+def _CheckData_cli():
+    CheckData(sys.argv[1:])
+
+
+def _CheckData_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=CheckData.__doc__)
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-o", "--output", type=str, help="List files that failed the check (yaml).")
+    parser.add_argument("files", nargs="*", type=str, help="Files (read only)")
+    return parser
+
+
 def CheckData(cli_args=None, my_data_version=data_version):
     """
     Check the data file for data version.
     Prints the files that have failed. No output is written if all files are ok.
     """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-o", "--output", type=str, help="List files that failed the check (yaml).")
-    parser.add_argument("files", nargs="*", type=str, help="Files (read only)")
+    parser = _CheckData_parser()
     args = tools._parse(parser, cli_args)
 
     assert all([os.path.isfile(f) for f in args.files])
@@ -419,7 +422,6 @@ def interpret_filename(filename: str) -> dict:
     """
     Split filename in useful information.
     """
-
     part = re.split("_|/", os.path.splitext(filename)[0])
     info = {}
 
@@ -1047,7 +1049,12 @@ def generate(
     file["/param/data_version"] = data_version
 
 
-def _generate_cli_options(parser):
+def _Generate_cli():
+    Generate(sys.argv[1:])
+
+
+def _Generate_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Generate.__doc__)
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -1077,6 +1084,7 @@ def _generate_cli_options(parser):
 
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("outdir", type=str, help="Output directory")
+    return parser
 
 
 def _generate_parse(args):
@@ -1140,18 +1148,7 @@ def Generate(cli_args=None):
     """
     Generate IO files (including job-scripts) to run simulations.
     """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    _generate_cli_options(parser)
+    parser = _Generate_parser()
     args = tools._parse(parser, cli_args)
 
     outdir = pathlib.Path(args.outdir)
@@ -1180,22 +1177,12 @@ def Generate(cli_args=None):
     shelephant.yaml.dump(outdir / "commands_info.yaml", info, force=True)
 
 
-def Run(cli_args=None):
-    """
-    Run simulation.
-    """
+def _Run_cli():
+    Run(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _Run_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Run.__doc__)
     parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -1206,7 +1193,14 @@ def Run(cli_args=None):
     )
     parser.add_argument("-n", "--nstep", type=int, default=5000, help="Total #load-steps to run")
     parser.add_argument("file", type=str, help="Input/output file")
+    return parser
 
+
+def Run(cli_args=None):
+    """
+    Run simulation.
+    """
+    parser = _Run_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     basename = os.path.basename(args.file)
@@ -1224,7 +1218,7 @@ def Run(cli_args=None):
                 / system.normalisation.k_frame
             )
 
-        metapath = f"/meta/QuasiStatic_{funcname}"
+        metapath = "/meta/QuasiStatic_Run"
         create_check_meta(file, metapath, dev=args.develop, **meta)
 
         if "QuasiStatic" in fload:
@@ -1303,28 +1297,25 @@ def Run(cli_args=None):
             fload.flush()
 
 
-def CheckDynamics(cli_args=None):
-    """
-    Write or check the detailed dynamics of a quasi-static step.
-    """
+def _CheckDynamics_cli():
+    CheckDynamics(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _CheckDynamics_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=CheckDynamics.__doc__)
     parser.add_argument("--step", type=int, required=True, help="Step to rerun")
     parser.add_argument("--write", type=str, help="Write details to file")
     parser.add_argument("--read", type=str, help="Read details from file and compare")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file (read-only)")
+    return parser
 
+
+def CheckDynamics(cli_args=None):
+    """
+    Write or check the detailed dynamics of a quasi-static step.
+    """
+    parser = _CheckDynamics_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     assert args.write is not None or args.read is not None
@@ -1547,9 +1538,7 @@ def basic_output(file: h5py.File) -> dict:
     ret["f_frame"] /= system.normalisation.f
     ret["f_potential"] /= system.normalisation.f
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    tools.check_docstring(doc, ret, ":return:")
+    tools.check_docstring(basic_output.__doc__, ret, ":return:")
 
     return ret
 
@@ -1572,32 +1561,28 @@ def _check_normalisation(norm: dict, test: dict):
             assert np.isclose(norm[key], test[key])
 
 
+def _EnsembleInfo_cli():
+    EnsembleInfo(sys.argv[1:])
+
+
+def _EnsembleInfo_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=EnsembleInfo.__doc__)
+    output = file_defaults["EnsembleInfo"]
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("files", nargs="*", type=str, help="Files to read")
+    return parser
+
+
 def EnsembleInfo(cli_args=None):
     """
     Read information (avalanche size, force) of an ensemble,
     see :py:func:`basic_output`.
     Store into a single output file.
     """
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    output = file_defaults[funcname]
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
-    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("files", nargs="*", type=str, help="Files to read")
-
+    parser = _EnsembleInfo_parser()
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
@@ -1614,7 +1599,7 @@ def EnsembleInfo(cli_args=None):
     pbar = tqdm.tqdm(info["filepath"], desc=fmt.format(""))
 
     with h5py.File(args.output, "w") as output:
-        create_check_meta(output, f"/meta/QuasiStatic_{funcname}", dev=args.develop)
+        create_check_meta(output, "/meta/QuasiStatic_EnsembleInfo", dev=args.develop)
 
         for i, (filename, filepath) in enumerate(zip(pbar, args.files)):
             pbar.set_description(fmt.format(filename), refresh=True)
@@ -1714,23 +1699,12 @@ def EnsembleInfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
-def JobRerun(cli_args=None):
-    """
-    Write list of jobs to rerun a quasi-static step.
-    """
+def _JobRerun_cli():
+    JobRerun(sys.argv[1:])
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _JobRerun_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=JobRerun.__doc__)
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--systemspanning", action="store_true", help="System spanning events")
     parser.add_argument("--eventmap", action="store_true", help="Produce event map")
@@ -1741,7 +1715,14 @@ def JobRerun(cli_args=None):
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("info", type=str, help="EnsembleInfo")
     parser.add_argument("output", type=str, help="Output file (yaml)")
+    return parser
 
+
+def JobRerun(cli_args=None):
+    """
+    Write list of jobs to rerun a quasi-static step.
+    """
+    parser = _JobRerun_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.info)
 
@@ -1797,24 +1778,22 @@ def JobRerun(cli_args=None):
         return ret
 
 
+def _CheckFastLoad_cli():
+    CheckFastLoad(sys.argv[1:])
+
+
+def _CheckFastLoad_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=CheckFastLoad.__doc__)
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Simulation file (read only)")
+    return parser
+
+
 def CheckFastLoad(cli_args=None):
     """
     Check the integrity of the fast load file.
     """
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("file", type=str, help="Simulation file (read only)")
+    parser = _CheckFastLoad_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
 
@@ -1838,29 +1817,27 @@ def CheckFastLoad(cli_args=None):
             assert np.all(system.chunk.state_at(index) == state)
 
 
+def _GenerateFastLoad_cli():
+    GenerateFastLoad(sys.argv[1:])
+
+
+def _GenerateFastLoad_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=GenerateFastLoad.__doc__)
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--append", action="store_true", help="Append existing file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("file", type=str, help="Simulation file")
+    return parser
+
+
 def GenerateFastLoad(cli_args=None):
     """
     Save the state of the random generators for fast loading of the simulation.
     The data created by this function is just to speed-up processing,
     it is completely obsolete and can be removed without hesitation.
     """
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--append", action="store_true", help="Append existing file")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
-    parser.add_argument("file", type=str, help="Simulation file")
+    parser = _GenerateFastLoad_parser()
     args = tools._parse(parser, cli_args)
     metapath = "/meta/QuasiStatic_Run"
 
@@ -1904,6 +1881,19 @@ def GenerateFastLoad(cli_args=None):
             fload.flush()
 
 
+def _PlotStateAfterSystemSpanning_cli():
+    PlotStateAfterSystemSpanning(sys.argv[1:])
+
+
+def _PlotStateAfterSystemSpanning_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=PlotStateAfterSystemSpanning.__doc__
+    )
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("files", nargs="*", type=str, help="Input files")
+    return parser
+
+
 def PlotStateAfterSystemSpanning(cli_args=None):
     """
     Plot state after system-spanning events.
@@ -1915,21 +1905,7 @@ def PlotStateAfterSystemSpanning(cli_args=None):
 
     plt.style.use(["goose", "goose-latex", "goose-autolayout"])
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("files", nargs="*", type=str, help="Input files")
-
+    parser = _PlotStateAfterSystemSpanning_parser()
     args = tools._parse(parser, cli_args)
     assert np.all([os.path.isfile(f) for f in args.files])
 
@@ -2009,6 +1985,24 @@ def PlotStateAfterSystemSpanning(cli_args=None):
     plt.close(fig)
 
 
+def _StateAfterSystemSpanning_cli():
+    StateAfterSystemSpanning(sys.argv[1:])
+
+
+def _StateAfterSystemSpanning_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=StateAfterSystemSpanning.__doc__
+    )
+    output = file_defaults["StateAfterSystemSpanning"]
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("-n", "--select", type=int, help="Select random subset")
+    parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
+    return parser
+
+
 def StateAfterSystemSpanning(cli_args=None):
     """
     Extract:
@@ -2016,27 +2010,7 @@ def StateAfterSystemSpanning(cli_args=None):
     -   P(x), with x the distance to yielding.
     -   The height-height correlation.
     """
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    output = file_defaults[funcname]
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
-    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("-n", "--select", type=int, help="Select random subset")
-    parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
-
+    parser = _StateAfterSystemSpanning_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
@@ -2181,31 +2155,29 @@ def StateAfterSystemSpanning(cli_args=None):
                 output.flush()
 
 
-def StructureAfterSystemSpanning(cli_args=None):
-    """
-    Extract the structure factor after a system spanning events.
-    See: https://doi.org/10.1103/PhysRevLett.118.147208
-    """
+def _StructureAfterSystemSpanning_cli():
+    StructureAfterSystemSpanning(sys.argv[1:])
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    output = file_defaults[funcname]
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _StructureAfterSystemSpanning_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=StructureAfterSystemSpanning.__doc__
+    )
+    output = file_defaults["StructureAfterSystemSpanning"]
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("ensembleinfo", type=str, help="EnsembleInfo")
+    return parser
 
+
+def StructureAfterSystemSpanning(cli_args=None):
+    """
+    Extract the structure factor after a system spanning events.
+    See: https://doi.org/10.1103/PhysRevLett.118.147208
+    """
+    parser = _StructureAfterSystemSpanning_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.ensembleinfo)
     tools._check_overwrite_file(args.output, args.force)
@@ -2267,6 +2239,19 @@ def StructureAfterSystemSpanning(cli_args=None):
             output.flush()
 
 
+def _Plot_cli():
+    Plot(sys.argv[1:])
+
+
+def _Plot_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Plot.__doc__)
+    parser.add_argument("--bins", type=int, default=30, help="Number of bins.")
+    parser.add_argument("-o", "--output", type=str, help="Store figure.")
+    parser.add_argument("-i", "--input", type=str, help="Realisation, if input in EnsembleInfo.")
+    parser.add_argument("file", type=str, help="Simulation file")
+    return parser
+
+
 def Plot(cli_args=None):
     """
     Basic plot
@@ -2277,22 +2262,7 @@ def Plot(cli_args=None):
 
     plt.style.use(["goose", "goose-latex", "goose-autolayout"])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    parser.add_argument("--bins", type=int, default=30, help="Number of bins.")
-    parser.add_argument("-o", "--output", type=str, help="Store figure.")
-    parser.add_argument("-i", "--input", type=str, help="Realisation, if input in EnsembleInfo.")
-    parser.add_argument("file", type=str, help="Simulation file")
-
+    parser = _Plot_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
 
@@ -2357,23 +2327,24 @@ def Plot(cli_args=None):
     plt.close(fig)
 
 
-def Paraview(cli_args=None):
-    """
-    Write all steps to be viewed in Paraview.
-    """
+def _Paraview_cli():
+    Paraview(sys.argv[1:])
 
-    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _Paraview_parser():
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Paraview.__doc__)
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
+    return parser
 
+
+def Paraview(cli_args=None):
+    """
+    Write all steps to be viewed in Paraview.
+    """
+    parser = _Paraview_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     tools._check_overwrite_file(args.output, args.force)

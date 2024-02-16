@@ -5,9 +5,8 @@ Rerun step (quasi-static step, or trigger) to extract the dynamic evolution of f
 from __future__ import annotations
 
 import argparse
-import inspect
 import os
-import textwrap
+import sys
 
 import enstat
 import FrictionQPotSpringBlock  # noqa: F401
@@ -28,22 +27,12 @@ file_defaults = dict(
 data_version = "2.0"
 
 
-def Run(cli_args=None):
-    """
-    Rerun an system-spanning event and store average output from the moment that the event spans
-    the system.
-    """
+def _Run_cli():
+    Run(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
+def _Run_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -61,6 +50,15 @@ def Run(cli_args=None):
     # input files
     parser.add_argument("file", type=str, help="Simulation from which to run (read-only)")
 
+    return parser
+
+
+def Run(cli_args=None):
+    """
+    Rerun an system-spanning event and store average output from the moment that the event spans
+    the system.
+    """
+    parser = _Run_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     assert os.path.abspath(args.file) != os.path.abspath(args.output)
@@ -77,7 +75,7 @@ def Run(cli_args=None):
         with h5py.File(args.file) as src:
             GooseHDF5.copy(src, file, ["/param", "/meta", "/realisation"])
 
-        meta = QuasiStatic.create_check_meta(file, f"/meta/Relaxation_{funcname}", dev=args.develop)
+        meta = QuasiStatic.create_check_meta(file, "/meta/Relaxation_Run", dev=args.develop)
         meta.attrs["file"] = os.path.basename(args.file)
         meta.attrs["step"] = args.step
         meta.attrs["t-step"] = args.t_step
@@ -121,23 +119,15 @@ def Run(cli_args=None):
         meta.attrs["completed"] = 1
 
 
-def EnsembleInfo(cli_args=None):
-    """
-    Bin the data from several run.
-    """
+def _EnsembleInfo_cli():
+    EnsembleInfo(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    output = file_defaults[funcname]
-
+def _EnsembleInfo_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=EnsembleInfo.__doc__
+    )
+    output = file_defaults["EnsembleInfo"]
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("--bins", type=int, default=101, help="Number of bins")
@@ -146,7 +136,14 @@ def EnsembleInfo(cli_args=None):
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("files", nargs="*", type=str, help="Output files of :py:func:`Run`")
+    return parser
 
+
+def EnsembleInfo(cli_args=None):
+    """
+    Bin the data from several run.
+    """
+    parser = _EnsembleInfo_parser()
     args = tools._parse(parser, cli_args)
     assert all([os.path.isfile(f) for f in args.files])
     tools._check_overwrite_file(args.output, args.force)
