@@ -16,6 +16,7 @@ dependencies:
 - pre-commit
 - prettytable
 - pybind11
+- pytest
 - python
 - python-cppcolormap
 - python-frictionqpotspringblock >=0.22.7
