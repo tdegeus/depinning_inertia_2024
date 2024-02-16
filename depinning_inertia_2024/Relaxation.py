@@ -20,28 +20,15 @@ from . import QuasiStatic
 from . import tools
 from ._version import version
 
-entry_points = dict(
-    cli_run="Relaxation_Run",
-    cli_ensembleinfo="Relaxation_EnsembleInfo",
-)
 
 file_defaults = dict(
-    cli_ensembleinfo="Relaxation_EnsembleInfo.h5",
+    EnsembleInfo="Relaxation_EnsembleInfo.h5",
 )
 
 data_version = "2.0"
 
 
-def replace_ep(doc: str) -> str:
-    """
-    Replace ``:py:func:`...``` with the relevant entry_point name
-    """
-    for ep in entry_points:
-        doc = doc.replace(rf":py:func:`{ep:s}`", entry_points[ep])
-    return doc
-
-
-def cli_run(cli_args=None):
+def Run(cli_args=None):
     """
     Rerun an system-spanning event and store average output from the moment that the event spans
     the system.
@@ -56,8 +43,7 @@ def cli_run(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
-    progname = entry_points[funcname]
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -91,7 +77,7 @@ def cli_run(cli_args=None):
         with h5py.File(args.file) as src:
             GooseHDF5.copy(src, file, ["/param", "/meta", "/realisation"])
 
-        meta = QuasiStatic.create_check_meta(file, f"/meta/{progname}", dev=args.develop)
+        meta = QuasiStatic.create_check_meta(file, f"/meta/Relaxation_{funcname}", dev=args.develop)
         meta.attrs["file"] = os.path.basename(args.file)
         meta.attrs["step"] = args.step
         meta.attrs["t-step"] = args.t_step
@@ -135,7 +121,7 @@ def cli_run(cli_args=None):
         meta.attrs["completed"] = 1
 
 
-def cli_ensembleinfo(cli_args=None):
+def EnsembleInfo(cli_args=None):
     """
     Bin the data from several run.
     """
@@ -149,7 +135,7 @@ def cli_ensembleinfo(cli_args=None):
 
     funcname = inspect.getframeinfo(inspect.currentframe()).function
     doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=replace_ep(doc))
+    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
     output = file_defaults[funcname]
 
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -159,9 +145,7 @@ def cli_ensembleinfo(cli_args=None):
     parser.add_argument("--vmax", type=float, default=4, help="Range of v: min(v):max(b):bins")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument(
-        "files", nargs="*", type=str, help=replace_ep("Output files of :py:func:`cli_run`")
-    )
+    parser.add_argument("files", nargs="*", type=str, help="Output files of :py:func:`Run`")
 
     args = tools._parse(parser, cli_args)
     assert all([os.path.isfile(f) for f in args.files])
