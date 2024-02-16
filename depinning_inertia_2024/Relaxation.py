@@ -1,6 +1,7 @@
 """
 Rerun step (quasi-static step, or trigger) to extract the dynamic evolution of fields.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,7 +20,6 @@ from . import Dynamics
 from . import QuasiStatic
 from . import tools
 from ._version import version
-
 
 file_defaults = dict(
     EnsembleInfo="Relaxation_EnsembleInfo.h5",
