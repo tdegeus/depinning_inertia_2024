@@ -781,7 +781,7 @@ def MergeBatch(cli_args=None):
         Merge([src, dest])
 
 
-def Job_Rerun(cli_args=None):
+def JobRerun(cli_args=None):
     """
     Create jobs to get event maps, from:
 

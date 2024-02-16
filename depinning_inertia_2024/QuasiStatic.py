@@ -2053,7 +2053,6 @@ def StateAfterSystemSpanning(cli_args=None):
         shape = info["/normalisation/shape"][...]
         dim = shape.size
         L = min(shape)
-        mu = info["param"]["mu"][...]
 
         keep = A == N
         file = file[keep]
