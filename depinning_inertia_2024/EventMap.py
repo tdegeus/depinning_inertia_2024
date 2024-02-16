@@ -5,10 +5,8 @@ Rerun step (quasi-static step, or trigger) to extract event map.
 from __future__ import annotations
 
 import argparse
-import inspect
 import os
 import sys
-import textwrap
 
 import FrictionQPotSpringBlock  # noqa: F401
 import GooseFEM
@@ -28,6 +26,26 @@ file_defaults = dict(
 )
 
 
+def _Run_cli():
+    Run(sys.argv[1:])
+
+
+def _Run_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
+    output = file_defaults["Run"]
+    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
+    parser.add_argument("--avalanche", action="store_true", help="Truncated once A == N")
+    parser.add_argument("-u", action="store_true", help="Store u (slip)")
+    parser.add_argument("-s", action="store_true", help="Store S (avalanche size)")
+    parser.add_argument("--smax", type=int, help="Truncate at a maximum total S")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output file")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("--step", required=True, type=int, help="Step number")
+    parser.add_argument("-v", "--version", action="version", version=version)
+    parser.add_argument("file", type=str, help="Simulation file")
+    return parser
+
+
 def Run(cli_args=None):
     """
     Rerun a quasistatic step (loaded using QuasiStatic, or triggered using Trigger)
@@ -40,26 +58,7 @@ def Run(cli_args=None):
     Tip: use "--smax" to truncate when (known) S is reached to not waste time on the final stage of
     energy minimisation.
     """
-
-    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    output = file_defaults[funcname]
-
-    parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
-    parser.add_argument("--avalanche", action="store_true", help="Truncated once A == N")
-    parser.add_argument("-u", action="store_true", help="Store u (slip)")
-    parser.add_argument("-s", action="store_true", help="Store S (avalanche size)")
-    parser.add_argument("--smax", type=int, help="Truncate at a maximum total S")
-    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output file")
-    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("--step", required=True, type=int, help="Step number")
-    parser.add_argument("-v", "--version", action="version", version=version)
-    parser.add_argument("file", type=str, help="Simulation file")
-
+    parser = _Run_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     tools._check_overwrite_file(args.output, args.force)
@@ -78,7 +77,7 @@ def Run(cli_args=None):
             root = file["QuasiStatic"]
             system.restore_quasistatic_step(root, args.step - 1)
 
-        meta = QuasiStatic.create_check_meta(output, f"/meta/EventMap_{funcname}", dev=args.develop)
+        meta = QuasiStatic.create_check_meta(output, "/meta/EventMap_Run", dev=args.develop)
         meta.attrs["file"] = args.file
         meta.attrs["step"] = args.step
         meta.attrs["Smax"] = args.smax if args.smax else sys.maxsize
@@ -141,24 +140,27 @@ def Run(cli_args=None):
     return args.output
 
 
-def Paraview(cli_args=None):
-    """
-    Convert :py:func:`Run` output to be viewed in Paraview.
-    """
+def _Paraview_cli():
+    Paraview(sys.argv[1:])
 
-    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _Paraview_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=Paraview.__doc__
+    )
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("--bins", type=int, default=1000, help="Number of time steps to write")
     parser.add_argument("file", type=str, help="Simulation file")
+    return parser
 
+
+def Paraview(cli_args=None):
+    """
+    Convert :py:func:`Run` output to be viewed in Paraview.
+    """
+    parser = _Paraview_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     tools._check_overwrite_file(args.output, args.force)
@@ -218,6 +220,17 @@ def Paraview(cli_args=None):
             xdmf += xh.Attribute(out[f"/S/{ibin:d}"], xh.AttributeCenter.Node, name="S")
 
 
+def _Plot_cli():
+    Plot(sys.argv[1:])
+
+
+def _Plot_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Plot.__doc__)
+    parser.add_argument("-o", "--output", type=str, help="Store figure.")
+    parser.add_argument("file", type=str, help="Event map")
+    return parser
+
+
 def Plot(cli_args=None):
     """
     Basic plot
@@ -228,20 +241,7 @@ def Plot(cli_args=None):
 
     plt.style.use(["goose", "goose-latex", "goose-autolayout"])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    parser.add_argument("-o", "--output", type=str, help="Store figure.")
-    parser.add_argument("file", type=str, help="Event map")
-
+    parser = _Plot_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
 
@@ -266,18 +266,13 @@ def Plot(cli_args=None):
     plt.close(fig)
 
 
-def Info(cli_args=None):
-    """
-    Collect basic information from :py:func:`Run` and combine in a single output file.
-    """
+def _Info_cli():
+    Info(sys.argv[1:])
 
-    class MyFmt(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    output = file_defaults[funcname]
+def _Info_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Info.__doc__)
+    output = file_defaults["Info"]
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -291,7 +286,14 @@ def Info(cli_args=None):
     parser.add_argument(
         "files", nargs="*", type=str, help="Files to read (generated by :py:func:`Run`)"
     )
+    return parser
 
+
+def Info(cli_args=None):
+    """
+    Collect basic information from :py:func:`Run` and combine in a single output file.
+    """
+    parser = _Info_parser()
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
@@ -345,4 +347,4 @@ def Info(cli_args=None):
             [";".join(i) for i in data["dependencies"]], file, "/dependencies", split=";"
         )
 
-        QuasiStatic.create_check_meta(file, f"/meta/EventMap_{funcname}", dev=args.develop)
+        QuasiStatic.create_check_meta(file, "/meta/EventMap_Info", dev=args.develop)

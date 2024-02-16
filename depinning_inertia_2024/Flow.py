@@ -5,11 +5,10 @@
 from __future__ import annotations
 
 import argparse
-import inspect
 import os
 import pathlib
 import re
-import textwrap
+import sys
 import time
 from collections import defaultdict
 
@@ -148,30 +147,29 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     return v_frame, mean, std, {k: steadystate[k] for k in keep}, data
 
 
-def EnsemblePack(cli_args=None):
-    """
-    Extract output all from a set of files run with :py:func:`Run`.
-    After this the run-files can be deleted (only destroys the possibility to continue the run).
-    """
+def _EnsemblePack_cli():
+    EnsemblePack(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    output = file_defaults[funcname]
-
+def _EnsemblePack_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=EnsemblePack.__doc__
+    )
+    output = file_defaults["EnsemblePack"]
     parser.add_argument("-i", "--inplace", action="store_true", help="Update output file inplace")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("files", nargs="*", type=str, help="Input files")
+    return parser
 
+
+def EnsemblePack(cli_args=None):
+    """
+    Extract output all from a set of files run with :py:func:`Run`.
+    After this the run-files can be deleted (only destroys the possibility to continue the run).
+    """
+    parser = _EnsemblePack_parser()
     args = tools._parse(parser, cli_args)
     assert all([os.path.isfile(file) for file in args.files])
     if args.inplace:
@@ -182,7 +180,7 @@ def EnsemblePack(cli_args=None):
         mode = "w"
 
     with h5py.File(args.output, mode) as output:
-        QuasiStatic.create_check_meta(output, f"/meta/Flow_{funcname}", dev=args.develop)
+        QuasiStatic.create_check_meta(output, "/meta/Flow_EnsemblePack", dev=args.develop)
         if "full" not in output:
             output.create_group("full")
         if "param" in output:
@@ -227,6 +225,22 @@ def EnsemblePack(cli_args=None):
                     g5.copy(file, output, "/realisation", root=f"/full/{fname}")
 
 
+def _Generate_cli():
+    Generate(sys.argv[1:])
+
+
+def _Generate_parser():
+    parser = QuasiStatic._Generate_parser()
+    parser.add_argument(
+        "--output",
+        type=lambda arg: float(arg),
+        default=50,
+        help="delta(u_frame) to leave between output steps",
+    )
+    parser.add_argument("--v-frame", type=float, required=True, help="Driving rate.")
+    return parser
+
+
 def Generate(cli_args=None):
     """
     Generate IO files.
@@ -236,27 +250,7 @@ def Generate(cli_args=None):
 
         shelephant_dump --fmt "Flow_Run --nstep 100000 {}" */id*h5 -o commands_run.yaml
     """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
-    QuasiStatic._generate_cli_options(parser)
-
-    parser.add_argument(
-        "--output",
-        type=lambda arg: float(arg),
-        default=50,
-        help="delta(u_frame) to leave between output steps",
-    )
-    parser.add_argument("--v-frame", type=float, required=True, help="Driving rate.")
+    parser = _Generate_parser()
     args = tools._parse(parser, cli_args)
 
     outdir = pathlib.Path(args.outdir)
@@ -284,22 +278,12 @@ def Generate(cli_args=None):
     shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
 
 
-def Run(cli_args=None):
-    """
-    Run simulation.
-    """
+def _Run_cli():
+    Run(sys.argv[1:])
 
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
 
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _Run_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--backup-interval", default=5, type=int, help="Backup interval in minutes")
     parser.add_argument(
@@ -313,7 +297,14 @@ def Run(cli_args=None):
     )
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file")
+    return parser
 
+
+def Run(cli_args=None):
+    """
+    Run simulation.
+    """
+    parser = _Run_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
 
@@ -329,7 +320,7 @@ def Run(cli_args=None):
 
         system = QuasiStatic.allocate_system(file)
         system.inc = 0
-        QuasiStatic.create_check_meta(file, f"/meta/Flow_{funcname}", dev=args.develop)
+        QuasiStatic.create_check_meta(file, "/meta/Flow_Run", dev=args.develop)
 
         if "u" in restart:
             system.inc = restart["inc"][...]
@@ -399,27 +390,12 @@ def Run(cli_args=None):
             file.flush()
 
 
-def Plot(cli_args=None):
-    """
-    Basic plot
-    """
+def _Plot_cli():
+    Plot(sys.argv[1:])
 
-    import GooseMPL as gplt  # noqa: F401
-    import matplotlib.pyplot as plt  # noqa: F401
 
-    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-
+def _Plot_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Plot.__doc__)
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("-p", "--path", type=str, help="'/full/{path}' (EnsembleInfo).")
@@ -431,7 +407,20 @@ def Plot(cli_args=None):
         help="Steady-state per realisation, see :py:func:`ensemble_average`.",
     )
     parser.add_argument("file", type=pathlib.Path, help="Simulation file / EnsembleInfo")
+    return parser
 
+
+def Plot(cli_args=None):
+    """
+    Basic plot
+    """
+
+    import GooseMPL as gplt  # noqa: F401
+    import matplotlib.pyplot as plt  # noqa: F401
+
+    plt.style.use(["goose", "goose-latex", "goose-autolayout"])
+
+    parser = _Plot_parser()
     args = tools._parse(parser, cli_args)
     assert args.file.exists()
 

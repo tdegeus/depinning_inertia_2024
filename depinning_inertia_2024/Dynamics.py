@@ -5,9 +5,8 @@ Rerun step (quasi-static step, or trigger) to extract the dynamic evolution of f
 from __future__ import annotations
 
 import argparse
-import inspect
 import os
-import textwrap
+import sys
 
 import enstat
 import FrictionQPotSpringBlock  # noqa: F401
@@ -76,37 +75,12 @@ def restore_system(filepath: str, step: int = None, branch: int = None, apply_tr
     return system, info
 
 
-def Run(cli_args=None):
-    """
-    Rerun an event and store output at different increments that are selected at:
-    *   Given event sizes "A" unit the event is system spanning (``--A-step`` controls interval).
-    *   Given time-steps if no longer checking at "A" (interval controlled by ``--t-step``).
+def _Run_cli():
+    Run(sys.argv[1:])
 
-    Customisation:
-    *   ``--t-step=0``: Break simulation when ``A = N``.
-    *   ``--A-step=0``: Store at fixed time intervals from the beginning.
 
-    Storage:
-    *   An exact copy of the input file.
-    *   The position of all particles ("/Dynamics/u/{iiter:d}").
-    *   Metadata:
-        - "/Dynamics/inc": Increment number (-> time).
-        - "/Dynamics/A": Actual number of blocks that yielded at least once.
-        - "/Dynamics/stored": The stored "iiter".
-        - "/Dynamics/sync-A": List of "iiter" stored due to given "A".
-        - "/Dynamics/sync-t": List of "iiter" stored due to given "inc" after checking for "A".
-    """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
+def _Run_parser():
+    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -127,6 +101,30 @@ def Run(cli_args=None):
     # input files
     parser.add_argument("file", type=str, help="Simulation from which to run (read-only)")
 
+    return parser
+
+
+def Run(cli_args=None):
+    """
+    Rerun an event and store output at different increments that are selected at:
+    *   Given event sizes "A" unit the event is system spanning (``--A-step`` controls interval).
+    *   Given time-steps if no longer checking at "A" (interval controlled by ``--t-step``).
+
+    Customisation:
+    *   ``--t-step=0``: Break simulation when ``A = N``.
+    *   ``--A-step=0``: Store at fixed time intervals from the beginning.
+
+    Storage:
+    *   An exact copy of the input file.
+    *   The position of all particles ("/Dynamics/u/{iiter:d}").
+    *   Metadata:
+        - "/Dynamics/inc": Increment number (-> time).
+        - "/Dynamics/A": Actual number of blocks that yielded at least once.
+        - "/Dynamics/stored": The stored "iiter".
+        - "/Dynamics/sync-A": List of "iiter" stored due to given "A".
+        - "/Dynamics/sync-t": List of "iiter" stored due to given "inc" after checking for "A".
+    """
+    parser = _Run_parser()
     args = tools._parse(parser, cli_args)
     assert os.path.isfile(args.file)
     assert os.path.abspath(args.file) != os.path.abspath(args.output)
@@ -148,9 +146,7 @@ def Run(cli_args=None):
             root = file.create_group("Dynamics")
             root.create_group("u")
 
-            meta = QuasiStatic.create_check_meta(
-                file, f"/meta/Dynamics_{funcname}", dev=args.develop
-            )
+            meta = QuasiStatic.create_check_meta(file, "/meta/Dynamics_Run", dev=args.develop)
             meta.attrs["file"] = os.path.basename(args.file)
             meta.attrs["A-step"] = args.A_step
             meta.attrs["t-step"] = args.t_step
@@ -315,6 +311,22 @@ class AlignedAverage(enstat.static):
             self.norm[index, incl] += 1
 
 
+def _AverageSystemSpanning_cli():
+    AverageSystemSpanning(sys.argv[1:])
+
+
+def _AverageSystemSpanning_parser():
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=AverageSystemSpanning.__doc__
+    )
+    output = file_defaults["AverageSystemSpanning"]
+    parser.add_argument("--develop", action="store_true", help="Development mode")
+    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
+    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
+    parser.add_argument("files", nargs="*", type=str, help="See :py:func:`Run`")
+    return parser
+
+
 def AverageSystemSpanning(cli_args=None):
     """
     Compute averages from output of :py:func:`Run`:
@@ -326,24 +338,7 @@ def AverageSystemSpanning(cli_args=None):
 
     -   'Aligned' averages (for different element rows), for fixed A.
     """
-
-    class MyFmt(
-        argparse.RawDescriptionHelpFormatter,
-        argparse.ArgumentDefaultsHelpFormatter,
-        argparse.MetavarTypeHelpFormatter,
-    ):
-        pass
-
-    funcname = inspect.getframeinfo(inspect.currentframe()).function
-    doc = textwrap.dedent(inspect.getdoc(globals()[funcname]))
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=doc)
-    output = file_defaults[funcname]
-
-    parser.add_argument("--develop", action="store_true", help="Development mode")
-    parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
-    parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("files", nargs="*", type=str, help="See :py:func:`Run`")
-
+    parser = _AverageSystemSpanning_parser()
     args = tools._parse(parser, cli_args)
     assert len(args.files) > 0
     assert all([os.path.isfile(file) for file in args.files])
@@ -514,7 +509,9 @@ def AverageSystemSpanning(cli_args=None):
                     d["du"].subsample(j, system.u - u_n, roll, broken)
 
     with h5py.File(args.output, "w") as file:
-        QuasiStatic.create_check_meta(file, f"/meta/Dynamics_{funcname}", dev=args.develop)
+        QuasiStatic.create_check_meta(
+            file, "/meta/Dynamics_AverageSystemSpanning", dev=args.develop
+        )
 
         file["files"] = [os.path.relpath(i, os.path.dirname(args.output)) for i in args.files]
 
