@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10679735.svg)](https://doi.org/10.5281/zenodo.10679735)
+
 # depinning_inertia_2024
 
 Interface between data and [FrictionQPotSpringBlock](https://github.com/tdegeus/FrictionQPotSpringBlock).
