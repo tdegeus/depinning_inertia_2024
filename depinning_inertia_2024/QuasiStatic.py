@@ -11,6 +11,7 @@ import re
 import shutil
 import sys
 import tempfile
+import textwrap
 import uuid
 
 import click
@@ -252,7 +253,7 @@ def _ForceCurrentDataVersion_cli():
 
 def _ForceCurrentDataVersion_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=MyFmt, description=ForceCurrentDataVersion.__doc__
+        formatter_class=MyFmt, description=textwrap.dedent(ForceCurrentDataVersion.__doc__)
     )
     parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -294,7 +295,9 @@ def _UpdateData_cli():
 
 
 def _UpdateData_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=UpdateData.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(UpdateData.__doc__)
+    )
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("--no-bak", action="store_true", help="Do not backup before modifying")
     parser.add_argument("--fastload", action="store_true", help="Update fastload file")
@@ -377,7 +380,9 @@ def _CheckData_cli():
 
 
 def _CheckData_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=CheckData.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(CheckData.__doc__)
+    )
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("-o", "--output", type=str, help="List files that failed the check (yaml).")
     parser.add_argument("files", nargs="*", type=str, help="Files (read only)")
@@ -667,7 +672,9 @@ class SystemExtra:
 
         :param root: HDF5 archive opened in the right root (read-only).
         :param step: Step number.
-        :param fastload: Use fastload file (if detected), see :py:func:`GenerateFastLoad`.
+        :param fastload:
+            Use fastload file (if detected),
+            see :py:func:`depinning_inertia_2024.QuasiStatic.GenerateFastLoad`.
         """
 
         u = root["u"][str(step)][...]
@@ -1054,7 +1061,9 @@ def _Generate_cli():
 
 
 def _Generate_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Generate.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(Generate.__doc__)
+    )
     parser.add_argument("-n", "--nsim", type=int, default=1, help="#simulations")
     parser.add_argument("-s", "--start", type=int, default=0, help="Start simulation")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -1182,7 +1191,9 @@ def _Run_cli():
 
 
 def _Run_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Run.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(Run.__doc__)
+    )
     parser.add_argument("--check", type=int, help="Rerun step to check old run / new version")
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -1302,7 +1313,9 @@ def _CheckDynamics_cli():
 
 
 def _CheckDynamics_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=CheckDynamics.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(CheckDynamics.__doc__)
+    )
     parser.add_argument("--step", type=int, required=True, help="Step to rerun")
     parser.add_argument("--write", type=str, help="Write details to file")
     parser.add_argument("--read", type=str, help="Read details from file and compare")
@@ -1566,7 +1579,9 @@ def _EnsembleInfo_cli():
 
 
 def _EnsembleInfo_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=EnsembleInfo.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(EnsembleInfo.__doc__)
+    )
     output = file_defaults["EnsembleInfo"]
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
@@ -1579,7 +1594,7 @@ def _EnsembleInfo_parser():
 def EnsembleInfo(cli_args=None):
     """
     Read information (avalanche size, force) of an ensemble,
-    see :py:func:`basic_output`.
+    see :py:func:`depinning_inertia_2024.QuasiStatic.basic_output`.
     Store into a single output file.
     """
     parser = _EnsembleInfo_parser()
@@ -1704,7 +1719,9 @@ def _JobRerun_cli():
 
 
 def _JobRerun_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=JobRerun.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(JobRerun.__doc__)
+    )
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--systemspanning", action="store_true", help="System spanning events")
     parser.add_argument("--eventmap", action="store_true", help="Produce event map")
@@ -1783,7 +1800,9 @@ def _CheckFastLoad_cli():
 
 
 def _CheckFastLoad_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=CheckFastLoad.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(CheckFastLoad.__doc__)
+    )
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("file", type=str, help="Simulation file (read only)")
     return parser
@@ -1822,7 +1841,9 @@ def _GenerateFastLoad_cli():
 
 
 def _GenerateFastLoad_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=GenerateFastLoad.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(GenerateFastLoad.__doc__)
+    )
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--append", action="store_true", help="Append existing file")
     parser.add_argument("-v", "--version", action="version", version=version)
@@ -1887,7 +1908,7 @@ def _PlotStateAfterSystemSpanning_cli():
 
 def _PlotStateAfterSystemSpanning_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=MyFmt, description=PlotStateAfterSystemSpanning.__doc__
+        formatter_class=MyFmt, description=textwrap.dedent(PlotStateAfterSystemSpanning.__doc__)
     )
     parser.add_argument("-v", "--version", action="version", version=version)
     parser.add_argument("files", nargs="*", type=str, help="Input files")
@@ -1897,7 +1918,7 @@ def _PlotStateAfterSystemSpanning_parser():
 def PlotStateAfterSystemSpanning(cli_args=None):
     """
     Plot state after system-spanning events.
-    Input files: :py:func:`EnsembleInfo`, or ?? (TODO)
+    Input files: :py:func:`depinning_inertia_2024.QuasiStatic.EnsembleInfo`, or ?? (TODO)
     """
 
     import GooseMPL as gplt  # noqa: F401
@@ -1991,7 +2012,7 @@ def _StateAfterSystemSpanning_cli():
 
 def _StateAfterSystemSpanning_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=MyFmt, description=StateAfterSystemSpanning.__doc__
+        formatter_class=MyFmt, description=textwrap.dedent(StateAfterSystemSpanning.__doc__)
     )
     output = file_defaults["StateAfterSystemSpanning"]
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -2161,7 +2182,7 @@ def _StructureAfterSystemSpanning_cli():
 
 def _StructureAfterSystemSpanning_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=MyFmt, description=StructureAfterSystemSpanning.__doc__
+        formatter_class=MyFmt, description=textwrap.dedent(StructureAfterSystemSpanning.__doc__)
     )
     output = file_defaults["StructureAfterSystemSpanning"]
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
@@ -2244,7 +2265,9 @@ def _Plot_cli():
 
 
 def _Plot_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Plot.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(Plot.__doc__)
+    )
     parser.add_argument("--bins", type=int, default=30, help="Number of bins.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("-i", "--input", type=str, help="Realisation, if input in EnsembleInfo.")
@@ -2332,7 +2355,9 @@ def _Paraview_cli():
 
 
 def _Paraview_parser():
-    parser = argparse.ArgumentParser(formatter_class=MyFmt, description=Paraview.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=MyFmt, description=textwrap.dedent(Paraview.__doc__)
+    )
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, required=True, help="Appended xdmf/h5py")
     parser.add_argument("-v", "--version", action="version", version=version)

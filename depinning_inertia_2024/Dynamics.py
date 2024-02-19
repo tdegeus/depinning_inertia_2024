@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import textwrap
 
 import enstat
 import FrictionQPotSpringBlock  # noqa: F401
@@ -80,7 +81,9 @@ def _Run_cli():
 
 
 def _Run_parser():
-    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Run.__doc__)
+    )
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -122,11 +125,11 @@ def Run(cli_args=None):
     *   The position of all particles ("/Dynamics/u/{iiter:d}").
     *   Metadata:
 
-        - "/Dynamics/inc": Increment number (-> time).
-        - "/Dynamics/A": Actual number of blocks that yielded at least once.
-        - "/Dynamics/stored": The stored "iiter".
-        - "/Dynamics/sync-A": List of "iiter" stored due to given "A".
-        - "/Dynamics/sync-t": List of "iiter" stored due to given "inc" after checking for "A".
+        - ``"/Dynamics/inc"``: Increment number (-> time).
+        - ``"/Dynamics/A"``: Actual number of blocks that yielded at least once.
+        - ``"/Dynamics/stored"``: The stored "iiter".
+        - ``"/Dynamics/sync-A"``: List of "iiter" stored due to given "A".
+        - ``"/Dynamics/sync-t"``: List of "iiter" stored due to given "inc" after checking for "A".
     """
     parser = _Run_parser()
     args = tools._parse(parser, cli_args)
@@ -283,8 +286,7 @@ def Run(cli_args=None):
 
 class AlignedAverage(enstat.static):
     """
-    Support class for :py:func:`AverageSystemSpanning`.
-    This class writes on item at a time using :py:func:`BasicAverage.subsample`.
+    Support class for :py:func:`depinning_inertia_2024.Dynamics.AverageSystemSpanning`.
     """
 
     def __init__(self, shape):
@@ -321,19 +323,22 @@ def _AverageSystemSpanning_cli():
 
 def _AverageSystemSpanning_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=QuasiStatic.MyFmt, description=AverageSystemSpanning.__doc__
+        formatter_class=QuasiStatic.MyFmt,
+        description=textwrap.dedent(AverageSystemSpanning.__doc__),
     )
     output = file_defaults["AverageSystemSpanning"]
     parser.add_argument("--develop", action="store_true", help="Development mode")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("files", nargs="*", type=str, help="See :py:func:`Run`")
+    parser.add_argument(
+        "files", nargs="*", type=str, help="See :py:func:`depinning_inertia_2024.Dynamics.Run`"
+    )
     return parser
 
 
 def AverageSystemSpanning(cli_args=None):
     """
-    Compute averages from output of :py:func:`Run`:
+    Compute averages from output of :py:func:`depinning_inertia_2024.Dynamics.Run`:
 
     -   'Simple' averages (macroscopic, on moving particles):
 

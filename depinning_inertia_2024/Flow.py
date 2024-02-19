@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import sys
+import textwrap
 import time
 from collections import defaultdict
 
@@ -59,7 +60,7 @@ def interpret_filename(filename: str) -> dict:
 
 def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     """
-    Ensemble average from a file written by :py:func:`cli_enembleinfo`.
+    Ensemble average from a file written by :py:func:`depinning_inertia_2024.Flow.EnsemblePack`.
 
     :param file: Ensemble info (opened HDF5 archive).
     :param steadystate:
@@ -153,7 +154,7 @@ def _EnsemblePack_cli():
 
 def _EnsemblePack_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=QuasiStatic.MyFmt, description=EnsemblePack.__doc__
+        formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(EnsemblePack.__doc__)
     )
     output = file_defaults["EnsemblePack"]
     parser.add_argument("-i", "--inplace", action="store_true", help="Update output file inplace")
@@ -166,7 +167,7 @@ def _EnsemblePack_parser():
 
 def EnsemblePack(cli_args=None):
     """
-    Extract output all from a set of files run with :py:func:`Run`.
+    Extract output all from a set of files run with :py:func:`depinning_inertia_2024.Flow.Run`.
     After this the run-files can be deleted (only destroys the possibility to continue the run).
     """
     parser = _EnsemblePack_parser()
@@ -283,7 +284,9 @@ def _Run_cli():
 
 
 def _Run_parser():
-    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Run.__doc__)
+    )
     parser.add_argument("--develop", action="store_true", help="Allow uncommitted")
     parser.add_argument("--backup-interval", default=5, type=int, help="Backup interval in minutes")
     parser.add_argument(
@@ -395,7 +398,9 @@ def _Plot_cli():
 
 
 def _Plot_parser():
-    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Plot.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Plot.__doc__)
+    )
     parser.add_argument("-m", "--marker", type=str, help="Marker.")
     parser.add_argument("-o", "--output", type=str, help="Store figure.")
     parser.add_argument("-p", "--path", type=str, help="'/full/{path}' (EnsembleInfo).")
@@ -404,7 +409,7 @@ def _Plot_parser():
         "--steadystate",
         type=pathlib.Path,
         default={},
-        help="Steady-state per realisation, see :py:func:`ensemble_average`.",
+        help="Steady-state per realisation, see :py:func:`depinning_inertia_2024.Flow.ensemble_average`.",
     )
     parser.add_argument("file", type=pathlib.Path, help="Simulation file / EnsembleInfo")
     return parser

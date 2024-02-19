@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import textwrap
 
 import enstat
 import FrictionQPotSpringBlock  # noqa: F401
@@ -32,7 +33,9 @@ def _Run_cli():
 
 
 def _Run_parser():
-    parser = argparse.ArgumentParser(formatter_class=QuasiStatic.MyFmt, description=Run.__doc__)
+    parser = argparse.ArgumentParser(
+        formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Run.__doc__)
+    )
 
     # developer options
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -125,7 +128,7 @@ def _EnsembleInfo_cli():
 
 def _EnsembleInfo_parser():
     parser = argparse.ArgumentParser(
-        formatter_class=QuasiStatic.MyFmt, description=EnsembleInfo.__doc__
+        formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(EnsembleInfo.__doc__)
     )
     output = file_defaults["EnsembleInfo"]
     parser.add_argument("--develop", action="store_true", help="Development mode")
@@ -135,13 +138,18 @@ def _EnsembleInfo_parser():
     parser.add_argument("--vmax", type=float, default=4, help="Range of v: min(v):max(b):bins")
     parser.add_argument("-f", "--force", action="store_true", help="Force overwrite output")
     parser.add_argument("-o", "--output", type=str, default=output, help="Output file")
-    parser.add_argument("files", nargs="*", type=str, help="Output files of :py:func:`Run`")
+    parser.add_argument(
+        "files",
+        nargs="*",
+        type=str,
+        help="Output files of :py:func:`depinning_inertia_2024.Relaxation.Run`",
+    )
     return parser
 
 
 def EnsembleInfo(cli_args=None):
     """
-    Bin the data from several run.
+    Bin the data from several runs.
     """
     parser = _EnsembleInfo_parser()
     args = tools._parse(parser, cli_args)

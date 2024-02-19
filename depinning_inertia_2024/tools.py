@@ -19,7 +19,7 @@ def h5py_read_unique(
     asstr: bool = False,
 ) -> np.ndarray:
     """
-    Return original array stored by :py:func:`h5py_save_unique`.
+    Return original array stored by :py:func:`depinning_inertia_2024.tools.h5py_save_unique`.
 
     :param file: HDF5 archive.
     :param path: Group containing ``index`` and ``value``.
@@ -56,7 +56,7 @@ def h5py_save_unique(
     -   ``path/value``: list of unique strings.
     -   ``path/index``: per item which index from ``path/value`` to take.
 
-    Use :py:func:`h5py_read_unique` to read data.
+    Use :py:func:`depinning_inertia_2024.tools.h5py_read_unique` to read data.
 
     :param data: Data to store.
     :param file: HDF5 archive.
