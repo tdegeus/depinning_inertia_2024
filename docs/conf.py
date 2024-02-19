@@ -15,3 +15,4 @@ extensions = [
     "sphinx.ext.todo",
     "sphinxarg.ext",
 ]
+templates_path = ["_templates"]

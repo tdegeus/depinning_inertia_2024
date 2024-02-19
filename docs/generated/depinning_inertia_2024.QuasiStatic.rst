@@ -1,18 +1,18 @@
-﻿depinning\_inertia\_2024.QuasiStatic
-====================================
+﻿QuasiStatic
+===========
 
 .. automodule:: depinning_inertia_2024.QuasiStatic
 
+   
+   
+   
 
-
-
-
-
-
+   
+   
    .. rubric:: Functions
 
    .. autosummary::
-
+   
       CheckData
       CheckDynamics
       CheckFastLoad
@@ -36,15 +36,15 @@
       generate
       interpret_filename
       steadystate
+   
+   
 
-
-
-
-
+   
+   
    .. rubric:: Classes
 
    .. autosummary::
-
+   
       Line1d_System_Cuspy_Laplace
       Line1d_System_Cuspy_Laplace_Nopassing
       Line1d_System_Cuspy_Laplace_RandomForcing
@@ -58,3 +58,17 @@
       MyFmt
       Normalisation
       SystemExtra
+   
+   
+
+   
+   
+   
+
+.. rubric:: Module Contents
+
+.. automodule:: depinning_inertia_2024.QuasiStatic
+    :members:
+
+
+

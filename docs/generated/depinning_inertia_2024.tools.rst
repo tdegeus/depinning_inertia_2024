@@ -1,18 +1,18 @@
-﻿depinning\_inertia\_2024.tools
-==============================
+﻿tools
+=====
 
 .. automodule:: depinning_inertia_2024.tools
 
+   
+   
+   
 
-
-
-
-
-
+   
+   
    .. rubric:: Functions
 
    .. autosummary::
-
+   
       center_avalanche
       center_avalanche_per_row
       check_docstring
@@ -21,3 +21,21 @@
       h5py_save_unique
       inboth
       indep_roll
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+.. rubric:: Module Contents
+
+.. automodule:: depinning_inertia_2024.tools
+    :members:
+
+
+
