@@ -1,3 +1,4 @@
+docs/generated/*rst
 _version.py
 
 # Byte-compiled / optimized / DLL files

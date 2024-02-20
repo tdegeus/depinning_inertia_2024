@@ -1,5 +1,5 @@
 """
-h5py 'extensions'.
+h5py extensions.
 """
 
 from typing import TypeVar
