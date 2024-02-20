@@ -1,5 +1,5 @@
 """
-??
+Measure response to a constant driving velocity.
 """
 
 from __future__ import annotations
@@ -60,7 +60,8 @@ def interpret_filename(filename: str) -> dict:
 
 def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     """
-    Ensemble average from a file written by :py:func:`depinning_inertia_2024.Flow.EnsemblePack`.
+    Ensemble average.
+    The input file has to be written by :py:func:`depinning_inertia_2024.Flow.EnsemblePack`.
 
     :param file: Ensemble info (opened HDF5 archive).
     :param steadystate:
@@ -167,8 +168,9 @@ def _EnsemblePack_parser():
 
 def EnsemblePack(cli_args=None):
     """
-    Extract output all from a set of files run with :py:func:`depinning_inertia_2024.Flow.Run`.
-    After this the run-files can be deleted (only destroys the possibility to continue the run).
+    Collect different runs.
+    Each run corresponds to :py:func:`depinning_inertia_2024.Flow.Run`.
+    After this, the run-files can be deleted (only destroys the possibility to continue the run).
     """
     parser = _EnsemblePack_parser()
     args = tools._parse(parser, cli_args)
@@ -417,7 +419,7 @@ def _Plot_parser():
 
 def Plot(cli_args=None):
     """
-    Basic plot
+    Basic plot.
     """
 
     import GooseMPL as gplt  # noqa: F401

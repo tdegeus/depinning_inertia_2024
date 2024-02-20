@@ -1,3 +1,7 @@
+"""
+Various tools.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -19,7 +23,8 @@ def h5py_read_unique(
     asstr: bool = False,
 ) -> np.ndarray:
     """
-    Return original array stored by :py:func:`depinning_inertia_2024.tools.h5py_save_unique`.
+    Return original array.
+    The array is stored by :py:func:`depinning_inertia_2024.tools.h5py_save_unique`.
 
     :param file: HDF5 archive.
     :param path: Group containing ``index`` and ``value``.

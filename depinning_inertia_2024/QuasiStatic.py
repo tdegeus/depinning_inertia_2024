@@ -1,5 +1,5 @@
 """
-QuasiStatic simulations, and tools to run those simulators.
+Quasistatic event-driven simulations.
 """
 
 from __future__ import annotations
@@ -263,7 +263,7 @@ def _ForceCurrentDataVersion_parser():
 
 def ForceCurrentDataVersion(cli_args=None):
     """
-    Add/overwrite "/param/data_version" to the current version.
+    Add/overwrite ``"/param/data_version"`` to the current version.
     Warning: use with caution.
     There are no checks that the data is compatible with the current version.
     """
@@ -663,7 +663,7 @@ class SystemExtra:
         fastload: bool = True,
     ):
         """
-        Quench and restore an a quasi-static step for the relevant root.
+        Quench and restore an a quasistatic step for the relevant root.
         The ``root`` group should contain::
 
             root["u"][str(step)]   # Positions
@@ -908,8 +908,8 @@ def create_check_meta(
     **kwargs,
 ) -> h5py.Group:
     """
-    Create, update, or read/check metadata. This function creates metadata as attributes to a group
-    ``path`` as follows::
+    Create, update, or read/check metadata.
+    This function creates metadata as attributes to a group ``path`` as follows::
 
         "uuid": A unique identifier that can be used to distinguish simulations.
         "version": The current version of this code (updated).
@@ -989,7 +989,7 @@ def generate(
     :param potential: Select potential.
     :param distribution: Distribution of potentials.
     :param interactions: Select interactions.
-    :param overdamped: Run overdamped dynamics (no passing rule if quasi-static).
+    :param overdamped: Run overdamped dynamics (no passing rule if quasistatic).
     :param temperature: Temperature (in units of the yield force = 1).
     """
     L = min(shape)
@@ -1326,7 +1326,7 @@ def _CheckDynamics_parser():
 
 def CheckDynamics(cli_args=None):
     """
-    Write or check the detailed dynamics of a quasi-static step.
+    Write or check the detailed dynamics of a quasistatic step.
     """
     parser = _CheckDynamics_parser()
     args = tools._parse(parser, cli_args)
@@ -1593,8 +1593,8 @@ def _EnsembleInfo_parser():
 
 def EnsembleInfo(cli_args=None):
     """
-    Read information (avalanche size, force) of an ensemble,
-    see :py:func:`depinning_inertia_2024.QuasiStatic.basic_output`.
+    Read information (avalanche size, force) of an ensemble.
+    See :py:func:`depinning_inertia_2024.QuasiStatic.basic_output`.
     Store into a single output file.
     """
     parser = _EnsembleInfo_parser()
@@ -1737,7 +1737,7 @@ def _JobRerun_parser():
 
 def JobRerun(cli_args=None):
     """
-    Write list of jobs to rerun a quasi-static step.
+    Write list of jobs to rerun a quasistatic step.
     """
     parser = _JobRerun_parser()
     args = tools._parse(parser, cli_args)
@@ -1917,7 +1917,7 @@ def _PlotStateAfterSystemSpanning_parser():
 
 def PlotStateAfterSystemSpanning(cli_args=None):
     """
-    Plot state after system-spanning events.
+    Plot state after system spanning events.
     Input files: :py:func:`depinning_inertia_2024.QuasiStatic.EnsembleInfo`, or ?? (TODO)
     """
 
@@ -2026,7 +2026,8 @@ def _StateAfterSystemSpanning_parser():
 
 def StateAfterSystemSpanning(cli_args=None):
     """
-    Extract:
+    Extract stability and height-height correlation after system spanning events.
+    In particular, the following quantities are stored:
 
     -   P(x), with x the distance to yielding.
     -   The height-height correlation.
@@ -2195,7 +2196,7 @@ def _StructureAfterSystemSpanning_parser():
 
 def StructureAfterSystemSpanning(cli_args=None):
     """
-    Extract the structure factor after a system spanning events.
+    Extract the structure factor after system spanning events.
     See: https://doi.org/10.1103/PhysRevLett.118.147208
     """
     parser = _StructureAfterSystemSpanning_parser()
@@ -2277,7 +2278,7 @@ def _Plot_parser():
 
 def Plot(cli_args=None):
     """
-    Basic plot
+    Basic plot.
     """
 
     import GooseMPL as gplt  # noqa: F401
