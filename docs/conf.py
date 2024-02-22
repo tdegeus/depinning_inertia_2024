@@ -2,6 +2,7 @@ import os
 import pathlib
 import re
 import sys
+import textwrap
 import tomllib
 
 sys.path.insert(0, os.path.abspath(".."))
@@ -58,17 +59,8 @@ for module in modules:
 
 data = tomllib.loads((pathlib.Path(__file__).parent / ".." / "pyproject.toml").read_text())
 scripts = data["project"]["scripts"]
-
-header = "Command-line tools"
-ret = [
-    "\n".join(
-        [
-            "*" * len(header),
-            header,
-            "*" * len(header),
-        ]
-    )
-]
+generated = []
+(pathlib.Path(__file__).parent / "cli").mkdir(exist_ok=True)
 
 for name, funcname in scripts.items():
     modname, funcname = funcname.split(":")
@@ -77,7 +69,8 @@ for name, funcname in scripts.items():
     parser = f"_{funcname}_parser"
     progname = f"{modname}_{funcname}"
 
-    ret.append(
+    generated.append(progname)
+    (pathlib.Path(__file__).parent / "cli" / f"{progname}.rst").write_text(
         "\n".join(
             [
                 f".. _{modname}_{funcname}:",
@@ -93,4 +86,23 @@ for name, funcname in scripts.items():
         )
     )
 
-(pathlib.Path(__file__).parent / "cli.rst").write_text("\n\n".join(ret) + "\n")
+header = "Command-line tools"
+ret = [
+    "\n".join(
+        [
+            "*" * len(header),
+            header,
+            "*" * len(header),
+        ]
+    )
+]
+
+ret += [
+    "",
+    ".. toctree::",
+    "    :maxdepth: 1",
+    "",
+]
+ret += [textwrap.indent(i, " " * 4) for i in generated]
+
+(pathlib.Path(__file__).parent / "cli" / "index.rst").write_text("\n".join(ret) + "\n")
