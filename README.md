@@ -4,7 +4,7 @@
 [![Documentation Status](https://readthedocs.org/projects/depinning_inertia_2024/badge/?version=latest)](https://depinning_inertia_2024.readthedocs.io/en/latest/?badge=latest)
 [![pre-commit](https://github.com/tdegeus/depinning_inertia_2024/workflows/pre-commit/badge.svg)](https://github.com/tdegeus/depinning_inertia_2024/actions)
 
-**Documentation: [https://depinning_inertia_2024.readthedocs.io](depinning_inertia_2024.readthedocs.io)**
+**Documentation: [depinning_inertia_2024.readthedocs.io](https://depinning_inertia_2024.readthedocs.io)**
 
 
 # depinning_inertia_2024
