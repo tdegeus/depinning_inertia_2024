@@ -18,7 +18,7 @@ dependencies:
 - prettytable
 - pybind11
 - pytest
-- python
+- python >=3.6
 - python-cppcolormap
 - python-frictionqpotspringblock >=0.22.7
 - python-gooseeye >=0.7.1
