@@ -5,20 +5,20 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 authors = [{name = "Tom de Geus", email = "tom@geus.me"}]
 classifiers = ["License :: OSI Approved :: MIT License"]
 dependencies = [
-  "click",
-  "enstat >= 0.9.1",
-  "FrictionQPotSpringBlock >= 0.22.7",
-  "GooseEYE >= 0.7.1",
-  "GooseFEM >= 1.1.0",
-  "GooseHDF5 >= 0.22.0",
-  "h5py",
-  "numpy",
-  "prettytable",
-  "prrng >= 1.11.0",
-  "shelephant >= 0.23.0",
-  "tqdm",
-  "XDMFWrite_h5py >= 0.2.0",
-  "pyyaml"
+    "click",
+    "enstat >=0.9.1",
+    "FrictionQPotSpringBlock >=0.22.7",
+    "GooseEYE >=0.7.1",
+    "GooseFEM >=1.1.0",
+    "GooseHDF5 >=0.22.0",
+    "h5py",
+    "numpy",
+    "prettytable",
+    "prrng >=1.11.0",
+    "pyyaml",
+    "shelephant >=0.23.0",
+    "tqdm",
+    "XDMFWrite_h5py >=0.2.0",
 ]
 description = "Shell between data and FrictionQPotSpringBlock"
 dynamic = ["version"]
