@@ -1,6 +1,5 @@
 import os
 import pathlib
-import re
 import sys
 import textwrap
 import tomllib
@@ -66,7 +65,6 @@ generated = []
 for name, funcname in scripts.items():
     modname, funcname = funcname.split(":")
     libname, modname = modname.split(".")
-    funcname = re.split(r"(\_)(.*)(\_cli)", funcname)[2]
     parser = f"_{funcname}_parser"
     progname = f"{modname}_{funcname}"
 

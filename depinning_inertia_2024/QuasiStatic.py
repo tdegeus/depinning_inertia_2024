@@ -9,7 +9,6 @@ import os
 import pathlib
 import re
 import shutil
-import sys
 import tempfile
 import textwrap
 import uuid
@@ -247,10 +246,6 @@ def _get_data_version(file: h5py.File) -> str:
     return "0.0"
 
 
-def _ForceCurrentDataVersion_cli():
-    ForceCurrentDataVersion(sys.argv[1:])
-
-
 def _ForceCurrentDataVersion_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(ForceCurrentDataVersion.__doc__)
@@ -261,7 +256,7 @@ def _ForceCurrentDataVersion_parser():
     return parser
 
 
-def ForceCurrentDataVersion(cli_args=None):
+def ForceCurrentDataVersion(cli_args: list[str] = None):
     """
     Add/overwrite ``"/param/data_version"`` to the current version.
     Warning: use with caution.
@@ -290,10 +285,6 @@ def ForceCurrentDataVersion(cli_args=None):
                 file["/param/data_version"] = data_version
 
 
-def _UpdateData_cli():
-    UpdateData(sys.argv[1:])
-
-
 def _UpdateData_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(UpdateData.__doc__)
@@ -306,7 +297,7 @@ def _UpdateData_parser():
     return parser
 
 
-def UpdateData(cli_args=None):
+def UpdateData(cli_args: list[str] = None):
     """
     Update the data from any version to the current version.
     """
@@ -373,10 +364,6 @@ def UpdateData(cli_args=None):
                 if not args.no_bak:
                     shutil.copy2(fastload[filename], fastload[filename] + ".bak")
                 shutil.copy2(tmp / "my.h5", fastload[filename])
-
-
-def _CheckData_cli():
-    CheckData(sys.argv[1:])
 
 
 def _CheckData_parser():
@@ -1056,10 +1043,6 @@ def generate(
     file["/param/data_version"] = data_version
 
 
-def _Generate_cli():
-    Generate(sys.argv[1:])
-
-
 def _Generate_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(Generate.__doc__)
@@ -1153,7 +1136,7 @@ def _generate_parse(args):
     return ret
 
 
-def Generate(cli_args=None):
+def Generate(cli_args: list[str] = None):
     """
     Generate IO files (including job-scripts) to run simulations.
     """
@@ -1186,10 +1169,6 @@ def Generate(cli_args=None):
     shelephant.yaml.dump(outdir / "commands_info.yaml", info, force=True)
 
 
-def _Run_cli():
-    Run(sys.argv[1:])
-
-
 def _Run_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(Run.__doc__)
@@ -1207,7 +1186,7 @@ def _Run_parser():
     return parser
 
 
-def Run(cli_args=None):
+def Run(cli_args: list[str] = None):
     """
     Run simulation.
     """
@@ -1308,10 +1287,6 @@ def Run(cli_args=None):
             fload.flush()
 
 
-def _CheckDynamics_cli():
-    CheckDynamics(sys.argv[1:])
-
-
 def _CheckDynamics_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(CheckDynamics.__doc__)
@@ -1324,7 +1299,7 @@ def _CheckDynamics_parser():
     return parser
 
 
-def CheckDynamics(cli_args=None):
+def CheckDynamics(cli_args: list[str] = None):
     """
     Write or check the detailed dynamics of a quasistatic step.
     """
@@ -1574,10 +1549,6 @@ def _check_normalisation(norm: dict, test: dict):
             assert np.isclose(norm[key], test[key])
 
 
-def _EnsembleInfo_cli():
-    EnsembleInfo(sys.argv[1:])
-
-
 def _EnsembleInfo_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(EnsembleInfo.__doc__)
@@ -1591,7 +1562,7 @@ def _EnsembleInfo_parser():
     return parser
 
 
-def EnsembleInfo(cli_args=None):
+def EnsembleInfo(cli_args: list[str] = None):
     """
     Read information (avalanche size, force) of an ensemble.
     See :py:func:`depinning_inertia_2024.QuasiStatic.basic_output`.
@@ -1714,10 +1685,6 @@ def EnsembleInfo(cli_args=None):
         output["files"] = output["/lookup/filepath"]
 
 
-def _JobRerun_cli():
-    JobRerun(sys.argv[1:])
-
-
 def _JobRerun_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(JobRerun.__doc__)
@@ -1735,7 +1702,7 @@ def _JobRerun_parser():
     return parser
 
 
-def JobRerun(cli_args=None):
+def JobRerun(cli_args: list[str] = None):
     """
     Write list of jobs to rerun a quasistatic step.
     """
@@ -1795,10 +1762,6 @@ def JobRerun(cli_args=None):
         return ret
 
 
-def _CheckFastLoad_cli():
-    CheckFastLoad(sys.argv[1:])
-
-
 def _CheckFastLoad_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(CheckFastLoad.__doc__)
@@ -1808,7 +1771,7 @@ def _CheckFastLoad_parser():
     return parser
 
 
-def CheckFastLoad(cli_args=None):
+def CheckFastLoad(cli_args: list[str] = None):
     """
     Check the integrity of the fast load file.
     """
@@ -1836,10 +1799,6 @@ def CheckFastLoad(cli_args=None):
             assert np.all(system.chunk.state_at(index) == state)
 
 
-def _GenerateFastLoad_cli():
-    GenerateFastLoad(sys.argv[1:])
-
-
 def _GenerateFastLoad_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(GenerateFastLoad.__doc__)
@@ -1852,7 +1811,7 @@ def _GenerateFastLoad_parser():
     return parser
 
 
-def GenerateFastLoad(cli_args=None):
+def GenerateFastLoad(cli_args: list[str] = None):
     """
     Save the state of the random generators for fast loading of the simulation.
     The data created by this function is just to speed-up processing,
@@ -1902,10 +1861,6 @@ def GenerateFastLoad(cli_args=None):
             fload.flush()
 
 
-def _PlotStateAfterSystemSpanning_cli():
-    PlotStateAfterSystemSpanning(sys.argv[1:])
-
-
 def _PlotStateAfterSystemSpanning_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(PlotStateAfterSystemSpanning.__doc__)
@@ -1915,7 +1870,7 @@ def _PlotStateAfterSystemSpanning_parser():
     return parser
 
 
-def PlotStateAfterSystemSpanning(cli_args=None):
+def PlotStateAfterSystemSpanning(cli_args: list[str] = None):
     """
     Plot state after system spanning events.
     Input files: :py:func:`depinning_inertia_2024.QuasiStatic.EnsembleInfo`, or ?? (TODO)
@@ -2006,10 +1961,6 @@ def PlotStateAfterSystemSpanning(cli_args=None):
     plt.close(fig)
 
 
-def _StateAfterSystemSpanning_cli():
-    StateAfterSystemSpanning(sys.argv[1:])
-
-
 def _StateAfterSystemSpanning_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(StateAfterSystemSpanning.__doc__)
@@ -2024,7 +1975,7 @@ def _StateAfterSystemSpanning_parser():
     return parser
 
 
-def StateAfterSystemSpanning(cli_args=None):
+def StateAfterSystemSpanning(cli_args: list[str] = None):
     """
     Extract stability and height-height correlation after system spanning events.
     In particular, the following quantities are stored:
@@ -2177,10 +2128,6 @@ def StateAfterSystemSpanning(cli_args=None):
                 output.flush()
 
 
-def _StructureAfterSystemSpanning_cli():
-    StructureAfterSystemSpanning(sys.argv[1:])
-
-
 def _StructureAfterSystemSpanning_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(StructureAfterSystemSpanning.__doc__)
@@ -2194,7 +2141,7 @@ def _StructureAfterSystemSpanning_parser():
     return parser
 
 
-def StructureAfterSystemSpanning(cli_args=None):
+def StructureAfterSystemSpanning(cli_args: list[str] = None):
     """
     Extract the structure factor after system spanning events.
     See: https://doi.org/10.1103/PhysRevLett.118.147208
@@ -2261,10 +2208,6 @@ def StructureAfterSystemSpanning(cli_args=None):
             output.flush()
 
 
-def _Plot_cli():
-    Plot(sys.argv[1:])
-
-
 def _Plot_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(Plot.__doc__)
@@ -2276,7 +2219,7 @@ def _Plot_parser():
     return parser
 
 
-def Plot(cli_args=None):
+def Plot(cli_args: list[str] = None):
     """
     Basic plot.
     """
@@ -2351,10 +2294,6 @@ def Plot(cli_args=None):
     plt.close(fig)
 
 
-def _Paraview_cli():
-    Paraview(sys.argv[1:])
-
-
 def _Paraview_parser():
     parser = argparse.ArgumentParser(
         formatter_class=MyFmt, description=textwrap.dedent(Paraview.__doc__)
@@ -2366,7 +2305,7 @@ def _Paraview_parser():
     return parser
 
 
-def Paraview(cli_args=None):
+def Paraview(cli_args: list[str] = None):
     """
     Write all steps to be viewed in Paraview.
     """

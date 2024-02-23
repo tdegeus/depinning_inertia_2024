@@ -10,7 +10,6 @@ import itertools
 import os
 import pathlib
 import shutil
-import sys
 import tempfile
 import textwrap
 
@@ -65,10 +64,6 @@ def _update_data_version(file: h5py.File) -> None:
     return True
 
 
-def _UpdateData_cli():
-    UpdateData(sys.argv[1:])
-
-
 def _UpdateData_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(UpdateData.__doc__)
@@ -111,10 +106,6 @@ def UpdateData(cli_args=None):
             shutil.copy2(tmp / "my.h5", filename)
 
 
-def _CheckData_cli():
-    CheckData(sys.argv[1:])
-
-
 def _CheckData_parser():
     return QuasiStatic._CheckData_parser()
 
@@ -125,10 +116,6 @@ def CheckData(cli_args=None):
     Prints the files that have failed. No output is written if all files are ok.
     """
     return QuasiStatic.CheckData(cli_args, data_version)
-
-
-def _FilterCompleted_cli():
-    FilterCompleted(sys.argv[1:])
 
 
 def _FilterCompleted_parser():
@@ -169,10 +156,6 @@ def FilterCompleted(cli_args=None):
                 ret.append(filepath)
 
     print(args.sep.join(ret))
-
-
-def _Run_cli():
-    Run(sys.argv[1:])
 
 
 def _Run_parser():
@@ -312,10 +295,6 @@ def _to_str_ranges(mylist):
         else:
             groups[i] = str(groups[i][0]) + "-" + str(groups[i][1])
     return groups
-
-
-def _EnsembleInfo_cli():
-    EnsembleInfo(sys.argv[1:])
 
 
 def _EnsembleInfo_parser():
@@ -462,10 +441,6 @@ def _get_force_increment(step, force, kick, target_force):
 
     j = np.argmax(t == 0)
     return s[j, 0], f[j, 0], False
-
-
-def _Generate_cli():
-    Generate(sys.argv[1:])
 
 
 def _Generate_parser():
@@ -659,10 +634,6 @@ def Generate(cli_args=None):
                     ibranch += 1
 
 
-def _Merge_cli():
-    Merge(sys.argv[1:])
-
-
 def _Merge_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Merge.__doc__)
@@ -756,10 +727,6 @@ def Merge(cli_args=None):
             dest.flush()
 
 
-def _MergeBatch_cli():
-    MergeBatch(sys.argv[1:])
-
-
 def _MergeBatch_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(MergeBatch.__doc__)
@@ -792,10 +759,6 @@ def MergeBatch(cli_args=None):
         pbar.set_description(src)
         pbar.refresh()
         Merge([src, dest])
-
-
-def _JobRerun_cli():
-    JobRerun(sys.argv[1:])
 
 
 def _JobRerun_parser():
@@ -926,10 +889,6 @@ def JobRerun(cli_args=None):
         commands.append(f"{executable} {opts} {src}")
 
     shelephant.yaml.dump(args.output, commands, force=True)
-
-
-def _Paraview_cli():
-    Paraview(sys.argv[1:])
 
 
 def _Paraview_parser():

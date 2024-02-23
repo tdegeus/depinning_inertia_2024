@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import textwrap
 
 import enstat
@@ -30,10 +29,6 @@ file_defaults = dict(
 )
 
 data_version = "2.0"
-
-
-def _Run_cli():
-    Run(sys.argv[1:])
 
 
 def _Run_parser():
@@ -124,10 +119,6 @@ def Run(cli_args=None):
                 system.timeSteps(args.t_step)
 
         meta.attrs["completed"] = 1
-
-
-def _EnsembleInfo_cli():
-    EnsembleInfo(sys.argv[1:])
 
 
 def _EnsembleInfo_parser():

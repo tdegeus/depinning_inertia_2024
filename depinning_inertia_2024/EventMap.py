@@ -31,10 +31,6 @@ file_defaults = dict(
 )
 
 
-def _Run_cli():
-    Run(sys.argv[1:])
-
-
 def _Run_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Run.__doc__)
@@ -152,10 +148,6 @@ def Run(cli_args=None):
     return args.output
 
 
-def _Paraview_cli():
-    Paraview(sys.argv[1:])
-
-
 def _Paraview_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Paraview.__doc__)
@@ -233,10 +225,6 @@ def Paraview(cli_args=None):
             xdmf += xh.Attribute(out[f"/S/{ibin:d}"], xh.AttributeCenter.Node, name="S")
 
 
-def _Plot_cli():
-    Plot(sys.argv[1:])
-
-
 def _Plot_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(Plot.__doc__)
@@ -279,10 +267,6 @@ def Plot(cli_args=None):
         plt.show()
 
     plt.close(fig)
-
-
-def _Info_cli():
-    Info(sys.argv[1:])
 
 
 def _Info_parser():

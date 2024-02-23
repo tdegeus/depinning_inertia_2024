@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import textwrap
 
 import enstat
@@ -78,10 +77,6 @@ def restore_system(filepath: str, step: int = None, branch: int = None, apply_tr
                 system.eventDrivenStep(du, kick)
 
     return system, info
-
-
-def _Run_cli():
-    Run(sys.argv[1:])
 
 
 def _Run_parser():
@@ -320,10 +315,6 @@ class AlignedAverage(enstat.static):
             self.first[index, incl] += data[incl]
             self.second[index, incl] += data[incl] ** 2
             self.norm[index, incl] += 1
-
-
-def _AverageSystemSpanning_cli():
-    AverageSystemSpanning(sys.argv[1:])
 
 
 def _AverageSystemSpanning_parser():

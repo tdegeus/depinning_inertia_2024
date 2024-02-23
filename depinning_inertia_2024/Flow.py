@@ -8,7 +8,6 @@ import argparse
 import os
 import pathlib
 import re
-import sys
 import textwrap
 import time
 from collections import defaultdict
@@ -149,10 +148,6 @@ def ensemble_average(file: h5py.File | dict, steadystate: dict | pathlib.Path):
     return v_frame, mean, std, {k: steadystate[k] for k in keep}, data
 
 
-def _EnsemblePack_cli():
-    EnsemblePack(sys.argv[1:])
-
-
 def _EnsemblePack_parser():
     parser = argparse.ArgumentParser(
         formatter_class=QuasiStatic.MyFmt, description=textwrap.dedent(EnsemblePack.__doc__)
@@ -228,10 +223,6 @@ def EnsemblePack(cli_args=None):
                     g5.copy(file, output, "/realisation", root=f"/full/{fname}")
 
 
-def _Generate_cli():
-    Generate(sys.argv[1:])
-
-
 def _Generate_parser():
     parser = QuasiStatic._Generate_parser()
     parser.add_argument(
@@ -279,10 +270,6 @@ def Generate(cli_args=None):
     executable = f"Flow_Run --nstep {args.nstep:d}"
     commands = [f"{executable} {file}" for file in files]
     shelephant.yaml.dump(outdir / "commands_run.yaml", commands, force=True)
-
-
-def _Run_cli():
-    Run(sys.argv[1:])
 
 
 def _Run_parser():
@@ -393,10 +380,6 @@ def Run(cli_args=None):
             root["u"][step] = np.mean(system.u)
             root["v"][step] = np.mean(system.v)
             file.flush()
-
-
-def _Plot_cli():
-    Plot(sys.argv[1:])
 
 
 def _Plot_parser():
