@@ -21,6 +21,7 @@ Getting started:
     ```
 
     Tip: use a new environment.
+    Note: some of these dependences are needed, some are merely a convenience for running the simulations.
 
 2.  Install this package:
 
